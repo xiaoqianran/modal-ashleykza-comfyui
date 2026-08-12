@@ -75,7 +75,7 @@ Image build 时：
 3. 删除复制/clone 来的 Manager 目录（改用固定 pip 版 Manager）；
 4. 写入 `/opt/comfy-base-nodes.json`；
 5. 使用固定版本 `comfyui-manager==4.2.2`；
-6. 对每个 `custom_nodes/*/requirements.txt` 做 sequential `pip install -r`（与 CNB 镜像的 `cm-cli.sh install` 一样，一次只解一个节点）。**不要**对这 130 个节点跑 `comfy node uv-sync`：统一求解无法同时满足（`accelerate` 上下限、`Pillow==10.3.0` vs `>=10.4.0`、YuE 的 `descript-audiotools` 要 `protobuf<3.20` 而 IPAdapter-Flux 要 `protobuf>=4.25.5`）。安装前会把 `==` / `~=` 改成 `>=`、去掉 `<` / `<=`，并丢掉已知无法共存的包（目前是 `descript-audiotools`）。单个节点的 pip 失败不中断 Image build。
+6. 对每个 `custom_nodes/*/requirements.txt` 做 sequential `pip install -r`（与 CNB 镜像的 `cm-cli.sh install` 一样，一次只解一个节点）。**不要**对这 130 个节点跑 `comfy node uv-sync`：统一求解无法同时满足（`accelerate` 上下限、`Pillow==10.3.0` vs `>=10.4.0`、YuE 的 `descript-audiotools` 要 `protobuf<3.20` 而 IPAdapter-Flux 要 `protobuf>=4.25.5`）。安装前会把 `==` / `~=` 改成 `>=`、去掉 `<` / `<=`，并丢掉已知无法共存或会覆盖 Ashley CUDA 栈的包（`descript-audiotools`、`torch` / `torchvision` / `torchaudio` / `cuda-toolkit`）。单个节点的 pip 失败不中断 Image build。
 
 这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。也不要把整个 CNB 运行时镜像当 Base——只要节点源码，依赖按节点装进 Ashley venv。
 

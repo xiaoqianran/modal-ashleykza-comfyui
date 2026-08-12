@@ -138,6 +138,7 @@ def test_relax_drops_packages_with_unsatisfiable_transitive_deps():
     text = "torch\ndescript-audiotools>=0.7.2\nprotobuf>=4.25.5\n"
     relaxed = base_nodes._relax_requirement_text(text)
     assert "descript-audiotools" not in relaxed
+    assert "torch" not in relaxed.split()
     assert "protobuf>=4.25.5" in relaxed
 
 

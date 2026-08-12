@@ -287,6 +287,13 @@ def _remove_copied_manager(dst_root: Path) -> None:
 _DROP_PACKAGES = frozenset(
     {
         "descript-audiotools",
+        # Ashley image already ships the CUDA torch stack. Re-resolving these
+        # from a node requirements.txt can replace the GPU wheels.
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "torchao",
+        "cuda-toolkit",
     }
 )
 _PKG_SPEC_RE = re.compile(
