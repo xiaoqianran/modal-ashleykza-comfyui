@@ -162,7 +162,7 @@ Image:       {IMAGE_TAG}
 Profile:     {PROFILE_NAME}
 GPU:         {GPU}
 Port:        {COMFY_PORT}
-Base nodes:  {BASE_NODE_COUNT if BASE_NODES_ENABLED else 0} (CNB rev {BASE_NODES_SOURCE_REV[:8]})
+Base nodes:  {BASE_NODE_COUNT if BASE_NODES_ENABLED else 0} (CNB rev {BASE_NODES_SOURCE_REV[:8]}; default ON / COMFY_BASE_NODES=1)
 Volume:      comfyui-ashleykza-workspace
 Secret:      {SECRET_NAME}
 
@@ -172,13 +172,13 @@ List profiles:
 Sync models without GPU:
   modal run comfyui_modal.py --action sync --profile qwen-image
 
-Interactive UI:
+Interactive UI (base nodes ON by default; omit COMFY_BASE_NODES):
   COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
 Persistent endpoint:
   COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 
-Debug without the common base nodes:
+Debug only — temporarily disable common base nodes:
   COMFY_BASE_NODES=0 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 """.strip()
     )

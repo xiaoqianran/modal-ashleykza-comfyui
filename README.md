@@ -50,6 +50,8 @@ Ashley ComfyUI Image
 
 ## Base Nodes：一点通 130-node Snapshot
 
+**默认开启** `COMFY_BASE_NODES=1`。可不写该环境变量；缺省即在 Modal Image build 时构建这 130 个 Base 节点。只有排查问题时才临时设 `COMFY_BASE_NODES=0`。
+
 来源：
 
 ```text
@@ -62,7 +64,9 @@ https://cnb.cool/SKDZSS90/ComfyUI-yi_dian_tong/-/blob/main/nodes.md
 5152c24cda53eddae02c0e8f0dab832444dab891
 ```
 
-`base_nodes.py` 保存这 130 个**精确目录名**。Image build 时：
+`base_nodes.py` 保存这 130 个**精确目录名**。`build_base_nodes_command()` **只在 Modal Image build 阶段**执行（`runtime_image.run_commands(...)`），不会在 GPU 冷启动时再跑一遍。
+
+Image build 时：
 
 1. 对 CNB 仓库做 sparse checkout；
 2. checkout 固定提交，而不是每次取最新 `main`；
@@ -74,9 +78,11 @@ https://cnb.cool/SKDZSS90/ComfyUI-yi_dian_tong/-/blob/main/nodes.md
 
 这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。
 
-Base 只在 Image build 时构建，正常 GPU 冷启动不会重新 clone / pip / sync。
+正常 `modal serve` / `modal deploy` 不需要设置 `COMFY_BASE_NODES`。
 
-如果需要排查 Base 节点导致的问题，可临时禁用：
+### 排查时可临时关闭
+
+仅在需要确认问题是否来自 Base 节点时临时关闭（调试用，不是推荐路径）：
 
 ```bash
 COMFY_BASE_NODES=0 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
