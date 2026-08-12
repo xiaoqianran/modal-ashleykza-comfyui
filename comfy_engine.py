@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 
+
 LOCK_SCHEMA = 1
 
 
@@ -22,7 +23,8 @@ def _quote(value: str | Path) -> str:
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
-    print("$ " + " ".join(_quote(part) for part in cmd), flush=True)
+    printable = " ".join(_quote(part) for part in cmd)
+    print(f"$ {printable}", flush=True)
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
 
 
@@ -79,6 +81,7 @@ def _safe_member_path(base: Path, name: str) -> Path:
 def _extract_archive(path: Path) -> None:
     lower = path.name.lower()
     target_dir = path.parent
+
     if lower.endswith(".zip"):
         with zipfile.ZipFile(path) as archive:
             for item in archive.infolist():
@@ -86,6 +89,7 @@ def _extract_archive(path: Path) -> None:
             archive.extractall(target_dir)
         path.unlink()
         return
+
     tar_suffixes = (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz")
     if lower.endswith(tar_suffixes):
         with tarfile.open(path, "r:*") as archive:
@@ -120,7 +124,12 @@ def _save_lock(workspace: Path, lock: dict) -> None:
 
 def ensure_workspace_layout(workspace: Path) -> None:
     for directory in (
-        "custom_nodes", "input", "output", "user", "logs", "state",
+        "custom_nodes",
+        "input",
+        "output",
+        "user",
+        "logs",
+        "state",
         *(f"models/{name}" for name in MODEL_DIRS),
     ):
         (workspace / directory).mkdir(parents=True, exist_ok=True)
@@ -133,92 +142,152 @@ def _is_asset_current(path: Path, asset: ModelAsset, lock_entry: dict | None) ->
         return _sha256(path).lower() == asset.sha256.lower()
     if not lock_entry:
         return False
-    return lock_entry.get("url") == normalize_huggingface_url(asset.url) and lock_entry.get("size") == path.stat().st_size
+    return (
+        lock_entry.get("url") == normalize_huggingface_url(asset.url)
+        and lock_entry.get("size") == path.stat().st_size
+    )
 
 
 def _parse_hf_url(url: str) -> tuple[str, str, str] | None:
+    """Return repo_id, revision, file path for a huggingface.co /resolve/ URL."""
     parsed = urlparse(normalize_huggingface_url(url))
     if "huggingface.co" not in parsed.netloc:
         return None
+
     parts = [p for p in parsed.path.split("/") if p]
     if len(parts) < 4:
         return None
+
     repo_id = "/".join(parts[:2])
     try:
         marker = parts.index("resolve", 2)
     except ValueError:
         return None
+
     if marker + 1 >= len(parts):
         return None
     revision = parts[marker + 1]
-    file_path = "/".join(parts[marker + 2:])
-    return (repo_id, revision, file_path) if file_path else None
+    file_path = "/".join(parts[marker + 2 :])
+    if not file_path:
+        return None
+    return repo_id, revision, file_path
 
 
 def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> None:
+    """Download a Hugging Face asset through huggingface_hub/hf_xet.
+
+    Modern huggingface_hub installs hf_xet automatically. The Modal sync Image
+    enables HF_XET_HIGH_PERFORMANCE=1, so this is the preferred path for HF.
+    """
     parsed = _parse_hf_url(asset.url)
     hf = shutil.which("hf") or shutil.which("huggingface-cli")
     if not parsed or not hf:
-        raise RuntimeError("Hugging Face CLI fallback is unavailable for this URL.")
+        raise RuntimeError("Hugging Face CLI/Xet downloader is unavailable for this URL.")
+
     repo_id, revision, file_path = parsed
+    before = {p.resolve() for p in target_dir.rglob("*") if p.is_file()}
     cmd = [
-        hf, "download", repo_id, file_path,
-        "--revision", revision,
-        "--repo-type", "model",
-        "--local-dir", str(target_dir),
+        hf,
+        "download",
+        repo_id,
+        file_path,
+        "--revision",
+        revision,
+        "--repo-type",
+        "model",
+        "--local-dir",
+        str(target_dir),
     ]
-    _run(cmd)
+    env = os.environ.copy()
+    env.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    _run(cmd, env=env)
+
     expected = target_dir / file_path
     if expected.exists() and expected.resolve() != target.resolve():
         target.parent.mkdir(parents=True, exist_ok=True)
         expected.replace(target)
+        # Remove empty nested directories created by `hf download --local-dir`.
+        parent = expected.parent
+        while parent != target_dir and parent.exists():
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+
+    if not target.exists():
+        after = [p for p in target_dir.rglob("*") if p.is_file() and p.resolve() not in before]
+        # Ignore Hugging Face local metadata when identifying the downloaded file.
+        after = [p for p in after if ".cache/huggingface" not in p.as_posix()]
+        if len(after) == 1:
+            after[0].replace(target)
+
     if not target.exists():
         raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
 
 
-def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / asset_filename(asset)
-    if _is_asset_current(target, asset, lock_entry):
-        print(f"[SKIP] {target}")
-        return lock_entry or {}
-
+def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> None:
+    """Fast generic HTTP downloader used for Civitai and other direct URLs."""
     url = _with_civitai_token(normalize_huggingface_url(asset.url))
-    print(f"[DOWNLOAD] {redact_url(url)}")
-    print(f"           -> {target}")
     aria = shutil.which("aria2c")
     if not aria:
         raise RuntimeError("aria2c is not installed in the sync image.")
 
     cmd = [
-        aria, "-x", "16", "-s", "16", "-c", "-k", "1M",
-        "--file-allocation=none", "--summary-interval=1",
-        "--console-log-level=notice", "-d", str(target_dir), "-o", target.name,
+        aria,
+        "-x", "16",
+        "-s", "16",
+        "-c",
+        "-k", "1M",
+        "--file-allocation=none",
+        "--summary-interval=1",
+        "--console-log-level=notice",
+        "-d", str(target_dir),
+        "-o", target.name,
+        url,
     ]
-    hf_token = os.environ.get("HF_TOKEN", "").strip()
-    if hf_token and "huggingface.co" in url:
-        cmd.extend(["--header", f"Authorization: Bearer {hf_token}"])
-    cmd.append(url)
+    _run(cmd)
 
-    try:
-        _run(cmd)
-    except subprocess.CalledProcessError:
-        if "huggingface.co" not in url:
-            raise
-        print("[WARN] aria2c failed; trying Hugging Face CLI fallback.")
-        _download_with_hf_cli(asset, target_dir, target)
+
+def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / asset_filename(asset)
+
+    if _is_asset_current(target, asset, lock_entry):
+        print(f"[SKIP] {target}")
+        return lock_entry or {}
+
+    normalized = normalize_huggingface_url(asset.url)
+    print(f"[DOWNLOAD] {redact_url(_with_civitai_token(normalized))}")
+    print(f"           -> {target}")
+
+    # Hugging Face is Xet-backed now. Prefer hf/hf_xet instead of forcing the
+    # URL through aria2; aria2 remains an excellent generic downloader for
+    # Civitai and ordinary HTTP(S) assets.
+    if _parse_hf_url(normalized):
+        try:
+            _download_with_hf_cli(asset, target_dir, target)
+        except (RuntimeError, subprocess.CalledProcessError) as exc:
+            print(f"[WARN] HF Xet download failed ({exc}); falling back to aria2c.")
+            _download_with_aria2(asset, target_dir, target)
+    else:
+        _download_with_aria2(asset, target_dir, target)
 
     if not target.exists() or target.stat().st_size <= 0:
         raise RuntimeError(f"Download did not produce a non-empty file: {target}")
+
     if asset.sha256:
         actual = _sha256(target)
         if actual.lower() != asset.sha256.lower():
-            raise RuntimeError(f"SHA256 mismatch for {target.name}: expected {asset.sha256}, got {actual}")
+            raise RuntimeError(
+                f"SHA256 mismatch for {target.name}: expected {asset.sha256}, got {actual}"
+            )
+
     if asset.extract:
         _extract_archive(target)
 
     return {
-        "url": normalize_huggingface_url(asset.url),
+        "url": normalized,
         "path": str(target),
         "size": target.stat().st_size if target.exists() else None,
         "sha256": asset.sha256,
@@ -235,7 +304,8 @@ def sync_profile_models(profile_name: str, workspace: str | Path = "/workspace")
     wanted: list[tuple[str, str, ModelAsset]] = []
     seen: set[tuple[str, str]] = set()
     for pack_name in profile.model_packs:
-        for category, assets in MODEL_PACKS[pack_name].items():
+        pack = MODEL_PACKS[pack_name]
+        for category, assets in pack.items():
             for asset in assets:
                 key = (category, asset_filename(asset))
                 if key in seen:
@@ -251,18 +321,25 @@ def sync_profile_models(profile_name: str, workspace: str | Path = "/workspace")
     for pack_name, category, asset in wanted:
         rel_key = f"models/{category}/{asset_filename(asset)}"
         entry = lock["assets"].get(rel_key)
-        new_entry = download_asset(asset, workspace / "models" / category, lock_entry=entry)
+        new_entry = download_asset(
+            asset,
+            workspace / "models" / category,
+            lock_entry=entry,
+        )
         new_entry = dict(new_entry)
         new_entry["packs"] = sorted(set(new_entry.get("packs", [])) | {pack_name})
         lock["assets"][rel_key] = new_entry
         _save_lock(workspace, lock)
         completed += 1
+
     return {"profile": profile_name, "downloaded": completed, "total": len(wanted)}
 
 
 def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[str]:
+    """Translate declarative node recipes into idempotent image-build shell commands."""
     recipes: list[NodeRecipe] = []
     seen_names: set[str] = set()
+
     for pack_name in node_pack_names:
         for recipe in NODE_PACKS[pack_name]:
             assert recipe.name
@@ -274,32 +351,61 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
     commands: list[str] = []
     for recipe in recipes:
         assert recipe.name
+        qrepo = _quote(recipe.repo)
+        qname = _quote(recipe.name)
+
         clone_flags = ["--depth=1"]
         if recipe.ref:
             clone_flags.extend(["--branch", _quote(recipe.ref)])
         if recipe.recursive:
             clone_flags.extend(["--recursive", "--shallow-submodules"])
+
         steps = [
             "set -eux",
+            # Optional fine-grained GITHUB_TOKEN support for private node repos.
+            # GIT_ASKPASS reads the environment at build time; the token itself
+            # is never written into the resulting Image or command string.
+            'if [ -n "${GITHUB_TOKEN:-}" ]; then printf \'%s\\n\' \'#!/bin/sh\' \'case "$1" in *Username*) echo x-access-token ;; *) echo "$GITHUB_TOKEN" ;; esac\' > /tmp/comfy-git-askpass && chmod 700 /tmp/comfy-git-askpass && export GIT_ASKPASS=/tmp/comfy-git-askpass GIT_TERMINAL_PROMPT=0; fi',
             "mkdir -p /ComfyUI/custom_nodes",
             "cd /ComfyUI/custom_nodes",
-            f"if [ ! -d {_quote(recipe.name)} ]; then git clone {' '.join(clone_flags)} {_quote(recipe.repo)} {_quote(recipe.name)}; fi",
-            f"cd {_quote(recipe.name)}",
-            'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; [ -x "$PY" ] || PY=python3',
+            (
+                f"if [ ! -d {qname} ]; then "
+                f"git clone {' '.join(clone_flags)} {qrepo} {qname}; "
+                f"fi"
+            ),
+            f"cd {qname}",
+            'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
+            '[ -x "$PY" ] || PY=python3',
         ]
-        steps.extend(recipe.pre_commands)
+
+        for command in recipe.pre_commands:
+            steps.append(command)
+
         for req in recipe.requirements:
-            steps.append(f'if [ -f {_quote(req)} ]; then "$PY" -m pip install --no-cache-dir -r {_quote(req)}; fi')
+            qreq = _quote(req)
+            steps.append(
+                f'if [ -f {qreq} ]; then "$PY" -m pip install --no-cache-dir -r {qreq}; fi'
+            )
+
         if recipe.pip:
-            steps.append('"$PY" -m pip install --no-cache-dir ' + " ".join(_quote(package) for package in recipe.pip))
-        steps.extend(recipe.commands)
+            steps.append(
+                '"$PY" -m pip install --no-cache-dir '
+                + " ".join(_quote(package) for package in recipe.pip)
+            )
+
+        for command in recipe.commands:
+            steps.append(command)
+
+        steps.append("rm -f /tmp/comfy-git-askpass")
         commands.append("; ".join(steps))
+
     return commands
 
 
 def write_extra_model_paths(comfy_root: str | Path, workspace: str | Path) -> Path:
     comfy_root = Path(comfy_root)
     workspace = Path(workspace)
+
     lines = [
         "# Generated by comfy_engine.py. Edit recipes.py, not this file.",
         "modal_workspace:",
@@ -310,6 +416,7 @@ def write_extra_model_paths(comfy_root: str | Path, workspace: str | Path) -> Pa
         lines.append(f"    {name}: models/{name}/")
     lines.append("    custom_nodes: custom_nodes/")
     lines.append("")
+
     path = comfy_root / "extra_model_paths.yaml"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
@@ -333,19 +440,28 @@ def _replace_with_symlink(link_path: Path, target: Path) -> None:
     link_path.symlink_to(target, target_is_directory=True)
 
 
-def prepare_runtime(comfy_root: str | Path = "/ComfyUI", workspace: str | Path = "/workspace") -> None:
+def prepare_runtime(
+    comfy_root: str | Path = "/ComfyUI",
+    workspace: str | Path = "/workspace",
+) -> None:
     comfy_root = Path(comfy_root)
     workspace = Path(workspace)
+
     if not (comfy_root / "main.py").exists():
         raise RuntimeError(f"ComfyUI main.py not found under {comfy_root}")
+
     ensure_workspace_layout(workspace)
     write_extra_model_paths(comfy_root, workspace)
+
+    # Mutable user/runtime state belongs on the Volume.
     for name in ("input", "output", "user"):
         _replace_with_symlink(comfy_root / name, workspace / name)
+
     write_optional_node_configs(comfy_root, workspace)
 
 
 def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
+    """Materialize secret-backed node config without storing credentials in Git."""
     candidates = (
         comfy_root / "custom_nodes" / "ComfyUI-OllamaGemini",
         workspace / "custom_nodes" / "ComfyUI-OllamaGemini",
@@ -353,6 +469,7 @@ def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
     node = next((candidate for candidate in candidates if candidate.exists()), None)
     if node is None:
         return
+
     values = {
         "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", ""),
         "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
@@ -362,7 +479,11 @@ def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
     }
     if not any(values[key] for key in ("GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "QWEN_API_KEY")):
         return
-    (node / "config.json").write_text(json.dumps(values, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    (node / "config.json").write_text(
+        json.dumps(values, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
     print("Wrote secret-backed ComfyUI-OllamaGemini/config.json")
 
 
@@ -377,20 +498,31 @@ def start_comfyui(
     comfy_root = Path(comfy_root)
     workspace = Path(workspace)
     profile = get_profile(profile_name)
+
     python = comfy_root / "venv" / "bin" / "python3"
     if not python.exists():
         python = comfy_root / "venv" / "bin" / "python"
     if not python.exists():
         python = Path("python3")
+
     cmd = [
-        str(python), str(comfy_root / "main.py"),
-        "--listen", "0.0.0.0", "--port", str(port),
-        *profile.comfy_args, *extra_args,
+        str(python),
+        str(comfy_root / "main.py"),
+        "--listen", "0.0.0.0",
+        "--port", str(port),
+        *profile.comfy_args,
+        *extra_args,
     ]
+
     log_path = workspace / "logs" / "comfyui.log"
     log = log_path.open("a", buffering=1)
     print("Starting:", " ".join(shlex.quote(arg) for arg in cmd))
-    process = subprocess.Popen(cmd, cwd=str(comfy_root), stdout=log, stderr=log)
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(comfy_root),
+        stdout=log,
+        stderr=log,
+    )
     time.sleep(2)
     if process.poll() is not None:
         tail = ""
