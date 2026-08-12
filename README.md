@@ -10,7 +10,7 @@
 Ashley ComfyUI Image
         │
         ├── base_nodes.py
-        │     固定 CNB 一点通 130-node snapshot
+        │     固定一点通 130-node 名单 + GitHub clone
         │     + 统一 uv-sync 依赖解析
         │
         ├── recipes.py
@@ -32,7 +32,7 @@ Ashley ComfyUI Image
 **Image（不可变）**
 
 - `/ComfyUI` 源码、venv、CUDA / torch；
-- CNB 一点通 Base Snapshot 的 130 个 custom nodes；
+- 一点通 Base Snapshot 的 130 个 custom nodes（GitHub clone）；
 - 当前 Profile 少量额外节点；
 - 节点 Python 依赖。
 
@@ -52,33 +52,32 @@ Ashley ComfyUI Image
 
 **默认开启** `COMFY_BASE_NODES=1`。可不写该环境变量；缺省即在 Modal Image build 时构建这 130 个 Base 节点。只有排查问题时才临时设 `COMFY_BASE_NODES=0`。
 
-来源：
+节点**名单**来自：
 
 ```text
 https://cnb.cool/SKDZSS90/ComfyUI-yi_dian_tong/-/blob/main/nodes.md
 ```
 
-固定源提交：
+CNB git 仓库里**没有** `ComfyUI/custom_nodes`（只有 `nodes.md`）。真正插件在 CNB Docker 镜像里，例如：
 
 ```text
-5152c24cda53eddae02c0e8f0dab832444dab891
+docker.cnb.cool/skdzss90/fenxiang/py312_t291_c130:xin-L40g-0811
 ```
 
-`base_nodes.py` 保存这 130 个**精确目录名**，并作为 Image build 安装脚本（`python base_nodes.py --comfy-root ...`）。`comfyui_modal.py` 先用 `Image.add_local_file(..., copy=True)` 把它拷进镜像，再跑 `build_base_nodes_commands()` 生成的**单行** `run_commands` 步骤。Modal 会把 `run_commands` 包进 Dockerfile `RUN`，**不支持 shell heredoc**，因此不在命令里内嵌大段 Python。
+该镜像约 23GiB（CUDA 13 + 模型 + venv），不适合 `COPY --from` 进 Ashley（CUDA 12.8）运行时。镜像 history 显示这些插件本来就是 `cm-cli.sh install` / `git clone` 装上的，所以 Base 安装改为：**按 `nodes.md` 目录名，从 GitHub shallow clone 对应仓库**。URL 从上述镜像（以及旧镜像 `3lian_guan_zhu:0531-v.0.3.39-n120`）的 Dockerfile history 还原；个别仓库已删除时用仍可 clone 的归档/fork。
+
+`base_nodes.py` 保存这 130 个**精确目录名**和 GitHub URL，并作为 Image build 安装脚本（`python base_nodes.py --comfy-root ...`）。`comfyui_modal.py` 先用 `Image.add_local_file(..., copy=True)` 把它拷进镜像，再跑 `build_base_nodes_commands()` 生成的**单行** `run_commands` 步骤。Modal 会把 `run_commands` 包进 Dockerfile `RUN`，**不支持 shell heredoc**，因此不在命令里内嵌大段 Python。Clone 步骤会使用 `GITHUB_TOKEN`（与 extra nodes 相同的 askpass，避免 xtrace 泄露）。
 
 Image build 时：
 
-1. 对 CNB 仓库做 sparse checkout；
-2. checkout 固定提交，而不是每次取最新 `main`；
-3. 运行仓库内的 `base_nodes.py` 安装器：验证 130 个目录全部存在，缺一个就失败；
-4. 只复制这 130 个 `custom_nodes`；
-5. 恢复上游存在的 `git_backup → .git` 元数据；
-6. 删除复制来的 Manager 目录（改用固定 pip 版 Manager）；
-7. 写入 `/opt/comfy-base-nodes.json`；
-8. 使用固定版本 `comfy-cli==1.12.0`、`comfyui-manager==4.2.2`；
-9. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。
+1. 按 `BASE_NODE_SOURCES` 把 129 个 GitHub 仓库 shallow clone 到 `/ComfyUI/custom_nodes/<nodes.md 目录名>`（`comfyui-manager` 不 clone）；
+2. 缺一个 clone 失败就让 Image build 失败，不静默跳过；
+3. 删除复制/clone 来的 Manager 目录（改用固定 pip 版 Manager）；
+4. 写入 `/opt/comfy-base-nodes.json`；
+5. 使用固定版本 `comfy-cli==1.12.0`、`comfyui-manager==4.2.2`；
+6. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。
 
-这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。
+这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。也不要把整个 CNB 运行时镜像当 Base——只要节点源码，依赖在 Ashley venv 里用 `uv-sync` 解析。
 
 正常 `modal serve` / `modal deploy` 不需要设置 `COMFY_BASE_NODES`。
 
@@ -315,16 +314,16 @@ PROFILES = {
 
 ## 7. 更新 Base Snapshot
 
-Base **不会自动追随** CNB `main`。要升级：
+Base **不会自动追随** CNB `main` 或 Docker tag。要升级：
 
 1. 检查上游新的 `nodes.md`；
-2. 更新 `BASE_NODE_NAMES`；
-3. 更新 `BASE_NODES_SOURCE_REV`；
-4. 更新 snapshot 日期；
+2. 如有需要，从新的 CNB 镜像 history 核对 GitHub URL；
+3. 更新 `BASE_NODE_SOURCES`（目录名 + clone URL）；
+4. 更新 `BASE_NODES_IMAGE` / snapshot 日期；
 5. 跑测试；
 6. 重新 `modal serve/deploy`，让 Modal 构建新的 Base layer。
 
-这样避免上游节点每天变化导致昨天能跑的工作流今天突然失效。
+`nodes.md` 名单是固定的；每次 Image build 会 clone 各仓库当时的默认分支 HEAD（`--depth=1`）。若某个上游仓库消失，Image build 会失败而不是少装节点。
 
 ## 8. 测试
 
@@ -335,7 +334,7 @@ pytest -q
 
 GitHub Actions 也会自动执行相同的基础检查，覆盖：
 
-- Base snapshot 数量 / 固定 commit；
+- Base snapshot 数量 / GitHub URL 映射；
 - Profile 引用一致性；
 - model destination 冲突；
 - extra node 不重复 Base；

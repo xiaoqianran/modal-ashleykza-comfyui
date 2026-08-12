@@ -9,18 +9,29 @@ import recipes
 def test_base_snapshot_is_pinned_and_complete():
     assert base_nodes.BASE_NODE_COUNT == 130
     assert len(set(base_nodes.BASE_NODE_NAMES)) == 130
-    assert base_nodes.BASE_NODES_SOURCE_REV == "5152c24cda53eddae02c0e8f0dab832444dab891"
+    assert len(base_nodes.BASE_NODE_SOURCES) == 130
+    assert len(base_nodes.BASE_NODE_REPOS) == 129
+    assert base_nodes.BASE_NODES_IMAGE.startswith("docker.cnb.cool/")
     assert "ComfyUI-WanVideoWrapper" in base_nodes.BASE_NODE_NAMES
     assert "ComfyUI-KJNodes" in base_nodes.BASE_NODE_NAMES
     assert "ComfyUI-Manager" not in base_nodes.BASE_NODE_NAMES  # snapshot uses normalized lowercase
     assert "comfyui-manager" in base_nodes.BASE_NODE_NAMES
+    assert base_nodes.BASE_NODE_REPOS.get("comfyui-manager") is None
+    assert base_nodes.BASE_NODE_REPOS["ComfyUI-WanVideoWrapper"].startswith("https://github.com/")
+    assert all(
+        url.startswith("https://github.com/") and url.endswith(".git")
+        for url in base_nodes.BASE_NODE_REPOS.values()
+    )
 
 
-def test_base_build_uses_source_snapshot_and_unified_dependency_sync():
+def test_base_build_clones_github_and_runs_unified_dependency_sync():
     commands = base_nodes.build_base_nodes_commands()
     joined = "\n".join(commands)
-    assert base_nodes.BASE_NODES_SOURCE_REV in joined
-    assert base_nodes.BASE_NODES_REPOSITORY in joined
+    assert "sparse-checkout" not in joined
+    assert "git init" not in joined
+    assert "cnb.cool/SKDZSS90/ComfyUI-yi_dian_tong.git" not in joined
+    assert "GITHUB_TOKEN" in joined
+    assert "GIT_ASKPASS" in joined
     assert "node uv-sync" in joined
     assert "comfy-cli==1.12.0" in joined
     assert "comfyui-manager==4.2.2" in joined
@@ -80,8 +91,10 @@ def test_install_base_nodes_copies_wanted_and_writes_manifest(tmp_path):
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["count"] == 130
-    assert manifest["revision"] == base_nodes.BASE_NODES_SOURCE_REV
+    assert manifest["cloned"] == 129
+    assert manifest["image"] == base_nodes.BASE_NODES_IMAGE
     assert manifest["nodes"] == list(base_nodes.BASE_NODE_NAMES)
+    assert len(manifest["repositories"]) == 129
 
 
 def test_profile_references_exist():
@@ -185,3 +198,34 @@ def test_node_build_supports_github_token_without_embedding_value():
 def test_github_token_handling_happens_before_xtrace():
     command = comfy_engine.build_node_commands(["qwen-image-extra"])[0]
     assert command.index("set -eu") < command.index("GITHUB_TOKEN") < command.index("set -x")
+
+
+def test_base_clone_uses_github_token_before_xtrace():
+    command = base_nodes.build_base_nodes_commands()[0]
+    assert command.index("set -eu") < command.index("GITHUB_TOKEN") < command.index("set -x")
+    assert "--source-custom-nodes" not in command
+
+
+def test_install_base_nodes_clones_github_when_no_source_tree(tmp_path, monkeypatch):
+    cloned: list[tuple[str, str]] = []
+
+    def fake_clone(url: str, dest: Path) -> None:
+        dest.mkdir(parents=True)
+        (dest / "marker.txt").write_text(url, encoding="utf-8")
+        cloned.append((dest.name, url))
+
+    monkeypatch.setattr(base_nodes, "_clone_repo", fake_clone)
+
+    dst_root = tmp_path / "ComfyUI"
+    manifest_path = tmp_path / "comfy-base-nodes.json"
+    base_nodes.install_base_nodes(
+        comfy_root=str(dst_root),
+        source_custom_nodes=None,
+        manifest_path=str(manifest_path),
+    )
+
+    custom_nodes = dst_root / "custom_nodes"
+    assert (custom_nodes / "ComfyUI-WanVideoWrapper" / "marker.txt").read_text(encoding="utf-8")
+    assert not (custom_nodes / "comfyui-manager").exists()
+    assert {name for name, _url in cloned} == set(base_nodes.BASE_NODE_REPOS)
+    assert dict(cloned)["ComfyUI-KJNodes"] == base_nodes.BASE_NODE_REPOS["ComfyUI-KJNodes"]

@@ -1,7 +1,7 @@
 """Deploy ashleykleynhans/comfyui on Modal with declarative recipes.
 
 Architecture:
-- Image: Ashley runtime + pinned CNB 130-node base + small profile extras.
+- Image: Ashley runtime + pinned 130-node GitHub base (from CNB nodes.md) + small profile extras.
 - Volume: models / input / output / user / optional user nodes / logs / lock state.
 - CPU sync function: downloads models without paying for GPU time.
 - GPU web server: only prepares paths and starts ComfyUI.
@@ -17,7 +17,7 @@ import modal
 
 from base_nodes import (
     BASE_NODE_COUNT,
-    BASE_NODES_SOURCE_REV,
+    BASE_NODES_IMAGE,
     INSTALLER_REMOTE_PATH,
     build_base_nodes_commands,
 )
@@ -71,6 +71,7 @@ runtime_image = (
 if BASE_NODES_ENABLED:
     # Copy the installer into the image before RUN steps that invoke it.
     # Modal does not support shell heredocs inside run_commands (Dockerfile parser).
+    # GITHUB_TOKEN is exposed only for the clone RUN (same askpass pattern as extra nodes).
     runtime_image = (
         runtime_image
         .add_local_file(
@@ -78,7 +79,7 @@ if BASE_NODES_ENABLED:
             remote_path=INSTALLER_REMOTE_PATH,
             copy=True,
         )
-        .run_commands(*build_base_nodes_commands())
+        .run_commands(*build_base_nodes_commands(), secrets=APP_SECRETS)
     )
 
 extra_node_commands = build_node_commands(PROFILE.node_packs)
@@ -177,7 +178,7 @@ Image:       {IMAGE_TAG}
 Profile:     {PROFILE_NAME}
 GPU:         {GPU}
 Port:        {COMFY_PORT}
-Base nodes:  {BASE_NODE_COUNT if BASE_NODES_ENABLED else 0} (CNB rev {BASE_NODES_SOURCE_REV[:8]}; default ON / COMFY_BASE_NODES=1)
+Base nodes:  {BASE_NODE_COUNT if BASE_NODES_ENABLED else 0} (GitHub clones from {BASE_NODES_IMAGE}; default ON / COMFY_BASE_NODES=1)
 Volume:      comfyui-ashleykza-workspace
 Secret:      {SECRET_NAME}
 
