@@ -93,6 +93,22 @@ modal run comfyui_modal.py --action sync --profile wan22
 
 再次运行同一个 sync 时，已记录且文件大小一致的资产会跳过；Recipe 可选填写 `sha256=` 进行强校验。
 
+## 下载策略：当前默认为什么这样设计
+
+模型同步阶段不占 GPU，下载完成后长期保存在 Modal Volume。当前默认路由：
+
+```text
+Hugging Face  → huggingface_hub / hf_xet（HF_XET_HIGH_PERFORMANCE=1）
+Civitai       → aria2c -x16 -s16
+普通 HTTP(S)  → aria2c -x16 -s16
+                 ↓
+            Modal Volume
+                 ↓
+         GPU 只加载 / 推理
+```
+
+这是为了避免每次 GPU 冷启动重新下载模型。`hf_xet` 是当前 Hugging Face 的主下载后端；如果 HF/Xet 下载异常，引擎会回退到 aria2。
+
 ## 4. 启动 UI
 
 第一次测试：
@@ -132,18 +148,49 @@ MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py
 MODAL_GPU=L4,L40S,RTX-PRO-6000 COMFY_PROFILE=wan22 modal serve comfyui_modal.py
 ```
 
-## 5. Secret
+## 5. `.env` / Secret
 
-公开 Hugging Face URL 不一定需要 Secret。涉及 gated HF、Civitai 或节点 API Key 时建议：
+最简单的个人开发方式：
 
 ```bash
-modal secret create comfyui-secrets \
-  HF_TOKEN=... \
-  CIVITAI_TOKEN=... \
-  GEMINI_API_KEY=... \
-  OPENAI_API_KEY=... \
-  ANTHROPIC_API_KEY=... \
-  QWEN_API_KEY=...
+cp .env.example .env
+```
+
+Windows PowerShell：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+然后编辑 `.env`。支持：
+
+```dotenv
+HF_TOKEN=...
+CIVITAI_TOKEN=...
+GITHUB_TOKEN=...
+GEMINI_API_KEY=...
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+QWEN_API_KEY=...
+OLLAMA_URL=http://localhost:11434
+```
+
+如果没有设置 `MODAL_SECRET_NAME`，`comfyui_modal.py` 会自动用 `modal.Secret.from_dotenv(".env")` 把本地 `.env` 注入：
+
+- CPU 模型同步 Function；
+- GPU ComfyUI Function；
+- custom node 的 Image build 阶段。
+
+因此 `HF_TOKEN` 可访问 gated/private Hugging Face，`CIVITAI_TOKEN` 用于 Civitai，`GITHUB_TOKEN` 可用于 private custom-node repo。GitHub 建议使用只读、repo-scoped 的 fine-grained token。
+
+`.env` 已加入 `.gitignore`，`.env.example` 只保存占位符。不要把真实 Key 写进 `recipes.py` 或提交到 Git。
+
+### 可选：转成持久 Modal Secret
+
+如果你不想每台开发机都保留 `.env` 注入，可以一次创建：
+
+```bash
+modal secret create comfyui-secrets --from-dotenv .env --force
 ```
 
 然后：
@@ -162,7 +209,17 @@ $env:COMFY_PROFILE="nordy-kontext-views"
 modal deploy comfyui_modal.py
 ```
 
-如果 `ComfyUI-OllamaGemini` 被选入 Image，运行时会从环境变量生成它的 `config.json`，不会把 API Key 写进仓库。
+优先级是：
+
+```text
+MODAL_SECRET_NAME 指定的 named Secret
+        >
+本地 .env
+        >
+无 Secret
+```
+
+如果 `ComfyUI-OllamaGemini` 被选入 Image，运行时会从这些环境变量生成它的 `config.json`，不会把 API Key 写进仓库。
 
 > 原 Notebook 中出现过明文 token。若那些 token 仍有效，建议在对应平台轮换。
 
@@ -234,8 +291,8 @@ N(
 ```python
 N(
     "https://github.com/example/node.git",
-    pre_commands=("$PY install.py",),
     requirements=("requirements.txt",),
+    commands=("$PY install.py",),
 )
 ```
 
