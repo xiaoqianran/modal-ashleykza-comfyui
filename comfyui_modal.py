@@ -80,6 +80,15 @@ if BASE_NODES_ENABLED:
             copy=True,
         )
         .run_commands(*build_base_nodes_commands(), secrets=APP_SECRETS)
+        # Some node requirements pull the PyPI `pathlib` backport, which shadows
+        # stdlib pathlib and crashes Python 3.12 (`from collections import Sequence`).
+        .run_commands(
+            "set -eu; "
+            "/ComfyUI/venv/bin/python3 -m pip uninstall -y pathlib pathlib2 enum34 typing || true; "
+            "rm -f /ComfyUI/venv/lib/python3.*/site-packages/pathlib.py "
+            "/ComfyUI/venv/lib/python3.*/site-packages/pathlib.pyc "
+            "/ComfyUI/venv/lib/python3.*/site-packages/__pycache__/pathlib*.pyc"
+        )
     )
 
 extra_node_commands = build_node_commands(PROFILE.node_packs)
