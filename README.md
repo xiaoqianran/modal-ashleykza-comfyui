@@ -75,7 +75,7 @@ Image build 时：
 3. 删除复制/clone 来的 Manager 目录（改用固定 pip 版 Manager）；
 4. 写入 `/opt/comfy-base-nodes.json`；
 5. 使用固定版本 `comfy-cli==1.12.0`、`comfyui-manager==4.2.2`；
-6. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。
+6. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。解析失败必须让 Image build 失败（`comfy-cli` 有时会打印 `Execution error` 却仍返回 0）。`comfyui-brushnet` 的 `accelerate>=0.29.0,<0.32.0` 会与 Hunyuan/Wan/FramePack 的 `accelerate>=1.2.1` / `>=1.6.0` 冲突，安装时会去掉这类无法满足的上限。
 
 这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。也不要把整个 CNB 运行时镜像当 Base——只要节点源码，依赖在 Ashley venv 里用 `uv-sync` 解析。
 

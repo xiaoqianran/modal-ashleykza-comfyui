@@ -35,6 +35,9 @@ def test_base_build_clones_github_and_runs_unified_dependency_sync():
     assert "node uv-sync" in joined
     assert "comfy-cli==1.12.0" in joined
     assert "comfyui-manager==4.2.2" in joined
+    # comfy-cli may exit 0 after a resolver failure; the image build must not.
+    assert "Resolution failed" in joined
+    assert "refusing to save a broken image" in joined
     # nodes.md entries are directory names, not Registry IDs; do not feed them
     # directly to `comfy node install`.
     assert "node install" not in joined
@@ -95,6 +98,45 @@ def test_install_base_nodes_copies_wanted_and_writes_manifest(tmp_path):
     assert manifest["image"] == base_nodes.BASE_NODES_IMAGE
     assert manifest["nodes"] == list(base_nodes.BASE_NODE_NAMES)
     assert len(manifest["repositories"]) == 129
+    assert manifest["relaxed_pins"] == []
+
+
+def test_relax_drops_brushnet_accelerate_upper_bound(tmp_path):
+    node = tmp_path / "comfyui-brushnet"
+    node.mkdir()
+    req = node / "requirements.txt"
+    req.write_text("diffusers>=0.29.0\naccelerate>=0.29.0,<0.32.0\npeft>=0.7.0\n")
+    (node / "pyproject.toml").write_text(
+        'dependencies = ["accelerate>=0.29.0"]\n', encoding="utf-8"
+    )
+
+    patched = base_nodes._relax_unsatisfiable_pins(tmp_path)
+
+    assert patched == ["comfyui-brushnet/requirements.txt"]
+    assert req.read_text(encoding="utf-8") == (
+        "diffusers>=0.29.0\naccelerate>=0.29.0\npeft>=0.7.0\n"
+    )
+
+
+def test_install_base_nodes_records_relaxed_pins(tmp_path):
+    src_root = tmp_path / "src" / "custom_nodes"
+    dst_root = tmp_path / "ComfyUI"
+    for name in base_nodes.BASE_NODE_NAMES:
+        (src_root / name).mkdir(parents=True)
+    req = src_root / "comfyui-brushnet" / "requirements.txt"
+    req.write_text("accelerate>=0.29.0,<0.32.0\n", encoding="utf-8")
+
+    manifest_path = tmp_path / "comfy-base-nodes.json"
+    base_nodes.install_base_nodes(
+        comfy_root=str(dst_root),
+        source_custom_nodes=str(src_root),
+        manifest_path=str(manifest_path),
+    )
+
+    installed = dst_root / "custom_nodes" / "comfyui-brushnet" / "requirements.txt"
+    assert installed.read_text(encoding="utf-8") == "accelerate>=0.29.0\n"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["relaxed_pins"] == ["comfyui-brushnet/requirements.txt"]
 
 
 def test_profile_references_exist():

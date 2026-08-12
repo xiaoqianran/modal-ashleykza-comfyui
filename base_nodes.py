@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import stat
@@ -275,6 +276,44 @@ def _remove_copied_manager(dst_root: Path) -> None:
             shutil.rmtree(manager_dir)
 
 
+# Live 130-node uv-sync failed because comfyui-brushnet pins
+# ``accelerate>=0.29.0,<0.32.0`` while Hunyuan/Wan/FramePack wrappers require
+# ``accelerate>=1.2.1`` / ``>=1.6.0``. Drop only that kind of upper bound.
+_ACCELERATE_UPPER_BOUND_RE = re.compile(
+    r"(?P<pkg>accelerate)(?P<lower>\s*(?:>=?|~=)\s*[\d.]+)(?P<upper>\s*,\s*<\s*=?\s*[\d.]+)",
+    re.IGNORECASE,
+)
+_REQUIREMENT_FILENAMES = (
+    "requirements.txt",
+    "requirements-lock.txt",
+    "requirements.in",
+    "pyproject.toml",
+)
+
+
+def _relax_unsatisfiable_pins(dst_root: Path) -> list[str]:
+    """Rewrite known-unsatisfiable requirement pins before unified uv-sync."""
+
+    patched: list[str] = []
+    if not dst_root.is_dir():
+        return patched
+    for node_dir in sorted(dst_root.iterdir()):
+        if not node_dir.is_dir():
+            continue
+        for filename in _REQUIREMENT_FILENAMES:
+            path = node_dir / filename
+            if not path.is_file():
+                continue
+            original = path.read_text(encoding="utf-8")
+            updated, count = _ACCELERATE_UPPER_BOUND_RE.subn(
+                r"\g<pkg>\g<lower>", original
+            )
+            if count:
+                path.write_text(updated, encoding="utf-8")
+                patched.append(f"{node_dir.name}/{filename}")
+    return patched
+
+
 def install_base_nodes(
     *,
     comfy_root: str = "/ComfyUI",
@@ -299,6 +338,7 @@ def install_base_nodes(
         _clone_base_nodes(dst_root)
 
     _remove_copied_manager(dst_root)
+    relaxed_pins = _relax_unsatisfiable_pins(dst_root)
 
     cloned = [
         {"name": name, "repository": url}
@@ -315,6 +355,7 @@ def install_base_nodes(
         "cloned": len(cloned),
         "nodes": wanted,
         "repositories": cloned,
+        "relaxed_pins": relaxed_pins,
     }
     Path(manifest_path).write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
@@ -353,10 +394,24 @@ def build_base_nodes_commands(
         "rm -f /tmp/comfy-git-askpass"
     )
 
+    # comfy-cli 1.12.0 can print "Execution error" / "Resolution failed" and
+    # still exit 0, which would let Modal save a broken image. Treat those
+    # strings as a hard build failure.
+    uv_sync_step = (
+        "set -eu; "
+        "COMFY_NO_TELEMETRY=1 /ComfyUI/venv/bin/comfy --workspace=/ComfyUI node uv-sync "
+        "> /tmp/comfy-uv-sync.log 2>&1 || true; "
+        "cat /tmp/comfy-uv-sync.log; "
+        "if grep -Eq 'Resolution failed|Execution error|No solution found' /tmp/comfy-uv-sync.log; then "
+        "echo 'comfy node uv-sync failed; refusing to save a broken image' >&2; "
+        "exit 1; "
+        "fi"
+    )
+
     return [
         clone_step,
         f"{q_py} -m pip install --no-cache-dir 'comfy-cli==1.12.0' 'comfyui-manager==4.2.2' uv",
-        "COMFY_NO_TELEMETRY=1 /ComfyUI/venv/bin/comfy --workspace=/ComfyUI node uv-sync",
+        uv_sync_step,
     ]
 
 
