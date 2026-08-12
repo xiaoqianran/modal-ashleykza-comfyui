@@ -25,6 +25,7 @@ import modal
 from comfy_engine import build_node_commands, prepare_runtime, start_comfyui, sync_profile_models
 from recipes import PROFILES, get_profile
 
+
 APP_NAME = "comfyui-ashleykza-cu128"
 IMAGE_TAG = os.getenv(
     "COMFY_IMAGE",
@@ -43,13 +44,24 @@ gpu_env = os.getenv("MODAL_GPU", "").strip()
 GPU = [item.strip() for item in gpu_env.split(",") if item.strip()] if gpu_env else GPU_DEFAULT
 
 SECRET_NAME = os.getenv("MODAL_SECRET_NAME", "").strip()
-APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)] if SECRET_NAME else []
+DOTENV_PATH = Path(".env")
+
+# Secret priority:
+#   1) named Modal Secret (best for shared/prod deployments)
+#   2) local .env (best for personal development; never commit it)
+if SECRET_NAME:
+    APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)]
+elif DOTENV_PATH.is_file():
+    APP_SECRETS = [modal.Secret.from_dotenv(str(DOTENV_PATH))]
+else:
+    APP_SECRETS = []
 
 app = modal.App(APP_NAME)
 workspace_vol = modal.Volume.from_name(
     "comfyui-ashleykza-workspace",
     create_if_missing=True,
 )
+
 
 # Stable custom nodes are baked into the image selected by COMFY_PROFILE.
 node_commands = build_node_commands(PROFILE.node_packs)
@@ -59,8 +71,11 @@ runtime_image = (
     .entrypoint([])
     .apt_install("git")
 )
+
 if node_commands:
-    runtime_image = runtime_image.run_commands(*node_commands)
+    # GITHUB_TOKEN from APP_SECRETS is available only during the build and is
+    # not baked into the resulting Image. Public repos work without it.
+    runtime_image = runtime_image.run_commands(*node_commands, secrets=APP_SECRETS)
 
 runtime_image = (
     runtime_image
@@ -71,14 +86,17 @@ runtime_image = (
             "PYTHONUNBUFFERED": "1",
         }
     )
+    # Modal 1.x no longer automounts arbitrary imported local modules.
     .add_local_python_source("recipes", "comfy_engine")
 )
+
 
 # Model downloads run on CPU and write directly into the persistent Volume.
 sync_image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("aria2", "ca-certificates")
     .uv_pip_install("huggingface_hub")
+    .env({"HF_XET_HIGH_PERFORMANCE": "1"})
     .add_local_python_source("recipes", "comfy_engine")
 )
 
@@ -109,6 +127,7 @@ def sync_models(profile: str) -> dict:
 @modal.web_server(port=COMFY_PORT, startup_timeout=15 * MINUTES)
 def ui():
     prepare_runtime(COMFY_ROOT, WORKSPACE)
+
     extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
     start_comfyui(
         profile_name=PROFILE_NAME,
@@ -121,7 +140,10 @@ def ui():
 
 
 @app.local_entrypoint()
-def main(action: str = "info", profile: str = PROFILE_NAME):
+def main(
+    action: str = "info",
+    profile: str = PROFILE_NAME,
+):
     """Local control entrypoint. action: info | profiles | sync"""
     action = action.strip().lower()
 
@@ -136,8 +158,9 @@ def main(action: str = "info", profile: str = PROFILE_NAME):
         return
 
     if action == "sync":
-        get_profile(profile)
-        print(sync_models.remote(profile))
+        get_profile(profile)  # validate before remote call
+        result = sync_models.remote(profile)
+        print(result)
         return
 
     if action != "info":
@@ -151,7 +174,7 @@ Profile:   {PROFILE_NAME}
 GPU:       {GPU}
 Port:      {COMFY_PORT}
 Volume:    comfyui-ashleykza-workspace
-Secret:    {SECRET_NAME or '(none)'}
+Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
 
 1. List profiles:
    modal run comfyui_modal.py --action profiles
@@ -164,5 +187,10 @@ Secret:    {SECRET_NAME or '(none)'}
 
 4. Persistent endpoint:
    COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+
+Optional:
+   MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py
+   EXTRA_ARGS='--lowvram' COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
+   MODAL_SECRET_NAME=comfyui-secrets COMFY_PROFILE=nordy-kontext-views modal deploy comfyui_modal.py
 """.strip()
     )
