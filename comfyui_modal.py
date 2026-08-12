@@ -33,7 +33,7 @@ MINUTES = 60
 PROFILE_NAME = os.getenv("COMFY_PROFILE", "base").strip() or "base"
 PROFILE = get_profile(PROFILE_NAME)
 
-GPU_DEFAULT = ["L4", "L40S", "RTX-PRO-6000"]
+GPU_DEFAULT = ["T4", "L4", "L40S", "RTX-PRO-6000"]
 gpu_env = os.getenv("MODAL_GPU", "").strip()
 GPU = [item.strip() for item in gpu_env.split(",") if item.strip()] if gpu_env else GPU_DEFAULT
 

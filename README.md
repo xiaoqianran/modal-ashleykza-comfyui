@@ -188,16 +188,16 @@ $env:COMFY_PROFILE="qwen-image"
 modal serve comfyui_modal.py
 ```
 
-默认 GPU fallback：
+默认 GPU 偏好（serve / deploy）：**T4 优先**（测试更便宜），然后 L4 / L40S / RTX-PRO-6000：
 
 ```text
-L4 → L40S → RTX-PRO-6000
+T4 → L4 → L40S → RTX-PRO-6000
 ```
 
-覆盖：
+需要更大 GPU 时再用 `MODAL_GPU` 覆盖：
 
 ```bash
-MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py
+MODAL_GPU=L4 COMFY_PROFILE=wan22 modal serve comfyui_modal.py
 ```
 
 或：
