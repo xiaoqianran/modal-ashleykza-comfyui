@@ -279,6 +279,16 @@ def _remove_copied_manager(dst_root: Path) -> None:
 # Unified uv-sync of 130 community nodes cannot satisfy every upstream pin.
 # Live serve hit accelerate>=0.29.0,<0.32.0 vs >=1.6.0, then Pillow==10.3.0 vs
 # >=10.4.0. Policy: keep lower bounds, convert == to >=, drop < / <=.
+#
+# Transitive metadata can still be unsatisfiable in one lock (YuE's
+# descript-audiotools wants protobuf<3.20, IPAdapter-Flux wants protobuf>=4.25.5).
+# Drop those packages from requirement files; remaining deps install sequentially
+# like the CNB image (cm-cli / pip per node), not as one uv-sync solve.
+_DROP_PACKAGES = frozenset(
+    {
+        "descript-audiotools",
+    }
+)
 _PKG_SPEC_RE = re.compile(
     r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"(?P<extras>\[[^\]]*\])?"
@@ -295,6 +305,10 @@ _REQUIREMENT_FILENAMES = (
 )
 
 
+def _normalize_requirement_name(name: str) -> str:
+    return name.replace("_", "-").casefold()
+
+
 def _relax_spec(spec: str) -> str:
     """Return a PEP 508 specifier that only keeps lower / inequality bounds."""
 
@@ -308,21 +322,48 @@ def _relax_spec(spec: str) -> str:
     return ",".join(kept)
 
 
+def _drop_blocked_packages(text: str) -> str:
+    """Remove packages whose published metadata cannot coexist in this snapshot."""
+
+    kept_lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        token = line.split("#", 1)[0].strip().strip("\",'")
+        name = re.split(r"[<>=!~\[\s;]", token, maxsplit=1)[0]
+        if name and _normalize_requirement_name(name) in _DROP_PACKAGES:
+            continue
+        kept_lines.append(line)
+    updated = "".join(kept_lines)
+    for package in _DROP_PACKAGES:
+        pattern = rf"""["']{re.escape(package)}[^"']*["']\s*,?\s*"""
+        updated = re.sub(pattern, "", updated, flags=re.IGNORECASE)
+        alt = package.replace("-", "_")
+        if alt != package:
+            pattern = rf"""["']{re.escape(alt)}[^"']*["']\s*,?\s*"""
+            updated = re.sub(pattern, "", updated, flags=re.IGNORECASE)
+    updated = re.sub(r",\s*,", ",", updated)
+    updated = re.sub(r"\[\s*,", "[", updated)
+    updated = re.sub(r",\s*\]", "]", updated)
+    return updated
+
+
 def _relax_requirement_text(text: str) -> str:
     """Rewrite package specs in requirements.txt / pyproject dependency text."""
 
     def replace(match: re.Match[str]) -> str:
+        name = match.group("name")
+        if _normalize_requirement_name(name) in _DROP_PACKAGES:
+            return ""
         relaxed = _relax_spec(match.group("spec"))
         extras = match.group("extras") or ""
         if not relaxed:
-            return match.group("name") + extras
-        return f"{match.group('name')}{extras}{relaxed}"
+            return name + extras
+        return f"{name}{extras}{relaxed}"
 
-    return _PKG_SPEC_RE.sub(replace, text)
+    return _PKG_SPEC_RE.sub(replace, _drop_blocked_packages(text))
 
 
 def _relax_unsatisfiable_pins(dst_root: Path) -> list[str]:
-    """Rewrite conflict-prone pins so one uv-sync can cover the 130-node set."""
+    """Rewrite conflict-prone pins so sequential pip can stack the 130-node set."""
 
     patched: list[str] = []
     if not dst_root.is_dir():
@@ -422,24 +463,32 @@ def build_base_nodes_commands(
         "rm -f /tmp/comfy-git-askpass"
     )
 
-    # comfy-cli 1.12.0 can print "Execution error" / "Resolution failed" and
-    # still exit 0, which would let Modal save a broken image. Treat those
-    # strings as a hard build failure.
-    uv_sync_step = (
+    # CNB installed nodes one-by-one with cm-cli/pip. A single `comfy node uv-sync`
+    # cannot solve this 130-node set (direct pins and transitive protobuf wars).
+    # Install each requirements.txt sequentially; one node failing must not
+    # abort the image (same as the source image). git+ deps need askpass.
+    deps_step = (
         "set -eu; "
-        "COMFY_NO_TELEMETRY=1 /ComfyUI/venv/bin/comfy --workspace=/ComfyUI node uv-sync "
-        "> /tmp/comfy-uv-sync.log 2>&1 || true; "
-        "cat /tmp/comfy-uv-sync.log; "
-        "if grep -Eq 'Resolution failed|Execution error|No solution found' /tmp/comfy-uv-sync.log; then "
-        "echo 'comfy node uv-sync failed; refusing to save a broken image' >&2; "
-        "exit 1; "
-        "fi"
+        'if [ -n "${GITHUB_TOKEN:-}" ]; then '
+        "printf '%s\\n' '#!/bin/sh' "
+        "'case \"$1\" in *Username*) echo x-access-token ;; *) echo \"$GITHUB_TOKEN\" ;; esac' "
+        "> /tmp/comfy-git-askpass && chmod 700 /tmp/comfy-git-askpass && "
+        "export GIT_ASKPASS=/tmp/comfy-git-askpass GIT_TERMINAL_PROMPT=0; "
+        "fi; "
+        "fail=0; "
+        "for req in /ComfyUI/custom_nodes/*/requirements.txt; do "
+        'if [ -f "$req" ]; then '
+        f"/ComfyUI/venv/bin/uv pip install --python {q_py} --no-cache -r \"$req\" || fail=$((fail+1)); "
+        "fi; "
+        "done; "
+        "rm -f /tmp/comfy-git-askpass; "
+        'echo "base-node requirement-file failures: $fail"'
     )
 
     return [
         clone_step,
-        f"{q_py} -m pip install --no-cache-dir 'comfy-cli==1.12.0' 'comfyui-manager==4.2.2' uv",
-        uv_sync_step,
+        f"{q_py} -m pip install --no-cache-dir 'comfyui-manager==4.2.2' uv",
+        deps_step,
     ]
 
 

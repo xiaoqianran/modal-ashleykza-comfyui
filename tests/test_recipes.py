@@ -24,7 +24,7 @@ def test_base_snapshot_is_pinned_and_complete():
     )
 
 
-def test_base_build_clones_github_and_runs_unified_dependency_sync():
+def test_base_build_clones_github_and_installs_requirements_sequentially():
     commands = base_nodes.build_base_nodes_commands()
     joined = "\n".join(commands)
     assert "sparse-checkout" not in joined
@@ -32,14 +32,12 @@ def test_base_build_clones_github_and_runs_unified_dependency_sync():
     assert "cnb.cool/SKDZSS90/ComfyUI-yi_dian_tong.git" not in joined
     assert "GITHUB_TOKEN" in joined
     assert "GIT_ASKPASS" in joined
-    assert "node uv-sync" in joined
-    assert "comfy-cli==1.12.0" in joined
+    assert "uv pip install" in joined
+    assert "--no-cache -r" in joined
+    assert "custom_nodes/*/requirements.txt" in joined
     assert "comfyui-manager==4.2.2" in joined
-    # comfy-cli may exit 0 after a resolver failure; the image build must not.
-    assert "Resolution failed" in joined
-    assert "refusing to save a broken image" in joined
-    # nodes.md entries are directory names, not Registry IDs; do not feed them
-    # directly to `comfy node install`.
+    # Unified uv-sync cannot solve this 130-node set; do not use it here.
+    assert "node uv-sync" not in joined
     assert "node install" not in joined
 
 
@@ -129,10 +127,18 @@ def test_relax_drops_upper_bounds_and_exact_pins(tmp_path):
 
 def test_relax_requirement_text_keeps_lower_bounds_only():
     text = "foo>=1.0,<2.0; python_version>='3.10'\nBar==1.2.3\nbaz~=1.4\n"
-    assert "foo>=1.0" in base_nodes._relax_requirement_text(text)
-    assert "<2.0" not in base_nodes._relax_requirement_text(text)
-    assert "Bar>=1.2.3" in base_nodes._relax_requirement_text(text)
-    assert "baz>=1.4" in base_nodes._relax_requirement_text(text)
+    relaxed = base_nodes._relax_requirement_text(text)
+    assert "foo>=1.0" in relaxed
+    assert "<2.0" not in relaxed
+    assert "Bar>=1.2.3" in relaxed
+    assert "baz>=1.4" in relaxed
+
+
+def test_relax_drops_packages_with_unsatisfiable_transitive_deps():
+    text = "torch\ndescript-audiotools>=0.7.2\nprotobuf>=4.25.5\n"
+    relaxed = base_nodes._relax_requirement_text(text)
+    assert "descript-audiotools" not in relaxed
+    assert "protobuf>=4.25.5" in relaxed
 
 
 def test_install_base_nodes_records_relaxed_pins(tmp_path):

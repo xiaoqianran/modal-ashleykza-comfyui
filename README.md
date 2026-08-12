@@ -11,7 +11,7 @@ Ashley ComfyUI Image
         │
         ├── base_nodes.py
         │     固定一点通 130-node 名单 + GitHub clone
-        │     + 统一 uv-sync 依赖解析
+        │     + 按节点 sequential pip（与 CNB cm-cli 相同）
         │
         ├── recipes.py
         │     MODEL_PACKS   模型资产
@@ -74,10 +74,10 @@ Image build 时：
 2. 缺一个 clone 失败就让 Image build 失败，不静默跳过；
 3. 删除复制/clone 来的 Manager 目录（改用固定 pip 版 Manager）；
 4. 写入 `/opt/comfy-base-nodes.json`；
-5. 使用固定版本 `comfy-cli==1.12.0`、`comfyui-manager==4.2.2`；
-6. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。解析失败必须让 Image build 失败（`comfy-cli` 有时会打印 `Execution error` 却仍返回 0）。130 个社区节点的 pin 无法同时满足（例如 `accelerate>=0.29.0,<0.32.0` vs `>=1.6.0`，`Pillow==10.3.0` vs `>=10.4.0`），安装时会把 `==` / `~=` 改成 `>=` 并去掉 `<` / `<=` 上限，只保留下限。
+5. 使用固定版本 `comfyui-manager==4.2.2`；
+6. 对每个 `custom_nodes/*/requirements.txt` 做 sequential `pip install -r`（与 CNB 镜像的 `cm-cli.sh install` 一样，一次只解一个节点）。**不要**对这 130 个节点跑 `comfy node uv-sync`：统一求解无法同时满足（`accelerate` 上下限、`Pillow==10.3.0` vs `>=10.4.0`、YuE 的 `descript-audiotools` 要 `protobuf<3.20` 而 IPAdapter-Flux 要 `protobuf>=4.25.5`）。安装前会把 `==` / `~=` 改成 `>=`、去掉 `<` / `<=`，并丢掉已知无法共存的包（目前是 `descript-audiotools`）。单个节点的 pip 失败不中断 Image build。
 
-这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。也不要把整个 CNB 运行时镜像当 Base——只要节点源码，依赖在 Ashley venv 里用 `uv-sync` 解析。
+这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。也不要把整个 CNB 运行时镜像当 Base——只要节点源码，依赖按节点装进 Ashley venv。
 
 正常 `modal serve` / `modal deploy` 不需要设置 `COMFY_BASE_NODES`。
 
