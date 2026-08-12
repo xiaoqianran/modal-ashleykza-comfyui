@@ -88,3 +88,8 @@ def test_node_build_supports_github_token_without_embedding_value():
     assert "GITHUB_TOKEN" in joined
     assert "x-access-token" in joined
     assert "github_pat_" not in joined
+
+
+def test_github_token_handling_happens_before_xtrace():
+    command = comfy_engine.build_node_commands(["qwen-image"])[0]
+    assert command.index("set -eu") < command.index("GITHUB_TOKEN") < command.index("set -x")
