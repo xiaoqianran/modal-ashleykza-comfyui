@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import base_nodes
@@ -16,28 +17,71 @@ def test_base_snapshot_is_pinned_and_complete():
 
 
 def test_base_build_uses_source_snapshot_and_unified_dependency_sync():
-    command = base_nodes.build_base_nodes_command()
-    assert base_nodes.BASE_NODES_SOURCE_REV in command
-    assert base_nodes.BASE_NODES_REPOSITORY in command
-    assert "node uv-sync" in command
-    assert "comfy-cli==1.12.0" in command
-    assert "comfyui-manager==4.2.2" in command
+    commands = base_nodes.build_base_nodes_commands()
+    joined = "\n".join(commands)
+    assert base_nodes.BASE_NODES_SOURCE_REV in joined
+    assert base_nodes.BASE_NODES_REPOSITORY in joined
+    assert "node uv-sync" in joined
+    assert "comfy-cli==1.12.0" in joined
+    assert "comfyui-manager==4.2.2" in joined
     # nodes.md entries are directory names, not Registry IDs; do not feed them
     # directly to `comfy node install`.
-    assert "node install" not in command
+    assert "node install" not in joined
 
 
-def test_base_build_command_avoids_fragile_python_c_quoting():
-    """Modal wraps run_commands into Dockerfile RUN; giant python -c breaks parsing."""
-    command = base_nodes.build_base_nodes_command()
-    assert "cat > /tmp/install_base_nodes.py <<'COMFY_BASE_NODES_PY'" in command
-    assert "COMFY_BASE_NODES_PY" in command
-    assert "/tmp/install_base_nodes.py" in command
-    # Helper must be executed as a file, not via python -c with the full payload.
-    assert "python3 -c " not in command
-    assert "python -c " not in command
-    assert "/opt/comfy-base-nodes.json" in command
-    assert "git_backup" in command
+def test_base_build_commands_are_modal_dockerfile_safe():
+    """Modal wraps each run_commands entry into Dockerfile RUN; no heredoc / python -c."""
+    commands = base_nodes.build_base_nodes_commands()
+    assert commands, "expected at least one shell step"
+    for command in commands:
+        assert "\n" not in command, command
+        assert "<<'" not in command
+        assert '<<"' not in command
+        assert "python3 -c " not in command
+        assert "python -c " not in command
+
+    joined = "\n".join(commands)
+    assert base_nodes.INSTALLER_REMOTE_PATH in joined
+    assert f"/ComfyUI/venv/bin/python3 {base_nodes.INSTALLER_REMOTE_PATH}" in joined
+    assert "--comfy-root" in joined
+
+
+def test_install_base_nodes_copies_wanted_and_writes_manifest(tmp_path):
+    src_root = tmp_path / "src" / "custom_nodes"
+    dst_root = tmp_path / "ComfyUI"
+    for name in base_nodes.BASE_NODE_NAMES:
+        node_dir = src_root / name
+        node_dir.mkdir(parents=True)
+        (node_dir / "marker.txt").write_text(name, encoding="utf-8")
+        # Simulate upstream git_backup layout for one node.
+        if name == "ComfyUI-KJNodes":
+            (node_dir / "git_backup").mkdir()
+            (node_dir / "git_backup" / "config").write_text("gitdir", encoding="utf-8")
+
+    # Copied manager dirs must be removed after install.
+    for manager_name in ("comfyui-manager", "ComfyUI-Manager"):
+        manager = src_root / manager_name
+        if not manager.exists():
+            manager.mkdir(parents=True)
+        (manager / "extra.txt").write_text("remove-me", encoding="utf-8")
+
+    manifest_path = tmp_path / "comfy-base-nodes.json"
+    base_nodes.install_base_nodes(
+        comfy_root=str(dst_root),
+        source_custom_nodes=str(src_root),
+        manifest_path=str(manifest_path),
+    )
+
+    custom_nodes = dst_root / "custom_nodes"
+    assert (custom_nodes / "ComfyUI-WanVideoWrapper" / "marker.txt").read_text(encoding="utf-8")
+    assert (custom_nodes / "ComfyUI-KJNodes" / ".git" / "config").read_text(encoding="utf-8") == "gitdir"
+    assert not (custom_nodes / "comfyui-manager").exists()
+    assert not (custom_nodes / "ComfyUI-Manager").exists()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["count"] == 130
+    assert manifest["revision"] == base_nodes.BASE_NODES_SOURCE_REV
+    assert manifest["nodes"] == list(base_nodes.BASE_NODE_NAMES)
 
 
 def test_profile_references_exist():

@@ -64,17 +64,19 @@ https://cnb.cool/SKDZSS90/ComfyUI-yi_dian_tong/-/blob/main/nodes.md
 5152c24cda53eddae02c0e8f0dab832444dab891
 ```
 
-`base_nodes.py` 保存这 130 个**精确目录名**。`build_base_nodes_command()` **只在 Modal Image build 阶段**执行（`runtime_image.run_commands(...)`），不会在 GPU 冷启动时再跑一遍。
+`base_nodes.py` 保存这 130 个**精确目录名**，并作为 Image build 安装脚本（`python base_nodes.py --comfy-root ...`）。`comfyui_modal.py` 先用 `Image.add_local_file(..., copy=True)` 把它拷进镜像，再跑 `build_base_nodes_commands()` 生成的**单行** `run_commands` 步骤。Modal 会把 `run_commands` 包进 Dockerfile `RUN`，**不支持 shell heredoc**，因此不在命令里内嵌大段 Python。
 
 Image build 时：
 
 1. 对 CNB 仓库做 sparse checkout；
 2. checkout 固定提交，而不是每次取最新 `main`；
-3. 验证 130 个目录全部存在，缺一个就失败；
+3. 运行仓库内的 `base_nodes.py` 安装器：验证 130 个目录全部存在，缺一个就失败；
 4. 只复制这 130 个 `custom_nodes`；
 5. 恢复上游存在的 `git_backup → .git` 元数据；
-6. 使用固定版本 `comfy-cli==1.12.0`、`comfyui-manager==4.2.2`；
-7. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。
+6. 删除复制来的 Manager 目录（改用固定 pip 版 Manager）；
+7. 写入 `/opt/comfy-base-nodes.json`；
+8. 使用固定版本 `comfy-cli==1.12.0`、`comfyui-manager==4.2.2`；
+9. 通过 `comfy node uv-sync` 对现有 custom nodes 做统一依赖解析。
 
 这避免了一个重要错误：`nodes.md` 中的名字是上游安装目录名，**不能假定等于 Comfy Registry ID**，因此不会把这 130 个名字直接传给 `comfy node install`。
 
