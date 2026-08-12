@@ -157,7 +157,13 @@ def build_base_nodes_command(
     comfy_root: str = "/ComfyUI",
     python_bin: str = "/ComfyUI/venv/bin/python3",
 ) -> str:
-    """Build the pinned 130-node base from the CNB source snapshot."""
+    """Build the pinned 130-node base from the CNB source snapshot.
+
+    The installer helper is written to a temp file via a quoted heredoc, then
+    executed. Avoid embedding a giant ``python -c '...'`` payload: Modal wraps
+    ``run_commands`` into Dockerfile ``RUN`` layers, and nested shell quoting of
+    a large inline script breaks the image build parser.
+    """
 
     payload = json.dumps(BASE_NODE_NAMES, ensure_ascii=False)
     py_script = f"""
@@ -203,29 +209,30 @@ manifest = {{
     'nodes': wanted,
 }}
 Path('/opt/comfy-base-nodes.json').write_text(
-    json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8'
+    json.dumps(manifest, indent=2, ensure_ascii=False) + '\\n', encoding='utf-8'
 )
 """.strip()
 
     q_repo = shlex.quote(BASE_NODES_REPOSITORY)
     q_rev = shlex.quote(BASE_NODES_SOURCE_REV)
     q_py = shlex.quote(python_bin)
-    q_script = shlex.quote(py_script)
+    helper_path = "/tmp/install_base_nodes.py"
 
-    return "; ".join(
-        (
-            "set -eu",
-            "rm -rf /tmp/comfy-base-source",
-            "git init -q /tmp/comfy-base-source",
-            f"git -C /tmp/comfy-base-source remote add origin {q_repo}",
-            "git -C /tmp/comfy-base-source config core.sparseCheckout true",
-            "printf 'ComfyUI/custom_nodes/\n' > /tmp/comfy-base-source/.git/info/sparse-checkout",
-            f"git -C /tmp/comfy-base-source fetch -q --filter=blob:none --depth=1 origin {q_rev} || git -C /tmp/comfy-base-source fetch -q --filter=blob:none --depth=500 origin main",
-            f"git -C /tmp/comfy-base-source cat-file -e {q_rev}^{{commit}}",
-            f"git -C /tmp/comfy-base-source checkout -q --detach {q_rev}",
-            f"{q_py} -c {q_script}",
-            "rm -rf /tmp/comfy-base-source",
-            f"{q_py} -m pip install --no-cache-dir 'comfy-cli==1.12.0' 'comfyui-manager==4.2.2' uv",
-            "COMFY_NO_TELEMETRY=1 /ComfyUI/venv/bin/comfy --workspace=/ComfyUI node uv-sync",
-        )
-    )
+    # Multi-line shell (not "; "-joined) so the heredoc stays Modal/Dockerfile-safe.
+    return f"""set -eu
+rm -rf /tmp/comfy-base-source
+git init -q /tmp/comfy-base-source
+git -C /tmp/comfy-base-source remote add origin {q_repo}
+git -C /tmp/comfy-base-source config core.sparseCheckout true
+printf 'ComfyUI/custom_nodes/\\n' > /tmp/comfy-base-source/.git/info/sparse-checkout
+git -C /tmp/comfy-base-source fetch -q --filter=blob:none --depth=1 origin {q_rev} || git -C /tmp/comfy-base-source fetch -q --filter=blob:none --depth=500 origin main
+git -C /tmp/comfy-base-source cat-file -e {q_rev}^{{commit}}
+git -C /tmp/comfy-base-source checkout -q --detach {q_rev}
+cat > {helper_path} <<'COMFY_BASE_NODES_PY'
+{py_script}
+COMFY_BASE_NODES_PY
+{q_py} {helper_path}
+rm -rf /tmp/comfy-base-source {helper_path}
+{q_py} -m pip install --no-cache-dir 'comfy-cli==1.12.0' 'comfyui-manager==4.2.2' uv
+COMFY_NO_TELEMETRY=1 /ComfyUI/venv/bin/comfy --workspace=/ComfyUI node uv-sync
+"""

@@ -27,6 +27,19 @@ def test_base_build_uses_source_snapshot_and_unified_dependency_sync():
     assert "node install" not in command
 
 
+def test_base_build_command_avoids_fragile_python_c_quoting():
+    """Modal wraps run_commands into Dockerfile RUN; giant python -c breaks parsing."""
+    command = base_nodes.build_base_nodes_command()
+    assert "cat > /tmp/install_base_nodes.py <<'COMFY_BASE_NODES_PY'" in command
+    assert "COMFY_BASE_NODES_PY" in command
+    assert "/tmp/install_base_nodes.py" in command
+    # Helper must be executed as a file, not via python -c with the full payload.
+    assert "python3 -c " not in command
+    assert "python -c " not in command
+    assert "/opt/comfy-base-nodes.json" in command
+    assert "git_backup" in command
+
+
 def test_profile_references_exist():
     for profile in recipes.PROFILES.values():
         assert all(name in recipes.MODEL_PACKS for name in profile.model_packs)
