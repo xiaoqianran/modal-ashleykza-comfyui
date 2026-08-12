@@ -39,14 +39,11 @@ GPU = [item.strip() for item in gpu_env.split(",") if item.strip()] if gpu_env e
 
 BASE_NODES_ENABLED = os.getenv("COMFY_BASE_NODES", "1").strip().lower() not in {"0", "false", "no", "off"}
 
-SECRET_NAME = os.getenv("MODAL_SECRET_NAME", "").strip()
-DOTENV_PATH = Path(".env")
-if SECRET_NAME:
-    APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)]
-elif DOTENV_PATH.is_file():
-    APP_SECRETS = [modal.Secret.from_dotenv(str(DOTENV_PATH))]
-else:
-    APP_SECRETS = []
+# Always use a named Modal Secret so local/remote dependency graphs match.
+# Conditional from_dotenv(.env) breaks hydration: .env exists locally but not
+# inside the remote container, so Modal sees 2 deps locally vs 3 object ids.
+SECRET_NAME = os.getenv("MODAL_SECRET_NAME", "comfyui-creds").strip() or "comfyui-creds"
+APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)]
 
 app = modal.App(APP_NAME)
 workspace_vol = modal.Volume.from_name(
@@ -163,7 +160,7 @@ GPU:         {GPU}
 Port:        {COMFY_PORT}
 Base nodes:  {BASE_NODE_COUNT if BASE_NODES_ENABLED else 0} (CNB rev {BASE_NODES_SOURCE_REV[:8]})
 Volume:      comfyui-ashleykza-workspace
-Secret:      {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
+Secret:      {SECRET_NAME}
 
 List profiles:
   modal run comfyui_modal.py --action profiles
