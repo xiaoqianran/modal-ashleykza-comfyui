@@ -206,7 +206,6 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
     if expected.exists() and expected.resolve() != target.resolve():
         target.parent.mkdir(parents=True, exist_ok=True)
         expected.replace(target)
-        # Remove empty nested directories created by `hf download --local-dir`.
         parent = expected.parent
         while parent != target_dir and parent.exists():
             try:
@@ -217,7 +216,6 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
 
     if not target.exists():
         after = [p for p in target_dir.rglob("*") if p.is_file() and p.resolve() not in before]
-        # Ignore Hugging Face local metadata when identifying the downloaded file.
         after = [p for p in after if ".cache/huggingface" not in p.as_posix()]
         if len(after) == 1:
             after[0].replace(target)
@@ -261,9 +259,6 @@ def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | No
     print(f"[DOWNLOAD] {redact_url(_with_civitai_token(normalized))}")
     print(f"           -> {target}")
 
-    # Hugging Face is Xet-backed now. Prefer hf/hf_xet instead of forcing the
-    # URL through aria2; aria2 remains an excellent generic downloader for
-    # Civitai and ordinary HTTP(S) assets.
     if _parse_hf_url(normalized):
         try:
             _download_with_hf_cli(asset, target_dir, target)
@@ -361,11 +356,11 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
             clone_flags.extend(["--recursive", "--shallow-submodules"])
 
         steps = [
-            "set -eux",
-            # Optional fine-grained GITHUB_TOKEN support for private node repos.
-            # GIT_ASKPASS reads the environment at build time; the token itself
-            # is never written into the resulting Image or command string.
+            # Do not enable xtrace before secret handling: `set -x` would print
+            # the expanded GITHUB_TOKEN in build logs.
+            "set -eu",
             'if [ -n "${GITHUB_TOKEN:-}" ]; then printf \'%s\\n\' \'#!/bin/sh\' \'case "$1" in *Username*) echo x-access-token ;; *) echo "$GITHUB_TOKEN" ;; esac\' > /tmp/comfy-git-askpass && chmod 700 /tmp/comfy-git-askpass && export GIT_ASKPASS=/tmp/comfy-git-askpass GIT_TERMINAL_PROMPT=0; fi',
+            "set -x",
             "mkdir -p /ComfyUI/custom_nodes",
             "cd /ComfyUI/custom_nodes",
             (
@@ -453,7 +448,6 @@ def prepare_runtime(
     ensure_workspace_layout(workspace)
     write_extra_model_paths(comfy_root, workspace)
 
-    # Mutable user/runtime state belongs on the Volume.
     for name in ("input", "output", "user"):
         _replace_with_symlink(comfy_root / name, workspace / name)
 
