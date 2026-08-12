@@ -1,17 +1,10 @@
 """Deploy ashleykleynhans/comfyui on Modal with declarative recipes.
 
 Architecture:
-- Image: immutable ComfyUI runtime + selected stable custom nodes.
+- Image: Ashley runtime + pinned CNB 130-node base + small profile extras.
 - Volume: models / input / output / user / optional user nodes / logs / lock state.
 - CPU sync function: downloads models without paying for GPU time.
 - GPU web server: only prepares paths and starts ComfyUI.
-
-Examples:
-    modal run comfyui_modal.py --action profiles
-    modal run comfyui_modal.py --action sync --profile qwen-image
-
-    COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
-    COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 """
 
 from __future__ import annotations
@@ -22,6 +15,7 @@ from pathlib import Path
 
 import modal
 
+from base_nodes import BASE_NODE_COUNT, BASE_NODES_SOURCE_REV, build_base_nodes_command
 from comfy_engine import build_node_commands, prepare_runtime, start_comfyui, sync_profile_models
 from recipes import PROFILES, get_profile
 
@@ -43,12 +37,10 @@ GPU_DEFAULT = ["L4", "L40S", "RTX-PRO-6000"]
 gpu_env = os.getenv("MODAL_GPU", "").strip()
 GPU = [item.strip() for item in gpu_env.split(",") if item.strip()] if gpu_env else GPU_DEFAULT
 
+BASE_NODES_ENABLED = os.getenv("COMFY_BASE_NODES", "1").strip().lower() not in {"0", "false", "no", "off"}
+
 SECRET_NAME = os.getenv("MODAL_SECRET_NAME", "").strip()
 DOTENV_PATH = Path(".env")
-
-# Secret priority:
-#   1) named Modal Secret (best for shared/prod deployments)
-#   2) local .env (best for personal development; never commit it)
 if SECRET_NAME:
     APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)]
 elif DOTENV_PATH.is_file():
@@ -62,20 +54,22 @@ workspace_vol = modal.Volume.from_name(
     create_if_missing=True,
 )
 
-
-# Stable custom nodes are baked into the image selected by COMFY_PROFILE.
-node_commands = build_node_commands(PROFILE.node_packs)
-
+# Keep the expensive common base before profile-specific layers so Modal can
+# cache it across profiles and normal redeploys.
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
-    .apt_install("git")
+    .apt_install("git", "ca-certificates")
 )
 
-if node_commands:
-    # GITHUB_TOKEN from APP_SECRETS is available only during the build and is
-    # not baked into the resulting Image. Public repos work without it.
-    runtime_image = runtime_image.run_commands(*node_commands, secrets=APP_SECRETS)
+if BASE_NODES_ENABLED:
+    runtime_image = runtime_image.run_commands(build_base_nodes_command())
+
+extra_node_commands = build_node_commands(PROFILE.node_packs)
+if extra_node_commands:
+    # GITHUB_TOKEN is only exposed during these image-build commands. The
+    # command builder configures askpass before enabling shell xtrace.
+    runtime_image = runtime_image.run_commands(*extra_node_commands, secrets=APP_SECRETS)
 
 runtime_image = (
     runtime_image
@@ -84,18 +78,17 @@ runtime_image = (
             "DISABLE_AUTOLAUNCH": "1",
             "DISABLE_SYNC": "1",
             "PYTHONUNBUFFERED": "1",
+            "COMFY_NO_TELEMETRY": "1",
         }
     )
-    # Modal 1.x no longer automounts arbitrary imported local modules.
-    .add_local_python_source("recipes", "comfy_engine")
+    .add_local_python_source("base_nodes", "recipes", "comfy_engine")
 )
-
 
 # Model downloads run on CPU and write directly into the persistent Volume.
 sync_image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("aria2", "ca-certificates")
-    .uv_pip_install("huggingface_hub")
+    .uv_pip_install("huggingface_hub==1.24.0")
     .env({"HF_XET_HIGH_PERFORMANCE": "1"})
     .add_local_python_source("recipes", "comfy_engine")
 )
@@ -127,7 +120,6 @@ def sync_models(profile: str) -> dict:
 @modal.web_server(port=COMFY_PORT, startup_timeout=15 * MINUTES)
 def ui():
     prepare_runtime(COMFY_ROOT, WORKSPACE)
-
     extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
     start_comfyui(
         profile_name=PROFILE_NAME,
@@ -140,10 +132,7 @@ def ui():
 
 
 @app.local_entrypoint()
-def main(
-    action: str = "info",
-    profile: str = PROFILE_NAME,
-):
+def main(action: str = "info", profile: str = PROFILE_NAME):
     """Local control entrypoint. action: info | profiles | sync"""
     action = action.strip().lower()
 
@@ -152,15 +141,14 @@ def main(
             print(
                 f"{name:22} "
                 f"models={','.join(recipe.model_packs) or '-':24} "
-                f"nodes={','.join(recipe.node_packs) or '-':24} "
+                f"extra_nodes={','.join(recipe.node_packs) or '-':28} "
                 f"{recipe.description}"
             )
         return
 
     if action == "sync":
-        get_profile(profile)  # validate before remote call
-        result = sync_models.remote(profile)
-        print(result)
+        get_profile(profile)
+        print(sync_models.remote(profile))
         return
 
     if action != "info":
@@ -168,29 +156,28 @@ def main(
 
     print(
         f"""
-App:       {APP_NAME}
-Image:     {IMAGE_TAG}
-Profile:   {PROFILE_NAME}
-GPU:       {GPU}
-Port:      {COMFY_PORT}
-Volume:    comfyui-ashleykza-workspace
-Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
+App:         {APP_NAME}
+Image:       {IMAGE_TAG}
+Profile:     {PROFILE_NAME}
+GPU:         {GPU}
+Port:        {COMFY_PORT}
+Base nodes:  {BASE_NODE_COUNT if BASE_NODES_ENABLED else 0} (CNB rev {BASE_NODES_SOURCE_REV[:8]})
+Volume:      comfyui-ashleykza-workspace
+Secret:      {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
 
-1. List profiles:
-   modal run comfyui_modal.py --action profiles
+List profiles:
+  modal run comfyui_modal.py --action profiles
 
-2. Sync models without GPU:
-   modal run comfyui_modal.py --action sync --profile qwen-image
+Sync models without GPU:
+  modal run comfyui_modal.py --action sync --profile qwen-image
 
-3. Interactive UI:
-   COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
+Interactive UI:
+  COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
-4. Persistent endpoint:
-   COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+Persistent endpoint:
+  COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 
-Optional:
-   MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py
-   EXTRA_ARGS='--lowvram' COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
-   MODAL_SECRET_NAME=comfyui-secrets COMFY_PROFILE=nordy-kontext-views modal deploy comfyui_modal.py
+Debug without the common base nodes:
+  COMFY_BASE_NODES=0 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 """.strip()
     )
