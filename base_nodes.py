@@ -276,13 +276,17 @@ def _remove_copied_manager(dst_root: Path) -> None:
             shutil.rmtree(manager_dir)
 
 
-# Live 130-node uv-sync failed because comfyui-brushnet pins
-# ``accelerate>=0.29.0,<0.32.0`` while Hunyuan/Wan/FramePack wrappers require
-# ``accelerate>=1.2.1`` / ``>=1.6.0``. Drop only that kind of upper bound.
-_ACCELERATE_UPPER_BOUND_RE = re.compile(
-    r"(?P<pkg>accelerate)(?P<lower>\s*(?:>=?|~=)\s*[\d.]+)(?P<upper>\s*,\s*<\s*=?\s*[\d.]+)",
+# Unified uv-sync of 130 community nodes cannot satisfy every upstream pin.
+# Live serve hit accelerate>=0.29.0,<0.32.0 vs >=1.6.0, then Pillow==10.3.0 vs
+# >=10.4.0. Policy: keep lower bounds, convert == to >=, drop < / <=.
+_PKG_SPEC_RE = re.compile(
+    r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
+    r"(?P<extras>\[[^\]]*\])?"
+    r"(?P<spec>(?:\s*(?:===|==|!=|<=|>=|~=|<|>)\s*[^,;=\s\"']+"
+    r"(?:\s*,\s*(?:===|==|!=|<=|>=|~=|<|>)\s*[^,;=\s\"']+)*))",
     re.IGNORECASE,
 )
+_CLAUSE_RE = re.compile(r"(===|==|!=|<=|>=|~=|<|>)\s*([^,;=\s\"']+)")
 _REQUIREMENT_FILENAMES = (
     "requirements.txt",
     "requirements-lock.txt",
@@ -291,8 +295,34 @@ _REQUIREMENT_FILENAMES = (
 )
 
 
+def _relax_spec(spec: str) -> str:
+    """Return a PEP 508 specifier that only keeps lower / inequality bounds."""
+
+    kept: list[str] = []
+    for operator, version in _CLAUSE_RE.findall(spec):
+        if operator in {"<", "<="}:
+            continue
+        if operator in {"==", "===", "~="}:
+            operator = ">="
+        kept.append(f"{operator}{version}")
+    return ",".join(kept)
+
+
+def _relax_requirement_text(text: str) -> str:
+    """Rewrite package specs in requirements.txt / pyproject dependency text."""
+
+    def replace(match: re.Match[str]) -> str:
+        relaxed = _relax_spec(match.group("spec"))
+        extras = match.group("extras") or ""
+        if not relaxed:
+            return match.group("name") + extras
+        return f"{match.group('name')}{extras}{relaxed}"
+
+    return _PKG_SPEC_RE.sub(replace, text)
+
+
 def _relax_unsatisfiable_pins(dst_root: Path) -> list[str]:
-    """Rewrite known-unsatisfiable requirement pins before unified uv-sync."""
+    """Rewrite conflict-prone pins so one uv-sync can cover the 130-node set."""
 
     patched: list[str] = []
     if not dst_root.is_dir():
@@ -305,10 +335,8 @@ def _relax_unsatisfiable_pins(dst_root: Path) -> list[str]:
             if not path.is_file():
                 continue
             original = path.read_text(encoding="utf-8")
-            updated, count = _ACCELERATE_UPPER_BOUND_RE.subn(
-                r"\g<pkg>\g<lower>", original
-            )
-            if count:
+            updated = _relax_requirement_text(original)
+            if updated != original:
                 path.write_text(updated, encoding="utf-8")
                 patched.append(f"{node_dir.name}/{filename}")
     return patched

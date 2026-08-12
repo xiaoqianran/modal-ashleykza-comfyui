@@ -101,21 +101,38 @@ def test_install_base_nodes_copies_wanted_and_writes_manifest(tmp_path):
     assert manifest["relaxed_pins"] == []
 
 
-def test_relax_drops_brushnet_accelerate_upper_bound(tmp_path):
-    node = tmp_path / "comfyui-brushnet"
-    node.mkdir()
-    req = node / "requirements.txt"
-    req.write_text("diffusers>=0.29.0\naccelerate>=0.29.0,<0.32.0\npeft>=0.7.0\n")
-    (node / "pyproject.toml").write_text(
+def test_relax_drops_upper_bounds_and_exact_pins(tmp_path):
+    brush = tmp_path / "comfyui-brushnet"
+    brush.mkdir()
+    (brush / "requirements.txt").write_text(
+        "diffusers>=0.29.0\naccelerate>=0.29.0,<0.32.0\npeft>=0.7.0\n",
+        encoding="utf-8",
+    )
+    (brush / "pyproject.toml").write_text(
         'dependencies = ["accelerate>=0.29.0"]\n', encoding="utf-8"
     )
+    strings = tmp_path / "comfyui-stringsandthings"
+    strings.mkdir()
+    (strings / "requirements.txt").write_text("Pillow==10.3.0\n", encoding="utf-8")
 
     patched = base_nodes._relax_unsatisfiable_pins(tmp_path)
 
-    assert patched == ["comfyui-brushnet/requirements.txt"]
-    assert req.read_text(encoding="utf-8") == (
+    assert patched == [
+        "comfyui-brushnet/requirements.txt",
+        "comfyui-stringsandthings/requirements.txt",
+    ]
+    assert (brush / "requirements.txt").read_text(encoding="utf-8") == (
         "diffusers>=0.29.0\naccelerate>=0.29.0\npeft>=0.7.0\n"
     )
+    assert (strings / "requirements.txt").read_text(encoding="utf-8") == "Pillow>=10.3.0\n"
+
+
+def test_relax_requirement_text_keeps_lower_bounds_only():
+    text = "foo>=1.0,<2.0; python_version>='3.10'\nBar==1.2.3\nbaz~=1.4\n"
+    assert "foo>=1.0" in base_nodes._relax_requirement_text(text)
+    assert "<2.0" not in base_nodes._relax_requirement_text(text)
+    assert "Bar>=1.2.3" in base_nodes._relax_requirement_text(text)
+    assert "baz>=1.4" in base_nodes._relax_requirement_text(text)
 
 
 def test_install_base_nodes_records_relaxed_pins(tmp_path):
