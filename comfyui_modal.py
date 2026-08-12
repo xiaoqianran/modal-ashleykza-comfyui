@@ -15,7 +15,12 @@ from pathlib import Path
 
 import modal
 
-from base_nodes import BASE_NODE_COUNT, BASE_NODES_SOURCE_REV, build_base_nodes_command
+from base_nodes import (
+    BASE_NODE_COUNT,
+    BASE_NODES_SOURCE_REV,
+    INSTALLER_REMOTE_PATH,
+    build_base_nodes_commands,
+)
 from comfy_engine import build_node_commands, prepare_runtime, start_comfyui, sync_profile_models
 from recipes import PROFILES, get_profile
 
@@ -64,7 +69,17 @@ runtime_image = (
 )
 
 if BASE_NODES_ENABLED:
-    runtime_image = runtime_image.run_commands(build_base_nodes_command())
+    # Copy the installer into the image before RUN steps that invoke it.
+    # Modal does not support shell heredocs inside run_commands (Dockerfile parser).
+    runtime_image = (
+        runtime_image
+        .add_local_file(
+            local_path=str(Path(__file__).resolve().parent / "base_nodes.py"),
+            remote_path=INSTALLER_REMOTE_PATH,
+            copy=True,
+        )
+        .run_commands(*build_base_nodes_commands())
+    )
 
 extra_node_commands = build_node_commands(PROFILE.node_packs)
 if extra_node_commands:
