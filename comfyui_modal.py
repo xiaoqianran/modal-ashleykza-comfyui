@@ -57,6 +57,10 @@ runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
     .apt_install("git", "ca-certificates")
+    # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
+    .run_commands(
+        "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"
+    )
 )
 
 if BASE_NODES_ENABLED:

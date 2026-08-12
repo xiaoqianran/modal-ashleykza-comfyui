@@ -510,12 +510,36 @@ def start_comfyui(
 
     log_path = workspace / "logs" / "comfyui.log"
     log = log_path.open("a", buffering=1)
+
+    # Modal injects packages under /usr/local and /pkg via PYTHONPATH. That can
+    # shadow Ashley's venv (e.g. an older typing_extensions without Sentinel),
+    # which then crashes pydantic/ComfyUI on import. Prefer the venv first.
+    env = os.environ.copy()
+    venv_dir = comfy_root / "venv"
+    env["VIRTUAL_ENV"] = str(venv_dir)
+    env["PATH"] = f"{venv_dir / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    env["PYTHONNOUSERSITE"] = "1"
+    site_packages = sorted(venv_dir.glob("lib/python*/site-packages"))
+    if site_packages:
+        venv_site = str(site_packages[0])
+        existing = env.get("PYTHONPATH", "")
+        # Drop Modal/system site-packages that commonly shadow the venv.
+        filtered = [
+            part
+            for part in existing.split(os.pathsep)
+            if part
+            and not part.startswith("/usr/local/lib/python")
+            and not part.startswith("/usr/lib/python")
+        ]
+        env["PYTHONPATH"] = os.pathsep.join([venv_site, *filtered])
+
     print("Starting:", " ".join(shlex.quote(arg) for arg in cmd))
     process = subprocess.Popen(
         cmd,
         cwd=str(comfy_root),
         stdout=log,
         stderr=log,
+        env=env,
     )
     time.sleep(2)
     if process.poll() is not None:
