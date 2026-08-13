@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "pixal3d",
+  "title": "Pixal3D",
+  "summary": "图生 GLB。需要 L40S，生成走 graphToPrompt，不要用 T4。",
+  "kind": "i23d",
+  "mode": "workflow",
+  "workflow": "examples/pixal3d-image-to-3d.json",
+  "lock": "examples/pixal3d-image-to-3d.lock.json",
+  "gpu": "L40S",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
+  "client_id": "studio-pixal3d",
+  "filename_prefix": "Pixal3D_studio",
+  "io": {"images_in": 1},
+  "params": [
+    {
+      "id": "image",
+      "type": "image",
+      "bind": "image",
+      "title": "输入图",
+      "required": true,
+      "help": "一张参考图，生成一个 GLB。可一次选多张，按张排队。"
+    }
+  ]
+}

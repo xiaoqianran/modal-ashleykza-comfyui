@@ -56,7 +56,15 @@ h1, h2 { font-family: "Fraunces", serif; font-weight: 620; margin: 0; }
 h1 { font-size: 34px; line-height: 1; }
 h2 { font-size: 20px; margin-bottom: 10px; }
 
-.top-meta { display: flex; gap: 10px; align-items: center; }
+.top-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.recipe-pick {
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  min-width: 180px;
+}
+.recipe-pick select { text-transform: none; }
 .chip, .pill {
   border: 1px solid var(--line);
   padding: 6px 12px;
@@ -139,6 +147,24 @@ textarea { min-height: 220px; resize: vertical; line-height: 1.45; }
   gap: 10px;
   margin-top: 12px;
 }
+.uploads { display: grid; gap: 12px; margin: 12px 0; }
+.dropzone {
+  border: 1px dashed var(--line);
+  background: #120f0c;
+  padding: 16px;
+  cursor: pointer;
+  color: var(--mute);
+  font-size: 13px;
+}
+.dropzone strong { color: var(--ink); display: block; margin-bottom: 4px; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.thumbs img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+.thumbs span { font-size: 12px; color: var(--mute); }
 .log {
   margin: 12px 0 0;
   max-height: 220px;

@@ -1,8 +1,10 @@
-# Studio（Z-Image）
+# Studio（本地配方控制面）
 
-引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机控制面：读 `catalog/` 里的配方契约，把提示词和参数打成 `POST /prompt`。
+引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-密钥只写在本机 `.studio.env`（已 gitignore）。Modal token 用来调你自己的 workspace；HF / GitHub / Civitai 再写入你的 `comfyui-creds` Secret。页面默认只绑 `127.0.0.1`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，不会改 `comfy_engine.py`。
+
+密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
 ## 启动
 
@@ -13,29 +15,110 @@ python -m studio
 打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。
 
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
-2. **准备权重**：`modal run hydrate_modal.py --workflow examples/z-image-base.json`
-3. **启动 GPU**：本机拉起 `modal serve`。catalog 默认 **T4**（省钱）。L40S 是下拉里的可选项，不会自动升级。
-4. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
-5. 提示词一行一条，调步数 / CFG / 尺寸 / 种子，生成。同一张 GPU 上是 Comfy 队列，不是多卡并行。
-6. **生成结束后默认停止 GPU**（包括杀掉 leftover 容器）。`scaledown_window=5s` 挡不住一直挂着的 `modal serve`。需要接着画，勾选「任务结束后继续占着 GPU」。
+2. 确认顶栏配方是 **Z-Image**（默认）。
+3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
+4. **启动 GPU**：用配方里的默认卡。Z-Image 是 **T4**。Pixal3D / TripoSplat 是 **L40S**，不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
+5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
+6. Z-Image：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
+7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
 
 关掉 Studio（Ctrl+C）也会尝试停掉它拉起的 serve。
 
-## 契约
+## 契约（经得起拷问的模板）
 
-`catalog/z-image.json` 绑定：
+一份新配方 = 三个文件，**不要**再写 `queue_*.py`：
 
-- 工作流 / 锁文件
-- 推荐 GPU
-- 用户能改的参数
-- API prompt graph（`$prompt` `$seed` 等占位符）
+| 文件 | 作用 |
+|---|---|
+| `examples/<id>.json` | 官方 UI 工作流 |
+| `examples/<id>.lock.json` | hydrate 锁（URL / CNR） |
+| `catalog/<id>.json` | Studio 表单 + 绑定 + GPU |
 
-以后加 LTX / Pixal3D，是再加一份 catalog，而不是改 `comfy_engine.py`。
+`catalog/<id>.json` 的 id 必须等于文件名。打开 Studio 就会出现在配方下拉里。
 
-CLI 批量出图仍可用：
+两种执行模式，选错会在加载时被拒绝：
+
+| `mode` | 何时用 | 生成时做什么 |
+|---|---|---|
+| `workflow`（默认，新配方用这个） | 官方 UI JSON 能在当前 Image 里打开 | 运行中的 ComfyUI 做 `graphToPrompt()`，再按 `params.bind` 填 LoadImage / 文本 / sampler |
+| `graph` | Image **缺节点**，官方 JSON 会红（现在只有 Z-Image） | 使用 catalog 里嵌好的 API prompt，`$prompt` `$seed` 等占位符 |
+
+Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph 外壳。这是兼容补丁，**不是**每个配方都要嵌一份 graph。
+
+浏览器拿不到 `graph` 字段（`public_catalog` 会剥掉），避免把整份 prompt 泄漏到前端。
+
+### 最小文生图（对照 `catalog/z-image.json`）
+
+```json
+{
+  "schema": 1,
+  "id": "z-image",
+  "title": "Z-Image",
+  "summary": "文生图。",
+  "kind": "t2i",
+  "mode": "graph",
+  "workflow": "examples/z-image-base.json",
+  "lock": "examples/z-image-base.lock.json",
+  "gpu": "T4",
+  "gpu_choices": ["T4", "L4", "L40S"],
+  "params": [
+    {"id": "prompt", "type": "text", "bind": "prompt", "title": "提示词", "required": true},
+    {"id": "seed", "type": "int", "bind": "seed", "title": "种子", "default": -1, "minimum": -1}
+  ]
+}
+```
+
+`mode=graph` 时还要有 `graph` 对象。新配方不要抄 graph，用下面这份。
+
+### 最小图生（对照 `catalog/pixal3d.json`）
+
+```json
+{
+  "schema": 1,
+  "id": "your-recipe",
+  "title": "显示名",
+  "summary": "一句话。写清 GPU。",
+  "kind": "i23d",
+  "mode": "workflow",
+  "workflow": "examples/your.json",
+  "lock": "examples/your.lock.json",
+  "gpu": "L40S",
+  "gpu_choices": ["L40S"],
+  "params": [
+    {
+      "id": "image",
+      "type": "image",
+      "bind": "image",
+      "title": "输入图",
+      "required": true
+    }
+  ]
+}
+```
+
+允许的 `params.type`：`text` / `int` / `float` / `image`。  
+允许的 `bind`：`prompt` `negative` `seed` `steps` `cfg` `width` `height` `image` `filename_prefix`。  
+`type=image` 必须 `bind=image`。多张图 = 多个任务，不是塞进同一个 graph。
+
+不要做的：
+
+- 为每个 JSON 写 Python 适配器
+- 在 catalog 里编造 HuggingFace 地址（那是锁文件 / resolver 的事）
+- 给图生配方默认 T4
+- 把 `graph` 抄到每个新配方上
+
+`workflow` / `lock` 必须是仓库内相对路径，不能 `..`。
+
+CLI 批量出图仍可用（同一份 Z-Image 契约）：
 
 ```bash
 python3 scripts/run_z_image_prompts.py --base-url https://<your>.modal.run
 ```
 
-它现在也从同一份 catalog 绑 graph。
+图生配方在无 UI 时走通用适配：
+
+```bash
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/pixal3d-image-to-3d.json \
+  --images photo.png
+```

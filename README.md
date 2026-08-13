@@ -33,15 +33,15 @@ modal serve comfyui_modal.py
 
 示例工作流在 `examples/`。LTX-2.5 官方 JSON 不能直接 `POST /prompt`，见文档「工作流与锁文件」。
 
-本机控制面（先做 Z-Image）：
+本机控制面：
 
 ```bash
 python -m studio
 ```
 
-打开 `http://127.0.0.1:8787`。密钥写在 `.studio.env`，不会进 Git。见文档「Studio」。
+打开 `http://127.0.0.1:8787`，默认就是 Z-Image 的配置。换 Pixal3D 可以上传图片。密钥写在 `.studio.env`，不会进 Git。见文档「Studio」。
 
-后面加工作流不必再写一份 queue 脚本。先 `--inspect`，再 hydrate，再用 `python3 -m workflow_queue` 交给 ComfyUI 自己做 `graphToPrompt()`。官方那几百份模板先用 `python3 -m template_analyzer` 分类。解析器只绑定 JSON 里已经写明的 URL / CNR，不会为每个模板猜下载源。
+后面加工作流不必再写一份 queue 脚本。先 `--inspect`，再 hydrate，再用 `python3 -m workflow_queue` 交给 ComfyUI 自己做 `graphToPrompt()`。官方那几百份模板先用 `python3 -m template_analyzer` 分类。解析器只绑定 JSON 里已经写明的 URL / CNR，不会为每个模板猜下载源。本机 App：`python -m studio`，打开后默认 Z-Image 配置；换配方只加 `catalog/<id>.json`。
 
 ## 开发
 

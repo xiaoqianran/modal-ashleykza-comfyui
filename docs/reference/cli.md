@@ -38,7 +38,7 @@ modal run comfyui_modal.py
 python -m studio
 ```
 
-本机 `127.0.0.1:8787`。见 [Studio](../guide/studio.md)。
+本机 `127.0.0.1:8787`。打开后默认 Z-Image。见 [Studio](../guide/studio.md)。
 
 ## 通用排队
 

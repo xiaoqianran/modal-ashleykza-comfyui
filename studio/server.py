@@ -8,14 +8,27 @@ import json
 import mimetypes
 import random
 import sys
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from catalog import bind_graph, list_catalogs, load_catalog, param_defaults
+import workflow_queue
+from catalog import (
+    DEFAULT_CATALOG_ID,
+    build_prompt,
+    catalog_mode,
+    has_param,
+    image_params,
+    list_catalogs,
+    load_catalog,
+    public_catalog,
+    workflow_path,
+)
+from storage import safe_dest_file
 from studio import jobs
-from studio.comfy import download_images, queue_prompt, wait_history, wait_ready
+from studio.comfy import queue_prompt, wait_history, wait_ready
 from studio.keys import ALL_KEYS, ROOT, public_key_state, save_keys
 from studio.modal_ops import (
     hydrate,
@@ -39,6 +52,10 @@ def wants_keep_gpu(payload: dict[str, Any]) -> bool:
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 OUTPUT_DIR = ROOT / "artifacts" / "studio"
+UPLOAD_DIR = OUTPUT_DIR / "uploads"
+MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+IMAGE_SUFFIXES = ALLOWED_IMAGE_SUFFIXES
 
 
 def _json(handler: BaseHTTPRequestHandler, code: int, payload: Any) -> None:
@@ -83,52 +100,159 @@ def _split_prompts(text: str) -> list[str]:
     return chunks
 
 
+def save_upload(filename: str, data: bytes) -> Path:
+    suffix = Path(filename.replace("\\", "/")).suffix.lower()
+    if suffix not in ALLOWED_IMAGE_SUFFIXES:
+        raise ValueError(f"只接受图片文件：{sorted(ALLOWED_IMAGE_SUFFIXES)}")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError(f"图片不能超过 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB")
+    if not data:
+        raise ValueError("empty upload")
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    dest = safe_dest_file(UPLOAD_DIR, Path(filename.replace("\\", "/")).name)
+    if dest.exists():
+        dest = safe_dest_file(UPLOAD_DIR, f"{dest.stem}-{uuid.uuid4().hex[:8]}{suffix}")
+    dest.write_bytes(data)
+    return dest
+
+
+def _image_names(catalog: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    raw = payload.get("images")
+    names: list[str] = []
+    if isinstance(raw, dict):
+        for spec in image_params(catalog):
+            value = raw.get(spec["id"])
+            if isinstance(value, list):
+                names.extend(str(item) for item in value if item)
+            elif value:
+                names.append(str(value))
+    elif isinstance(raw, list):
+        names = [str(item) for item in raw if item]
+    elif isinstance(raw, str) and raw.strip():
+        names = [raw.strip()]
+    return names
+
+
+def iter_generate_jobs(catalog: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
+    params = dict(payload.get("params") or {})
+    prompts = payload.get("prompts")
+    if isinstance(prompts, str):
+        prompts = _split_prompts(prompts)
+    prompts = [str(item).strip() for item in (prompts or []) if str(item).strip()]
+    images = _image_names(catalog, payload)
+    need_prompt = has_param(catalog, "prompt")
+    need_image = any(spec.get("required") for spec in image_params(catalog))
+    if need_prompt and not prompts:
+        raise RuntimeError("至少需要一条提示词")
+    if need_image and not images:
+        raise RuntimeError("至少需要一张输入图")
+    if not prompts:
+        prompts = [""]
+    if not images:
+        images_or_none: list[str | None] = [None]
+    else:
+        images_or_none = list(images)
+    if len(prompts) > 1 and len(images_or_none) > 1 and len(prompts) != len(images_or_none):
+        raise RuntimeError("多提示词且多图时数量必须一致")
+    jobs_spec: list[dict[str, Any]] = []
+    if len(images_or_none) == 1:
+        for prompt in prompts:
+            jobs_spec.append({"prompt": prompt, "image": images_or_none[0], "params": params})
+    elif len(prompts) == 1:
+        for image in images_or_none:
+            jobs_spec.append({"prompt": prompts[0], "image": image, "params": params})
+    else:
+        for prompt, image in zip(prompts, images_or_none, strict=True):
+            jobs_spec.append({"prompt": prompt, "image": image, "params": params})
+    return jobs_spec
+
+
+def _resolve_upload(name: str) -> Path:
+    path = safe_dest_file(UPLOAD_DIR, Path(str(name).replace("\\", "/")).name)
+    if not path.is_file():
+        raise RuntimeError(f"找不到已上传的图片: {path.name}")
+    return path
+
+
 def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    recipe_id = str(payload.get("catalog") or "z-image")
+    recipe_id = str(payload.get("catalog") or load_state().get("catalog") or DEFAULT_CATALOG_ID)
     catalog = load_catalog(recipe_id)
     base = str(payload.get("base_url") or load_state().get("base_url") or "").rstrip("/")
     if not base:
         raise RuntimeError("还没有 ComfyUI 地址。先启动 GPU，或粘贴已有的 *.modal.run")
-    prompts = payload.get("prompts")
-    if isinstance(prompts, str):
-        prompts = _split_prompts(prompts)
-    if not isinstance(prompts, list) or not prompts:
-        raise RuntimeError("至少需要一条提示词")
-    params = dict(payload.get("params") or {})
-    jobs.append_log(job_id, f"等待 {base} 就绪")
+    planned = iter_generate_jobs(catalog, payload)
+    jobs.append_log(job_id, f"等待 {base} 就绪 · {catalog['title']} · {len(planned)} 个任务")
     ready = wait_ready(base, timeout=int(payload.get("ready_timeout") or 900))
     jobs.append_log(job_id, json.dumps({"ready": True, "devices": ready.get("devices")}, ensure_ascii=False))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    seed_base = params.get("seed", -1)
+
+    template = None
+    if catalog_mode(catalog) == "workflow":
+        workflow = json.loads(workflow_path(catalog).read_text(encoding="utf-8"))
+        jobs.append_log(job_id, "用运行中的 ComfyUI 做 graphToPrompt()")
+        try:
+            template = workflow_queue.to_api_prompt(base, workflow)
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "workflow 模式需要本机 Playwright / Chrome 来跑 graphToPrompt。"
+                "Z-Image 这种 mode=graph 的配方不需要。"
+            ) from exc
+
+    seed_base = (payload.get("params") or {}).get("seed", -1)
     results: list[dict[str, Any]] = []
-    for index, prompt in enumerate(prompts):
-        text = str(prompt).strip()
-        if not text:
-            continue
-        bound = dict(params)
-        bound["prompt"] = text
+    for index, item in enumerate(planned):
+        bound = dict(item["params"])
+        if item["prompt"]:
+            bound["prompt"] = item["prompt"]
         if seed_base == -1 or seed_base is None:
             bound["seed"] = random.randint(0, 2**31 - 1)
-        else:
+        elif "seed" in bound:
             bound["seed"] = int(seed_base) + index
-        graph, values = bind_graph(catalog, bound)
-        jobs.append_log(job_id, f"[{index + 1}/{len(prompts)}] seed={values['seed']}")
+        image_name = None
+        if item["image"]:
+            local = _resolve_upload(str(item["image"]))
+            image_name = workflow_queue.upload_image(base, local)
+            jobs.append_log(job_id, f"uploaded {local.name} -> {image_name}")
+        graph, values = build_prompt(
+            catalog,
+            bound,
+            api_prompt=template,
+            image_name=image_name,
+        )
+        jobs.append_log(
+            job_id,
+            f"[{index + 1}/{len(planned)}] seed={values.get('seed')} image={image_name or '-'}",
+        )
         prompt_id = queue_prompt(base, graph, str(catalog.get("client_id") or "studio"))
         history = wait_history(base, prompt_id, timeout=900)
-        images = download_images(base, history, OUTPUT_DIR)
-        if not images:
-            raise RuntimeError(f"prompt {prompt_id} finished without images")
-        item = {
+        saved = workflow_queue.download_outputs(base, history, OUTPUT_DIR)
+        if not saved:
+            raise RuntimeError(f"prompt {prompt_id} finished without outputs")
+        files = [f"/api/outputs/{path.name}" for path in saved]
+        images = [
+            f"/api/outputs/{path.name}"
+            for path in saved
+            if path.suffix.lower() in IMAGE_SUFFIXES
+        ]
+        record = {
             "index": index,
-            "prompt": text,
-            "seed": values["seed"],
+            "prompt": item["prompt"],
+            "seed": values.get("seed"),
             "prompt_id": prompt_id,
-            "images": [f"/api/outputs/{path.name}" for path in images],
+            "image": image_name,
+            "files": files,
+            "images": images or files,
         }
-        results.append(item)
-        jobs.append_log(job_id, json.dumps(item, ensure_ascii=False))
+        results.append(record)
+        jobs.append_log(job_id, json.dumps(record, ensure_ascii=False))
     save_state({"base_url": base, "catalog": recipe_id})
-    return {"ok": True, "count": len(results), "results": results, "devices": ready.get("devices")}
+    return {
+        "ok": True,
+        "catalog": recipe_id,
+        "count": len(results),
+        "results": results,
+        "devices": ready.get("devices"),
+    }
 
 
 def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -171,7 +295,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file(OUTPUT_DIR / name)
             return
         if path == "/api/catalogs":
-            _json(self, 200, {"catalogs": list_catalogs()})
+            _json(
+                self,
+                200,
+                {"default": DEFAULT_CATALOG_ID, "catalogs": list_catalogs()},
+            )
             return
         if path.startswith("/api/catalogs/"):
             recipe_id = path.removeprefix("/api/catalogs/").strip("/")
@@ -180,13 +308,14 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 _json(self, 404, {"error": f"unknown catalog: {recipe_id}"})
                 return
-            public = {
-                key: catalog[key]
-                for key in ("id", "title", "summary", "gpu", "gpu_choices", "params")
-                if key in catalog
-            }
-            public["defaults"] = param_defaults(catalog)
-            _json(self, 200, public)
+            except ValueError as exc:
+                _json(self, 400, {"error": str(exc)})
+                return
+            _json(self, 200, public_catalog(catalog))
+            return
+        if path.startswith("/api/uploads/"):
+            name = Path(path.removeprefix("/api/uploads/")).name
+            self._send_file(UPLOAD_DIR / name)
             return
         if path == "/api/status":
             _json(
@@ -210,6 +339,26 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == "/api/uploads":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                filename = self.headers.get("X-Filename") or "upload.png"
+                data = self.rfile.read(length) if length else b""
+                stored = save_upload(filename, data)
+            except ValueError as exc:
+                _json(self, 400, {"error": str(exc)})
+                return
+            _json(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "name": stored.name,
+                    "url": f"/api/uploads/{stored.name}",
+                    "bytes": stored.stat().st_size,
+                },
+            )
+            return
         try:
             payload = _read_json(self)
         except (ValueError, json.JSONDecodeError) as exc:
@@ -225,7 +374,7 @@ class Handler(BaseHTTPRequestHandler):
             _json(self, 200, {"ok": True, "keys": public_key_state()})
             return
         if path == "/api/hydrate":
-            recipe_id = str(payload.get("catalog") or "z-image")
+            recipe_id = str(payload.get("catalog") or DEFAULT_CATALOG_ID)
 
             def run(job_id: str) -> dict[str, Any]:
                 return hydrate(recipe_id, log=lambda line: jobs.append_log(job_id, line))
@@ -233,7 +382,7 @@ class Handler(BaseHTTPRequestHandler):
             _json(self, 200, {"job_id": jobs.spawn("hydrate", run)})
             return
         if path == "/api/serve":
-            recipe_id = str(payload.get("catalog") or "z-image")
+            recipe_id = str(payload.get("catalog") or DEFAULT_CATALOG_ID)
             gpu = str(payload.get("gpu") or "")
 
             def run(job_id: str) -> dict[str, Any]:
@@ -253,6 +402,19 @@ class Handler(BaseHTTPRequestHandler):
             state = save_state({"base_url": url or None})
             _json(self, 200, {"ok": True, "runtime": {**runtime_status(), **{"base_url": state.get("base_url")}}})
             return
+        if path == "/api/catalog":
+            recipe_id = str(payload.get("catalog") or DEFAULT_CATALOG_ID)
+            try:
+                catalog = load_catalog(recipe_id)
+            except FileNotFoundError:
+                _json(self, 404, {"error": f"unknown catalog: {recipe_id}"})
+                return
+            except ValueError as exc:
+                _json(self, 400, {"error": str(exc)})
+                return
+            save_state({"catalog": recipe_id})
+            _json(self, 200, {"ok": True, "catalog": public_catalog(catalog)})
+            return
         if path == "/api/generate":
             _json(self, 200, {"job_id": jobs.spawn("generate", lambda job_id: _generate_batch(job_id, payload))})
             return
@@ -260,7 +422,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_file(self, path: Path, content_type: str | None = None) -> None:
         path = path.resolve()
-        allowed = (STATIC_DIR.resolve(), OUTPUT_DIR.resolve())
+        allowed = (STATIC_DIR.resolve(), OUTPUT_DIR.resolve(), UPLOAD_DIR.resolve())
         if not any(path == root or root in path.parents for root in allowed):
             _json(self, 404, {"error": "not found"})
             return
@@ -277,7 +439,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Z-Image studio control plane")
+    parser = argparse.ArgumentParser(description="Local catalog control plane")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
     args = parser.parse_args()

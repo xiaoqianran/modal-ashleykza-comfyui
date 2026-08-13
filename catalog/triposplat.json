@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "triposplat",
+  "title": "TripoSplat",
+  "summary": "图生 Gaussian Splat。需要 L40S，生成走 graphToPrompt。",
+  "kind": "i23d",
+  "mode": "workflow",
+  "workflow": "examples/triposplat-image-to-gaussian-splat.json",
+  "lock": "examples/triposplat-image-to-gaussian-splat.lock.json",
+  "gpu": "L40S",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
+  "client_id": "studio-triposplat",
+  "filename_prefix": "TripoSplat_studio",
+  "io": {"images_in": 1},
+  "params": [
+    {
+      "id": "image",
+      "type": "image",
+      "bind": "image",
+      "title": "输入图",
+      "required": true,
+      "help": "一张物体图。可一次选多张，按张排队。"
+    }
+  ]
+}

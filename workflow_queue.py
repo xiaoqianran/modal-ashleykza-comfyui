@@ -16,6 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -298,6 +299,47 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
             found = True
     if not found:
         raise RuntimeError("converted prompt has no LoadImage node")
+    return prompt
+
+
+SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced"}
+NUMBER_KEYS = {"seed", "steps", "cfg", "denoise", "width", "height"}
+
+
+def bind_number_inputs(prompt: dict[str, Any], values: Mapping[str, Any]) -> dict[str, Any]:
+    """Overwrite sampler / latent widgets that already exist. Do not invent nodes."""
+    wanted = {
+        key: values[key]
+        for key in NUMBER_KEYS
+        if key in values and values[key] is not None
+    }
+    if not wanted:
+        return prompt
+    for node in prompt.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.setdefault("inputs", {})
+        class_type = str(node.get("class_type") or "")
+        if class_type in SAMPLER_TYPES:
+            for key in ("seed", "steps", "cfg", "denoise"):
+                if key in wanted and key in inputs:
+                    inputs[key] = wanted[key]
+        if class_type.startswith("Empty") and "Latent" in class_type:
+            for key in ("width", "height"):
+                if key in wanted and key in inputs:
+                    inputs[key] = wanted[key]
+    return prompt
+
+
+def bind_filename_prefix(prompt: dict[str, Any], prefix: str) -> dict[str, Any]:
+    for node in prompt.values():
+        if not isinstance(node, dict):
+            continue
+        if not str(node.get("class_type") or "").startswith("Save"):
+            continue
+        inputs = node.setdefault("inputs", {})
+        if "filename_prefix" in inputs:
+            inputs["filename_prefix"] = prefix
     return prompt
 
 

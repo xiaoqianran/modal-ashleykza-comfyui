@@ -106,7 +106,7 @@ modal deploy comfyui_modal.py
 
 对应文件：`examples/z-image-base.json` 与 `examples/z-image-base.lock.json`。
 
-官方 UI JSON 里还有 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph。Ashley 0.32.0 默认 Image **不含**这些节点（`COMFY_BASE_NODES` 默认关，锁里也没有 CNR id）。在网页里打开这份 JSON 可能会看到红节点。无 UI 批量出图用 `scripts/run_z_image_prompts.py` 或 `python -m studio`（契约在 `catalog/z-image.json`）。
+官方 UI JSON 里还有 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph。Ashley 0.32.0 默认 Image **不含**这些节点。Studio 里 Z-Image 因此用 `mode=graph` 的兼容 prompt；新配方不要再嵌 graph，见 [Studio](studio.md)。无 UI 批量出图仍可用 `scripts/run_z_image_prompts.py`。
 
 ## 仓库示例：LTX-2.5 distilled
 
