@@ -271,5 +271,29 @@ class HydrateStorageTests(unittest.TestCase):
             self.assertEqual(result["downloaded"], 1)
 
 
+class WaitReadyTests(unittest.TestCase):
+    def test_wait_comfyui_ready_accepts_system_stats(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, *_args):
+                return
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            comfy_engine.wait_comfyui_ready(port=server.server_address[1], timeout=5)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 if __name__ == "__main__":
     unittest.main()

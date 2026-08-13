@@ -30,6 +30,10 @@
 
 ## 关键取舍
 
+### GPU UI 使用 Cls + memory snapshot
+
+`modal deploy` 后对 ComfyUI 进程做 CPU/GPU memory snapshot，缩到零后的下一次冷启动可以跳过大部分进程初始化。快照没有单独计费，只付实际 GPU 秒数；每种 GPU worker 前 2–3 次冷启动会多付一次捕获时间。`modal serve` 不持久化快照。权重从 Volume 装进显存仍可能是首张的主要耗时。
+
 ### 保留 `web_server`，不改为 Server primitive
 
 ComfyUI 已经是完整的长驻 HTTP / WebSocket 服务。`@modal.web_server` 直接表达该运行模型，并提供启动探测、代理 URL 与认证选项。Server primitive 更适合需要端口级客户端、TLS 隧道或非 HTTP 协议的服务；当前迁移没有足够收益。

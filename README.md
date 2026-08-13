@@ -49,7 +49,7 @@ modal run hydrate_modal.py --action hydrate --profile qwen-image
 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
-持久部署默认复用 Image 缓存；若部署也要最新节点，加上 `COMFY_LATEST=1`：
+持久部署默认复用 Image 缓存，并在前几次冷启动后写入 memory snapshot（`modal serve` 不保存快照）。若部署也要最新节点，加上 `COMFY_LATEST=1`：
 
 ```bash
 COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
@@ -234,6 +234,8 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 | `MODAL_SECRET_NAME` | `comfyui-creds` | named Modal Secret |
 | `COMFY_BASE_NODES` | `true` | Image build 时克隆 130 个 GitHub 基础节点 |
 | `COMFY_LATEST` | `false` | 忽略节点 clone / CNR 层缓存，始终拉最新 Git HEAD |
+| `COMFY_MEMORY_SNAPSHOT` | `true` | `modal deploy` 后对 GPU UI 做 memory snapshot |
+| `COMFY_GPU_SNAPSHOT` | `true` | 同时快照 GPU 显存（alpha，需 memory snapshot） |
 | `EXTRA_ARGS` | 空 | 追加 ComfyUI CLI 参数 |
 
 `COMFY_REQUIRE_PROXY_AUTH=true` 会要求请求携带 `Modal-Key` / `Modal-Secret` 头，普通浏览器直接打开会不方便，因此保留公开 endpoint 作为兼容默认。面向公网部署时，应明确选择认证策略且不要在 ComfyUI 中暴露敏感文件。

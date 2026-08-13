@@ -9,6 +9,8 @@ import subprocess
 import tarfile
 import threading
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from collections.abc import Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -823,3 +825,17 @@ def start_comfyui(
             pass
         raise RuntimeError(f"ComfyUI exited during startup (code={process.returncode}).\n{tail}")
     return process
+
+
+def wait_comfyui_ready(*, port: int, timeout: int = 600) -> None:
+    """Block until the local ComfyUI HTTP server answers /system_stats."""
+    deadline = time.time() + timeout
+    url = f"http://127.0.0.1:{port}/system_stats"
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=5)
+            print(f"ComfyUI ready on :{port}", flush=True)
+            return
+        except (urllib.error.URLError, TimeoutError, OSError):
+            time.sleep(1)
+    raise RuntimeError(f"ComfyUI did not become ready on :{port} within {timeout}s")
