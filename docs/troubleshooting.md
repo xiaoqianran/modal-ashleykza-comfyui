@@ -82,7 +82,9 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## 工作流仍有 unresolved
 
-锁文件不会猜测下载地址。把 URL 写进工作流的 `models` 数组，或手工编辑 `.lock.json` 后再 hydrate。
+锁文件不会猜测下载地址。把 `name` + `directory` + http(s) URL 写进工作流的 `models` 数组，或把 HuggingFace / Civitai 直链写进 Note（文件名必须对得上 widget）。不要为此再写一份 `queue_*.py`。
+
+若 `unresolved` 条目已经带了 `url`、`reason` 为 `missing_category`，只差补 ComfyUI 目录名，再挪进 `models`。手修 `.lock.json` 后也可以 hydrate。
 
 ## Pages 文档 404
 

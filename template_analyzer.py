@@ -107,10 +107,17 @@ def classify_workflow(
     models = lock.get("models") or []
     unresolved = lock.get("unresolved") or []
     custom = lock.get("custom_nodes") or []
+    warnings = [
+        item for item in (lock.get("warnings") or []) if isinstance(item, dict)
+    ]
     record["n_models"] = len(models)
     record["n_urls"] = sum(1 for model in models if model.get("url"))
     record["n_unresolved"] = len(unresolved)
     record["n_custom"] = len(custom)
+    record["n_warnings"] = len(warnings)
+    record["warning_codes"] = sorted(
+        {str(item.get("code")) for item in warnings if item.get("code")}
+    )
     record["custom_ids"] = [node.get("id") for node in custom]
     record["unresolved"] = [item.get("filename") for item in unresolved[:12]]
     record["models"] = [
@@ -161,16 +168,23 @@ def scan_templates(templates_dir: Path) -> dict[str, Any]:
 
 
 def render_summary(report: dict[str, Any]) -> str:
+    warned = sum(1 for row in report.get("rows") or () if row.get("n_warnings"))
     lines = [
         f"scanned {report['count']} JSON under {report['dir']}",
         f"buckets {report['buckets']}",
         f"locally feasible (hydrate_ready + core_no_weights) {report['feasible']}",
+        f"locks with warnings {warned}",
         "cheapest hydrate_ready smoke (vram <= 16GB):",
     ]
     for row in report.get("smoke") or ():
         lines.append(
             f"  {row.get('vram_gb')}GB  {row['file']}  models={row.get('n_models')}  {row.get('title')}"
         )
+    fails = [row for row in report.get("rows") or () if row.get("bucket") == "parse_fail"]
+    if fails:
+        lines.append("parse_fail:")
+        for row in fails:
+            lines.append(f"  {row['file']}: {row.get('error')}")
     return "\n".join(lines) + "\n"
 
 

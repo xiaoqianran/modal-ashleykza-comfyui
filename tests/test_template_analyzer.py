@@ -19,6 +19,10 @@ def _write_workflow(directory: Path, name: str, payload: dict) -> Path:
 class ModelPatchCategoryTests(unittest.TestCase):
     def test_model_patches_is_a_known_storage_dir(self):
         self.assertIn("model_patches", recipes.MODEL_DIRS)
+        self.assertIn("audio_encoders", recipes.MODEL_DIRS)
+        self.assertIn("detection", recipes.MODEL_DIRS)
+        self.assertIn("frame_interpolation", recipes.MODEL_DIRS)
+        self.assertIn("optical_flow", recipes.MODEL_DIRS)
 
 
 class ClassifySyntheticTests(unittest.TestCase):

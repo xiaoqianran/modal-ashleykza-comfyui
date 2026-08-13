@@ -67,7 +67,8 @@ MODEL_DIRS = (
     "embeddings", "gligen", "hypernetworks", "latent_upscale_models", "loras",
     "photomaker", "style_models", "text_encoders", "unet", "upscale_models",
     "vae", "vae_approx", "background_removal", "Pixal3D", "geometry_estimation",
-    "model_patches",
+    "model_patches", "audio_encoders", "detection", "frame_interpolation",
+    "optical_flow",
 )
 
 

@@ -41,7 +41,7 @@ python -m studio
 
 打开 `http://127.0.0.1:8787`。密钥写在 `.studio.env`，不会进 Git。见文档「Studio」。
 
-后面加工作流不必再写一份 queue 脚本。先 `--inspect`，再 hydrate，再用 `python3 -m workflow_queue` 交给 ComfyUI 自己做 `graphToPrompt()`。官方那几百份模板先用 `python3 -m template_analyzer` 分类。
+后面加工作流不必再写一份 queue 脚本。先 `--inspect`，再 hydrate，再用 `python3 -m workflow_queue` 交给 ComfyUI 自己做 `graphToPrompt()`。官方那几百份模板先用 `python3 -m template_analyzer` 分类。解析器只绑定 JSON 里已经写明的 URL / CNR，不会为每个模板猜下载源。
 
 ## 开发
 

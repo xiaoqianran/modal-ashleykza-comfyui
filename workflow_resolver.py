@@ -5,10 +5,11 @@ import json
 import re
 import struct
 import zlib
+from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_DIRS
 from storage import PathError, canonical_relpath
@@ -26,8 +27,17 @@ MODEL_EXTENSIONS = {
     ".safetensors",
 }
 CORE_NODE_IDS = {"comfy-core", "comfyui", "comfyui-core"}
+NOTE_NODE_TYPES = {"markdownnote", "note"}
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 CNR_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+SEMVER_RE = re.compile(r"^\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9.]+)?$")
+DOWNLOAD_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:huggingface\.co|hf\.co|civitai\.com)/[^\s\]\)<>\"'\\]+",
+    re.IGNORECASE,
+)
+HF_HOSTS = {"huggingface.co", "hf.co", "www.huggingface.co"}
+DOWNLOAD_HOSTS = HF_HOSTS | {"civitai.com", "www.civitai.com"}
+DROP_QUERY_KEYS = {"download"}
 
 NODE_CATEGORY_HINTS = {
     "checkpoint": "checkpoints",
@@ -40,6 +50,8 @@ NODE_CATEGORY_HINTS = {
     "unet": "diffusion_models",
     "upscale": "upscale_models",
     "vae": "vae",
+    "audioencoder": "audio_encoders",
+    "whisper": "audio_encoders",
 }
 
 
@@ -49,6 +61,66 @@ class WorkflowResolutionError(ValueError):
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _compact_node_type(node_type: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", node_type.lower())
+
+
+def _is_note_node(node_type: str) -> bool:
+    return _compact_node_type(node_type) in NOTE_NODE_TYPES
+
+
+def _is_semver(value: str) -> bool:
+    return bool(SEMVER_RE.fullmatch(value))
+
+
+def _canonical_download_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host == "hf.co":
+        host = "huggingface.co"
+    path = parsed.path
+    if host in HF_HOSTS or host == "huggingface.co":
+        path = path.replace("/blob/", "/resolve/", 1)
+        if path.endswith("/") and PurePosixPath(path.rstrip("/")).suffix.lower() in MODEL_EXTENSIONS:
+            path = path.rstrip("/")
+    query = urlencode(
+        [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key.lower() not in DROP_QUERY_KEYS
+        ]
+    )
+    return urlunparse((parsed.scheme.lower(), host, path, "", query, ""))
+
+
+def _url_basename(url: str) -> str:
+    return unquote(PurePosixPath(urlparse(url).path).name)
+
+
+def _category_from_url(url: str) -> str | None:
+    parts = PurePosixPath(urlparse(url).path).parts
+    found: str | None = None
+    for part in parts[:-1]:
+        if part in MODEL_DIRS:
+            found = part
+    return found
+
+
+def _prefer_cnr_version(seen: list[str | None]) -> str | None:
+    nonempty = [value for value in seen if value]
+    if not nonempty:
+        return None
+    counts = Counter(nonempty)
+    pool = [value for value in counts if _is_semver(value)] or list(counts)
+    return max(pool, key=lambda value: (counts[value], -seen.index(value)))
+
+
+def _warning(code: str, **fields: Any) -> dict[str, Any]:
+    return {"code": code, **fields}
 
 
 def _json_object(value: str | bytes, *, source: str) -> dict[str, Any]:
@@ -217,7 +289,7 @@ def _model_url(value: Any) -> str:
     parsed = urlparse(value.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise WorkflowResolutionError(f"Unsupported model URL: {value!r}")
-    return value.strip()
+    return _canonical_download_url(value)
 
 
 def _model_sha256(model: Mapping[str, Any]) -> str | None:
@@ -230,7 +302,10 @@ def _model_sha256(model: Mapping[str, Any]) -> str | None:
     return value.lower()
 
 
-def _declared_models(workflow: Mapping[str, Any], nodes: Iterable[Mapping[str, Any]]) -> list[dict]:
+def _declared_models(
+    workflow: Mapping[str, Any],
+    nodes: Iterable[Mapping[str, Any]],
+) -> tuple[list[dict], list[dict[str, Any]]]:
     declarations: list[tuple[str, Any]] = []
     if isinstance(workflow.get("models"), list):
         declarations.extend(("workflow.models", item) for item in workflow["models"])
@@ -243,38 +318,90 @@ def _declared_models(workflow: Mapping[str, Any], nodes: Iterable[Mapping[str, A
         declarations.extend((f"node:{node_type}", item) for item in properties["models"])
 
     resolved: dict[tuple[str, str], dict] = {}
+    conflicted: set[tuple[str, str]] = set()
+    warnings: list[dict[str, Any]] = []
     for source, declaration in declarations:
         if not isinstance(declaration, Mapping):
-            raise WorkflowResolutionError(f"Model declaration in {source} must be an object.")
+            warnings.append(_warning("malformed_model", source=source, detail="not an object"))
+            continue
         name = declaration.get("name") or declaration.get("filename")
         directory = declaration.get("directory") or declaration.get("folder")
         if not isinstance(name, str) or not isinstance(directory, str):
-            raise WorkflowResolutionError(
-                f"Model declaration in {source} requires string name and directory fields."
+            warnings.append(
+                _warning(
+                    "malformed_model",
+                    source=source,
+                    detail="missing string name and directory",
+                )
             )
-        category, filename = _model_destination(directory, name)
+            continue
+        try:
+            category, filename = _model_destination(directory, name)
+            url = _model_url(declaration.get("url"))
+            sha256 = _model_sha256(declaration)
+        except WorkflowResolutionError as exc:
+            message = str(exc)
+            if message.startswith("Unsafe"):
+                raise
+            code = (
+                "unsupported_directory"
+                if "Unsupported model directory" in message
+                else "invalid_model_declaration"
+            )
+            warnings.append(
+                _warning(code, source=source, directory=directory, name=name, detail=message)
+            )
+            continue
+
+        key = (category, filename)
+        if key in conflicted:
+            continue
         entry = {
             "category": category,
             "filename": filename,
-            "url": _model_url(declaration.get("url")),
-            "sha256": _model_sha256(declaration),
+            "url": url,
+            "sha256": sha256,
             "source": source,
         }
-        key = (category, filename)
         previous = resolved.get(key)
-        if previous and (previous["url"], previous["sha256"]) != (
-            entry["url"],
-            entry["sha256"],
-        ):
-            raise WorkflowResolutionError(
-                f"Conflicting download metadata for models/{category}/{filename}."
+        if previous is None:
+            resolved[key] = entry
+            continue
+        if previous["url"] == entry["url"]:
+            if previous["sha256"] and entry["sha256"] and previous["sha256"] != entry["sha256"]:
+                warnings.append(
+                    _warning(
+                        "hash_conflict",
+                        category=category,
+                        filename=filename,
+                        detail="same URL with two SHA256 values",
+                    )
+                )
+                del resolved[key]
+                conflicted.add(key)
+                continue
+            if not previous["sha256"] and entry["sha256"]:
+                previous["sha256"] = entry["sha256"]
+            continue
+        if previous["sha256"] and entry["sha256"] and previous["sha256"] == entry["sha256"]:
+            continue
+        warnings.append(
+            _warning(
+                "url_conflict",
+                category=category,
+                filename=filename,
+                urls=sorted({previous["url"], entry["url"]}),
             )
-        resolved[key] = entry
-    return [resolved[key] for key in sorted(resolved)]
+        )
+        del resolved[key]
+        conflicted.add(key)
+    return [resolved[key] for key in sorted(resolved)], warnings
 
 
-def _custom_nodes(nodes: Iterable[Mapping[str, Any]]) -> list[dict]:
-    resolved: dict[str, dict] = {}
+def _custom_nodes(
+    nodes: Iterable[Mapping[str, Any]],
+) -> tuple[list[dict], list[dict[str, Any]]]:
+    buckets: dict[str, dict[str, Any]] = {}
     for node in nodes:
         properties = node.get("properties")
         if not isinstance(properties, Mapping):
@@ -287,35 +414,51 @@ def _custom_nodes(nodes: Iterable[Mapping[str, Any]]) -> list[dict]:
         version = properties.get("ver")
         version = str(version).strip() if version is not None else None
         node_type = str(node.get("type") or node.get("class_type") or "unknown")
-        previous = resolved.get(node_id)
-        if previous and previous["version"] != version:
-            raise WorkflowResolutionError(
-                f"Conflicting versions for custom node {node_id!r}: "
-                f"{previous['version']!r} and {version!r}."
+        bucket = buckets.setdefault(node_id, {"versions": [], "node_types": set()})
+        bucket["versions"].append(version)
+        bucket["node_types"].add(node_type)
+
+    resolved: dict[str, dict] = {}
+    warnings: list[dict[str, Any]] = []
+    for node_id, bucket in buckets.items():
+        seen: list[str | None] = bucket["versions"]
+        nonempty_unique = {value for value in seen if value}
+        kept = _prefer_cnr_version(seen)
+        if len(nonempty_unique) > 1:
+            dropped = sorted(value for value in nonempty_unique if value != kept)
+            warnings.append(
+                _warning(
+                    "version_conflict",
+                    id=node_id,
+                    kept=kept,
+                    dropped=dropped,
+                )
             )
-        if previous:
-            previous["node_types"] = sorted(set(previous["node_types"]) | {node_type})
-            continue
         resolved[node_id] = {
             "id": node_id,
-            "version": version,
-            "node_types": [node_type],
+            "version": kept,
+            "node_types": sorted(bucket["node_types"]),
         }
-    return [resolved[key] for key in sorted(resolved)]
+    return [resolved[key] for key in sorted(resolved)], warnings
 
 
 def _category_hint(node_type: str) -> str | None:
-    compact = re.sub(r"[^a-z0-9]", "", node_type.lower())
+    compact = _compact_node_type(node_type)
     for token, category in NODE_CATEGORY_HINTS.items():
         if token in compact:
             return category
     return None
 
 
-def _referenced_models(nodes: Iterable[Mapping[str, Any]]) -> list[dict]:
+def _referenced_models(
+    nodes: Iterable[Mapping[str, Any]],
+) -> tuple[list[dict], list[dict[str, Any]]]:
     references: dict[tuple[str | None, str], dict] = {}
+    warnings: list[dict[str, Any]] = []
     for node in nodes:
         node_type = str(node.get("type") or node.get("class_type") or "unknown")
+        if _is_note_node(node_type):
+            continue
         category = _category_hint(node_type)
         for value in _iter_values(node.get("widgets_values", ())):
             if not isinstance(value, str) or urlparse(value).scheme:
@@ -323,34 +466,157 @@ def _referenced_models(nodes: Iterable[Mapping[str, Any]]) -> list[dict]:
             candidate = value.strip().replace("\\", "/")
             if PurePosixPath(candidate).suffix.lower() not in MODEL_EXTENSIONS:
                 continue
-            filename = _safe_relative(candidate, field="referenced model name").as_posix()
-            key = (category, filename)
+            try:
+                filename = _safe_relative(candidate, field="referenced model name").as_posix()
+            except WorkflowResolutionError as exc:
+                warnings.append(
+                    _warning(
+                        "unsafe_reference",
+                        node_type=node_type,
+                        value=candidate,
+                        detail=str(exc),
+                    )
+                )
+                continue
+            parts = list(PurePosixPath(filename).parts)
+            widget_category = category
+            if parts and parts[0] == "models":
+                parts = parts[1:]
+            if widget_category is None and parts and parts[0] in MODEL_DIRS:
+                widget_category = parts[0]
+                parts = parts[1:]
+            elif widget_category and parts and parts[0] == widget_category:
+                parts = parts[1:]
+            if parts:
+                filename = PurePosixPath(*parts).as_posix()
+            key = (widget_category, filename)
             references[key] = {
                 "kind": "model",
-                "category": category,
+                "category": widget_category,
                 "filename": filename,
                 "node_type": node_type,
                 "reason": "missing_download_metadata",
             }
-    return [references[key] for key in sorted(references, key=lambda item: (item[0] or "", item[1]))]
+    return [
+        references[key] for key in sorted(references, key=lambda item: (item[0] or "", item[1]))
+    ], warnings
+
+
+def _note_urls_by_basename(
+    nodes: Iterable[Mapping[str, Any]],
+) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    collected: dict[str, dict[str, str]] = {}
+    for node in nodes:
+        node_type = str(node.get("type") or node.get("class_type") or "unknown")
+        if not _is_note_node(node_type):
+            continue
+        for value in _iter_values(node.get("widgets_values", ())):
+            if not isinstance(value, str):
+                continue
+            for raw in DOWNLOAD_URL_RE.findall(value):
+                raw = raw.rstrip(".,;:)")
+                parsed = urlparse(raw)
+                host = parsed.netloc.lower()
+                if host.startswith("www."):
+                    host = host[4:]
+                if parsed.scheme not in {"http", "https"} or host not in DOWNLOAD_HOSTS:
+                    continue
+                basename = _url_basename(raw)
+                if PurePosixPath(basename).suffix.lower() not in MODEL_EXTENSIONS:
+                    continue
+                canonical = _canonical_download_url(raw)
+                collected.setdefault(basename, {})[canonical] = canonical
+    unique: dict[str, str] = {}
+    warnings: list[dict[str, Any]] = []
+    for basename, urls in collected.items():
+        if len(urls) == 1:
+            unique[basename] = next(iter(urls))
+            continue
+        warnings.append(
+            _warning("note_url_conflict", filename=basename, urls=sorted(urls))
+        )
+    return unique, warnings
+
+
+def _bind_note_models(
+    references: Iterable[Mapping[str, Any]],
+    declared: Iterable[Mapping[str, Any]],
+    note_urls: Mapping[str, str],
+) -> tuple[list[dict], list[dict], list[dict[str, Any]]]:
+    declared_keys = {(model["category"], model["filename"]) for model in declared}
+    declared_basenames = {PurePosixPath(model["filename"]).name for model in declared}
+    extra: dict[tuple[str, str], dict] = {}
+    unresolved: list[dict] = []
+    warnings: list[dict[str, Any]] = []
+    for reference in references:
+        filename = str(reference["filename"])
+        basename = PurePosixPath(filename).name
+        key = (reference.get("category"), filename)
+        if key in declared_keys or basename in declared_basenames:
+            continue
+        url = note_urls.get(basename)
+        if not url:
+            unresolved.append(dict(reference))
+            continue
+        category = reference.get("category") or _category_from_url(url)
+        if category not in MODEL_DIRS:
+            item = dict(reference)
+            item["reason"] = "missing_category"
+            item["url"] = url
+            unresolved.append(item)
+            warnings.append(
+                _warning(
+                    "missing_category",
+                    filename=filename,
+                    url=url,
+                    detail="note URL matched the basename but no known ComfyUI folder",
+                )
+            )
+            continue
+        try:
+            stored = canonical_relpath(filename, category=str(category), field="model name")
+        except PathError as exc:
+            item = dict(reference)
+            item["reason"] = "unsafe_path"
+            unresolved.append(item)
+            warnings.append(_warning("unsafe_reference", filename=filename, detail=str(exc)))
+            continue
+        extra[(category, stored)] = {
+            "category": category,
+            "filename": stored,
+            "url": url,
+            "sha256": None,
+            "source": "note",
+        }
+    return [extra[key] for key in sorted(extra)], unresolved, warnings
 
 
 def resolve_workflow(path: str | Path) -> dict[str, Any]:
     workflow_path = Path(path)
     workflow, raw = load_workflow(workflow_path)
     nodes = _nodes(workflow)
-    models = _declared_models(workflow, nodes)
-    custom_nodes = _custom_nodes(nodes)
+    models, model_warnings = _declared_models(workflow, nodes)
+    custom_nodes, node_warnings = _custom_nodes(nodes)
+    references, reference_warnings = _referenced_models(nodes)
+    note_urls, note_warnings = _note_urls_by_basename(nodes)
+    extra_models, unresolved, bind_warnings = _bind_note_models(
+        references,
+        models,
+        note_urls,
+    )
+    if extra_models:
+        merged = {(model["category"], model["filename"]): model for model in models}
+        for model in extra_models:
+            merged[(model["category"], model["filename"])] = model
+        models = [merged[key] for key in sorted(merged)]
 
-    declared = {(model["category"], model["filename"]) for model in models}
-    declared_basenames = {PurePosixPath(model["filename"]).name for model in models}
-    unresolved = []
-    for reference in _referenced_models(nodes):
-        key = (reference["category"], reference["filename"])
-        if key in declared or PurePosixPath(reference["filename"]).name in declared_basenames:
-            continue
-        unresolved.append(reference)
-
+    warnings = [
+        *model_warnings,
+        *node_warnings,
+        *reference_warnings,
+        *note_warnings,
+        *bind_warnings,
+    ]
     return {
         "schema": WORKFLOW_LOCK_SCHEMA,
         "workflow": {
@@ -360,6 +626,7 @@ def resolve_workflow(path: str | Path) -> dict[str, Any]:
         "models": models,
         "custom_nodes": custom_nodes,
         "unresolved": unresolved,
+        "warnings": warnings,
     }
 
 
@@ -373,6 +640,9 @@ def validate_workflow_lock(lock: Mapping[str, Any], *, require_resolved: bool = 
     unresolved = lock.get("unresolved")
     if not isinstance(unresolved, list):
         raise WorkflowResolutionError("Workflow lock requires an unresolved array.")
+    warnings = lock.get("warnings", [])
+    if warnings is not None and not isinstance(warnings, list):
+        raise WorkflowResolutionError("Workflow lock warnings must be an array when present.")
 
     destinations: set[tuple[str, str]] = set()
     for model in lock["models"]:
