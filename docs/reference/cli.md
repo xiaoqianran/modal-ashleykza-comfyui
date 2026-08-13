@@ -40,6 +40,16 @@ python -m studio
 
 本机 `127.0.0.1:8787`。见 [Studio](../guide/studio.md)。
 
+## 通用排队
+
+```bash
+python3 -m workflow_queue --inspect --workflow examples/z-image-base.json
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/z-image-base.json --prompt "a celadon teapot"
+```
+
+把官方 UI JSON 交给正在跑的 ComfyUI 做 `graphToPrompt()`，再 `POST /prompt`。见 [工作流与锁文件](../guide/workflows.md)。
+
 ## Volume
 
 ```bash

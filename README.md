@@ -41,6 +41,8 @@ python -m studio
 
 打开 `http://127.0.0.1:8787`。密钥写在 `.studio.env`，不会进 Git。见文档「Studio」。
 
+后面加工作流不必再写一份 queue 脚本。先 `--inspect`，再 hydrate，再用 `python3 -m workflow_queue` 交给 ComfyUI 自己做 `graphToPrompt()`。
+
 ## 开发
 
 ```bash

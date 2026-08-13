@@ -2,6 +2,34 @@
 
 GPU 启动前，工作流引用的权重必须已经在 Storage 里。锁文件描述「这份工作流需要哪些文件、从哪下载」。
 
+## 通用适配（不要每个 JSON 写一份脚本）
+
+引擎、输出目录、缩容都是全局的。官方 UI JSON 带 subgraph，不能直接 `POST /prompt`；浏览器点 Queue 时会先跑 `app.graphToPrompt()`。无头跑也用**同一件事**：
+
+```bash
+python3 -m workflow_queue --inspect --workflow examples/你的.json
+modal run hydrate_modal.py --workflow examples/你的.json
+MODAL_GPU=T4 modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/你的.json \
+  --images photo.png \
+  --prompt "optional text" \
+  --out artifacts/run
+```
+
+`--inspect` 不占 GPU，只列出能绑定的 LoadImage / 提示词 / Save* 节点。已经是 API prompt（节点带 `class_type`）则跳过浏览器。UI 图需要本机 Chrome + Playwright，去跑正在服务的 ComfyUI 页。
+
+只有下面这些才需要额外文件，不是每个工作流都要：
+
+| 还要特供 | 原因 |
+|---|---|
+| 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重 |
+| `scripts/queue_ltx25.py` 的 patch | Ashley 0.32.0 缺官方节点 |
+| Pixal3D 预构建 wheel | 否则会在 GPU 上编译 natten |
+| `catalog/*.json` | 只给 Studio 控制面填表单 |
+
+网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
+
 ## 生成锁文件
 
 ```bash
