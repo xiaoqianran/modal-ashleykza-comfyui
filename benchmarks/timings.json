@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "updated": "2026-08-13",
+  "environment": {
+    "image": "ashleykleynhans/comfyui cu128-py312",
+    "comfyui_version": "0.32.0",
+    "modal_profile": "weiranzhiqian",
+    "platform": "Modal",
+    "measurement": "从 POST /prompt 到 /history 出现 success 的墙钟时间（脚本或 Studio 客户端计时；ComfyUI execution 时间仅在有记录时注明）",
+    "scaledown_window_seconds": 5,
+    "notes": [
+      "首张图通常含冷启动、权重装进 VRAM、或同卡换模；后续张为热显存。",
+      "测完应停 modal serve，避免 leftover 阻止缩容。",
+      "产物不进 Git；本文件只记数字与条件。"
+    ]
+  },
+  "runs": [
+    {
+      "id": "flux2-dev-pro6000-2026-08-13",
+      "catalog_id": "flux2-dev",
+      "model": "FLUX.2 [dev]",
+      "gpu": "RTX-PRO-6000",
+      "gpu_detail": "NVIDIA RTX PRO 6000 Blackwell Server Edition, 96GB",
+      "date": "2026-08-13",
+      "source": "PR #21 / artifacts/pro6000-soundness",
+      "workflow": "examples/flux2-dev-t2i.json",
+      "template": "image_flux2_text_to_image",
+      "settings": {
+        "resolution": "1024x1024",
+        "steps": 20,
+        "turbo_lora": false,
+        "vram_observed_gb": 70
+      },
+      "prompts": [
+        "a celadon teapot on wet slate",
+        "雨夜霓虹巷口，红风衣，电影感",
+        "aerial cinematic terraced rice fields at sunrise",
+        "a ginger cat sitting on stacked books by a window",
+        "still life of blue-and-white porcelain with lychee soda"
+      ],
+      "results": [
+        {"prompt_index": 1, "seconds": 144.0, "note": "冷加载进 VRAM；ComfyUI execution ≈143981ms；首张 POST 曾因容器回收丢失后重跑"},
+        {"prompt_index": 2, "seconds": 15.35},
+        {"prompt_index": 3, "seconds": 15.38},
+        {"prompt_index": 4, "seconds": 15.38},
+        {"prompt_index": 5, "seconds": 15.34}
+      ],
+      "summary": {
+        "count": 5,
+        "success": 5,
+        "first_seconds": 144.0,
+        "warm_min_seconds": 15.34,
+        "warm_max_seconds": 15.38,
+        "warm_mean_seconds": 15.36
+      }
+    },
+    {
+      "id": "qwen-image-2512-pro6000-2026-08-13",
+      "catalog_id": "qwen-image-2512",
+      "model": "Qwen-Image-2512",
+      "gpu": "RTX-PRO-6000",
+      "gpu_detail": "NVIDIA RTX PRO 6000 Blackwell Server Edition, 96GB",
+      "date": "2026-08-13",
+      "source": "PR #21 / artifacts/pro6000-soundness",
+      "workflow": "examples/qwen-image-2512.json",
+      "template": "image_qwen_Image_2512",
+      "settings": {
+        "resolution": "1328x1328",
+        "steps": 50,
+        "lightning_lora": false,
+        "vram_observed_gb": 32
+      },
+      "prompts": [
+        "a celadon teapot on wet slate",
+        "雨夜霓虹巷口，红风衣，电影感",
+        "aerial cinematic terraced rice fields at sunrise",
+        "a ginger cat sitting on stacked books by a window",
+        "still life of blue-and-white porcelain with lychee soda"
+      ],
+      "results": [
+        {"prompt_index": 1, "seconds": 77.59, "note": "同卡从 Flux.2 切到 Qwen + 50 步"},
+        {"prompt_index": 2, "seconds": 53.99},
+        {"prompt_index": 3, "seconds": 53.93},
+        {"prompt_index": 4, "seconds": 53.89},
+        {"prompt_index": 5, "seconds": 53.84}
+      ],
+      "summary": {
+        "count": 5,
+        "success": 5,
+        "first_seconds": 77.59,
+        "warm_min_seconds": 53.84,
+        "warm_max_seconds": 53.99,
+        "warm_mean_seconds": 53.91
+      }
+    },
+    {
+      "id": "triposplat-l40s-2026-08-13",
+      "catalog_id": "triposplat",
+      "model": "TripoSplat",
+      "gpu": "L40S",
+      "gpu_detail": "NVIDIA L40S",
+      "date": "2026-08-13",
+      "source": "PR #13",
+      "workflow": "examples/triposplat-image-to-gaussian-splat.json",
+      "settings": {
+        "vram_estimate_gb": 48,
+        "outputs": ["SPZ", "GLB"]
+      },
+      "results": [
+        {"input": "headphones", "seconds": 53.7, "spz_mb": 3.0, "glb_mb": 39},
+        {"input": "wristwatch", "seconds": 30.1, "spz_mb": 2.7, "glb_mb": 8.8},
+        {"input": "rubber-duck", "seconds": 32.8, "spz_mb": 2.9, "glb_mb": 58}
+      ],
+      "summary": {
+        "count": 3,
+        "success": 3,
+        "min_seconds": 30.1,
+        "max_seconds": 53.7,
+        "mean_seconds": 38.9
+      }
+    },
+    {
+      "id": "pixal3d-l40s-2026-08-13",
+      "catalog_id": "pixal3d",
+      "model": "Pixal3D",
+      "gpu": "L40S",
+      "date": "2026-08-13",
+      "source": "PR #14",
+      "workflow": "examples/pixal3d-image-to-3d.json",
+      "settings": {
+        "preset": "1024_cascade",
+        "vram_estimate_gb": "20-32",
+        "outputs": ["GLB"]
+      },
+      "results": [
+        {"input": "gecko.jpg", "seconds": null, "note": "跑通 success，未记录墙钟秒数"}
+      ],
+      "summary": {
+        "count": 1,
+        "success": 1,
+        "status": "待补正式计时"
+      }
+    },
+    {
+      "id": "z-image-t4",
+      "catalog_id": "z-image",
+      "model": "Z-Image",
+      "gpu": "T4",
+      "workflow": "examples/z-image-base.json",
+      "settings": {
+        "resolution": "1024x1024",
+        "steps": 25,
+        "cfg": 4.0,
+        "mode": "graph"
+      },
+      "results": [],
+      "summary": {
+        "status": "待补测",
+        "script": "scripts/run_z_image_prompts.py",
+        "note": "Studio 默认配方；可用上述脚本批量记 timings.json"
+      }
+    }
+  ]
+}

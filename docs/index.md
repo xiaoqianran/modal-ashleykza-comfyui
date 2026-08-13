@@ -38,5 +38,6 @@ modal serve comfyui_modal.py
 3. [工作流与锁文件](guide/workflows.md)
 4. [GPU 部署](guide/deploy.md)
 5. [Studio（Z-Image）](guide/studio.md)
-6. [环境变量](reference/configuration.md)
-7. [配方](guide/recipes.md)
+6. [实测耗时（GPU 参考）](reference/benchmarks.md)
+7. [环境变量](reference/configuration.md)
+8. [配方](guide/recipes.md)
