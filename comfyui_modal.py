@@ -26,13 +26,19 @@ import modal
 
 from comfy_engine import (
     build_node_commands,
+    build_registry_node_commands,
     prepare_runtime,
     start_comfyui,
     sync_profile_models,
     sync_workflow_models,
+    verify_workflow_models,
 )
 from recipes import PROFILES, get_profile
-from workflow_resolver import resolve_workflow, validate_workflow_lock, write_workflow_lock
+from workflow_resolver import (
+    load_workflow_lock,
+    validate_workflow_lock,
+    write_workflow_lock,
+)
 
 
 APP_NAME = "comfyui-ashleykza-cu128"
@@ -44,9 +50,16 @@ COMFY_ROOT = Path("/ComfyUI")
 WORKSPACE = Path("/workspace")
 COMFY_PORT = 3001
 MINUTES = 60
+IMAGE_WORKFLOW_LOCK = Path("/opt/comfy/workflow.lock.json")
 
 PROFILE_NAME = os.getenv("COMFY_PROFILE", "base").strip() or "base"
 PROFILE = get_profile(PROFILE_NAME)
+WORKFLOW_LOCK_SOURCE = os.getenv("COMFY_WORKFLOW_LOCK", "").strip()
+BUILD_WORKFLOW_LOCK = (
+    load_workflow_lock(WORKFLOW_LOCK_SOURCE, require_resolved=True)
+    if WORKFLOW_LOCK_SOURCE and modal.is_local()
+    else None
+)
 
 GPU_DEFAULT = ["L4", "L40S", "RTX-PRO-6000"]
 gpu_env = os.getenv("MODAL_GPU", "").strip()
@@ -72,8 +85,11 @@ workspace_vol = modal.Volume.from_name(
 )
 
 
-# Stable custom nodes are baked into the image selected by COMFY_PROFILE.
+# Stable profile nodes and workflow-declared CNR nodes are installed in CPU Image builds.
 node_commands = build_node_commands(PROFILE.node_packs)
+registry_node_commands = build_registry_node_commands(
+    BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else ()
+)
 
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
@@ -81,10 +97,20 @@ runtime_image = (
     .apt_install("git")
 )
 
-if node_commands:
+for node_command in node_commands:
     # GITHUB_TOKEN from APP_SECRETS is available only during the build and is
     # not baked into the resulting Image. Public repos work without it.
-    runtime_image = runtime_image.run_commands(*node_commands, secrets=APP_SECRETS)
+    runtime_image = runtime_image.run_commands(node_command, secrets=APP_SECRETS)
+
+for registry_command in registry_node_commands:
+    runtime_image = runtime_image.run_commands(registry_command)
+
+if BUILD_WORKFLOW_LOCK:
+    runtime_image = runtime_image.add_local_file(
+        WORKFLOW_LOCK_SOURCE,
+        remote_path=str(IMAGE_WORKFLOW_LOCK),
+        copy=True,
+    )
 
 runtime_image = (
     runtime_image
@@ -96,7 +122,7 @@ runtime_image = (
         }
     )
     # Modal 1.x no longer automounts arbitrary imported local modules.
-    .add_local_python_source("recipes", "comfy_engine")
+    .add_local_python_source("recipes", "workflow_resolver", "comfy_engine")
 )
 
 
@@ -161,6 +187,9 @@ def sync_workflow(workflow_lock: dict) -> dict:
 @modal.concurrent(max_inputs=20)
 @modal.web_server(port=COMFY_PORT, startup_timeout=15 * MINUTES)
 def ui():
+    if IMAGE_WORKFLOW_LOCK.is_file():
+        workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
+        verify_workflow_models(workflow_lock, WORKSPACE)
     prepare_runtime(COMFY_ROOT, WORKSPACE)
 
     extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
@@ -218,10 +247,11 @@ def main(
     if action == "workflow-sync":
         if not workflow:
             raise ValueError("--workflow is required for action=workflow-sync")
-        lock = resolve_workflow(workflow)
+        output = lock_out or str(Path(workflow).with_suffix(".lock.json"))
+        lock = write_workflow_lock(workflow, output)
         validate_workflow_lock(lock, require_resolved=True)
         result = sync_workflow.remote(lock)
-        print(result)
+        print({**result, "lock": output})
         return
 
     if action != "info":
@@ -236,6 +266,7 @@ GPU:       {GPU}
 Port:      {COMFY_PORT}
 Volume:    comfyui-ashleykza-workspace
 Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
+Workflow:  {WORKFLOW_LOCK_SOURCE or '(none)'}
 
 1. List profiles:
    modal run comfyui_modal.py --action profiles
@@ -251,7 +282,7 @@ Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
    COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
 5. Persistent endpoint:
-   COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+   COMFY_PROFILE=qwen-image COMFY_WORKFLOW_LOCK=workflow.lock.json modal deploy comfyui_modal.py
 
 Optional:
    MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py

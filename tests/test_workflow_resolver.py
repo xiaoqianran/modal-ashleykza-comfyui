@@ -152,6 +152,26 @@ class WorkflowResolverTests(unittest.TestCase):
         self.assertEqual(result["synced"], 1)
         self.assertIn("models/checkpoints/qwen/model.safetensors", state["assets"])
 
+    def test_gpu_preflight_rejects_missing_models(self):
+        workflow = _sample_workflow()
+        workflow["nodes"][2]["widgets_values"] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "workflow.json"
+            source.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(source)
+            with self.assertRaisesRegex(RuntimeError, "action=workflow-sync"):
+                comfy_engine.verify_workflow_models(lock, root / "workspace")
+
+    def test_registry_node_build_is_pinned_and_cpu_safe(self):
+        commands = comfy_engine.build_registry_node_commands(
+            [{"id": "comfyui-kjnodes", "version": "1.2.3"}]
+        )
+        self.assertEqual(len(commands), 2)
+        self.assertIn("comfy-cli==1.16.0", commands[0])
+        self.assertIn("registry-install comfyui-kjnodes --version 1.2.3", commands[1])
+        self.assertNotIn("nvidia", "\n".join(commands).lower())
+
 
 if __name__ == "__main__":
     unittest.main()

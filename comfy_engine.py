@@ -9,7 +9,7 @@ import subprocess
 import tarfile
 import time
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -382,6 +382,28 @@ def sync_workflow_models(
     }
 
 
+def verify_workflow_models(
+    workflow_lock: Mapping[str, Any],
+    workspace: str | Path = "/workspace",
+) -> dict:
+    """Fail fast when a GPU runtime is missing CPU-prefetched workflow models."""
+    validate_workflow_lock(workflow_lock, require_resolved=True)
+    workspace = Path(workspace)
+    missing = []
+    for model in workflow_lock["models"]:
+        relative = Path("models") / model["category"] / model["filename"]
+        target = workspace / relative
+        if not target.is_file() or target.stat().st_size <= 0:
+            missing.append(relative.as_posix())
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(
+            "Workflow models were not prefetched into the Modal Volume: "
+            f"{joined}. Run action=workflow-sync before starting the GPU endpoint."
+        )
+    return {"verified": len(workflow_lock["models"]), "missing": []}
+
+
 def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[str]:
     """Translate declarative node recipes into idempotent image-build shell commands."""
     recipes: list[NodeRecipe] = []
@@ -446,6 +468,53 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
         steps.append("rm -f /tmp/comfy-git-askpass")
         commands.append("; ".join(steps))
 
+    return commands
+
+
+def build_registry_node_commands(
+    custom_nodes: Iterable[Mapping[str, Any]],
+    *,
+    comfy_cli_version: str = "1.16.0",
+) -> list[str]:
+    """Install workflow-declared CNR nodes in CPU-backed Image build layers."""
+    nodes = list(custom_nodes)
+    if not nodes:
+        return []
+
+    bootstrap = "; ".join(
+        (
+            "set -eux",
+            'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
+            '[ -x "$PY" ] || PY=python3',
+            f'"$PY" -m pip install --no-cache-dir comfy-cli=={_quote(comfy_cli_version)}',
+        )
+    )
+    commands = [bootstrap]
+
+    for node in nodes:
+        node_id = str(node["id"])
+        version = node.get("version")
+        install = [
+            'COMFY=/ComfyUI/venv/bin/comfy; [ -x "$COMFY" ] || COMFY=comfy',
+            f'"$COMFY" --workspace=/ComfyUI node registry-install {_quote(node_id)}',
+        ]
+        if version:
+            install[-1] += f" --version {_quote(str(version))}"
+        qnode = _quote(node_id)
+        commands.append(
+            "; ".join(
+                (
+                    "set -eux",
+                    "mkdir -p /ComfyUI/custom_nodes",
+                    (
+                        "if ! find /ComfyUI/custom_nodes -mindepth 1 -maxdepth 1 "
+                        f"-type d -iname {qnode} -print -quit | grep -q .; then "
+                        + "; ".join(install)
+                        + "; fi"
+                    ),
+                )
+            )
+        )
     return commands
 
 
