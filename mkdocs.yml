@@ -1,0 +1,96 @@
+site_name: ComfyUI on Modal
+site_description: 在 Modal 上可复现地运行 ComfyUI。CPU 预取模型，GPU 只推理。
+site_url: https://xiaoqianran.github.io/modal-ashleykza-comfyui/
+repo_url: https://github.com/xiaoqianran/modal-ashleykza-comfyui
+repo_name: xiaoqianran/modal-ashleykza-comfyui
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; modal-ashleykza-comfyui
+strict: true
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到浅色模式
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang: zh
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/xiaoqianran/modal-ashleykza-comfyui
+
+validation:
+  omitted_files: warn
+  absolute_links: ignore
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - 首页: index.md
+  - 快速开始: getting-started.md
+  - 指南:
+      - 核心概念: guide/concepts.md
+      - Hydrate Storage: guide/hydrate.md
+      - 工作流与锁文件: guide/workflows.md
+      - GPU 部署: guide/deploy.md
+      - 配方: guide/recipes.md
+  - 参考:
+      - 环境变量: reference/configuration.md
+      - 命令行: reference/cli.md
+      - 架构: reference/architecture.md
+      - 文档站点: reference/publishing.md
+  - 故障排除: troubleshooting.md
