@@ -1,123 +1,55 @@
 # modal-ashleykza-comfyui
 
-把原来的 ComfyUI Docker / Jupyter Notebook 操作拆成可维护的 **Recipe → Build → Sync → Run** 架构。
+在 Modal 上运行可复现的 ComfyUI，并把“解析别人的工作流、下载模型、安装自定义节点”前移到 CPU 阶段。GPU 容器只校验依赖、加载模型和执行推理，不在启动时联网下载资产。
 
-## 设计
+项目按 Modal 1.5.4 和 2026-08-13 的官方 [`llms.txt`](https://modal.com/llms.txt) 审计。
 
-```text
-recipes.py
-   │
-   ├── MODEL_PACKS     模型 URL / 分类
-   ├── NODE_PACKS      custom node 仓库 / requirements / 安装动作
-   └── PROFILES        一个可直接运行的组合
-          │
-          ▼
-comfy_engine.py
-   ├── build_node_commands()   节点 → Image build
-   ├── sync_profile_models()   模型 → Modal Volume（CPU）
-   ├── comfy.lock.json         幂等下载状态
-   └── prepare_runtime()       extra_model_paths + mutable state
-          │
-          ▼
-comfyui_modal.py
-   ├── CPU sync_models()
-   └── GPU ui()
+## 工作方式
+
+```mermaid
+flowchart TD
+    A["ComfyUI JSON / PNG"] --> B["本地解析 workflow.lock.json"]
+    B --> C["CPU Function 下载模型"]
+    B --> D["CPU Image build 安装 CNR 节点"]
+    C --> E["Modal Volume"]
+    D --> F["不可变 Runtime Image"]
+    E --> G["GPU 启动前校验"]
+    F --> G
+    G --> H["ComfyUI Web UI / 推理"]
 ```
 
-### 存储边界
+| 阶段 | 运行位置 | 产物 | 是否使用 GPU |
+|---|---|---|---|
+| 解析工作流 | 本机 | `*.lock.json` | 否 |
+| 下载模型 | Modal CPU Function | `/workspace/models/...` Volume | 否 |
+| 安装工作流节点 | Modal Image build | Runtime Image | 否 |
+| 启动与推理 | Modal GPU Function | Web endpoint | 是 |
 
-- **Image（不可变）**：`/ComfyUI`、venv、CUDA / torch、选中 Profile 的稳定 custom nodes。
-- **Volume（可变）**：`/workspace/models`、`input`、`output`、`user`、`custom_nodes`、`logs`、`state/comfy.lock.json`。
-- `/ComfyUI/models` 不被覆盖；通过 `extra_model_paths.yaml` 让 ComfyUI 同时读取 `/workspace/models`。
-- `/workspace/custom_nodes` 作为额外节点目录保留，适合实验节点；稳定节点建议写进 `NODE_PACKS` 后重新 deploy。
+模型放在持久 Volume；稳定 custom nodes 放在不可变 Image。这样既避免每次 GPU 冷启动重新下载，也让节点依赖跟随部署版本。
 
-## 已迁移的 Notebook 功能
+## 快速开始
 
-### Model Profiles
-
-- `ltx23`
-- `nordy-kontext-views`
-- `nordy-clothes`
-- `qwen-image`
-- `flux-krea`
-- `flux-kontext`
-- `wan22`
-- `wan22-notebook-full`
-
-### Node Packs
-
-- Nordy 换衣节点组
-- Qwen Image
-- omini-kontext
-- Wan 2.2 core
-- Wan Notebook 全量节点组
-- Nunchaku
-
-旧 Notebook 中 Docker `run/exec/restart`、gradio-tunneling、zrok、`nvidia-smi --gpu-reset` 等操作不再放进部署代码：Modal 已负责容器生命周期和 Web endpoint。
-
-Notebook 中硬编码的 HF / Civitai / Gemini credential **没有迁移到 Git**。
-
-## 1. 安装 / 登录 Modal
+要求 Python 3.12。项目固定 `modal==1.5.4`：
 
 ```bash
-pip install -U modal
+python -m pip install "modal==1.5.4"
 modal setup
 ```
 
-## 2. 查看 Profile
+查看已有 Profile：
 
 ```bash
 modal run comfyui_modal.py --action profiles
 ```
 
-## 3. 先同步模型（CPU，不占 GPU）
-
-例如 Qwen Image：
+先用 CPU 同步 Profile 模型，再启动 GPU UI：
 
 ```bash
 modal run comfyui_modal.py --action sync --profile qwen-image
-```
-
-Wan 2.2：
-
-```bash
-modal run comfyui_modal.py --action sync --profile wan22
-```
-
-下载写入：
-
-```text
-/workspace/models/...
-/workspace/state/comfy.lock.json
-```
-
-再次运行同一个 sync 时，已记录且文件大小一致的资产会跳过；Recipe 可选填写 `sha256=` 进行强校验。
-
-## 下载策略：当前默认为什么这样设计
-
-模型同步阶段不占 GPU，下载完成后长期保存在 Modal Volume。当前默认路由：
-
-```text
-Hugging Face  → huggingface_hub / hf_xet（HF_XET_HIGH_PERFORMANCE=1）
-Civitai       → aria2c -x16 -s16
-普通 HTTP(S)  → aria2c -x16 -s16
-                 ↓
-            Modal Volume
-                 ↓
-         GPU 只加载 / 推理
-```
-
-这是为了避免每次 GPU 冷启动重新下载模型。`hf_xet` 是当前 Hugging Face 的主下载后端；如果 HF/Xet 下载异常，引擎会回退到 aria2。
-
-## 4. 启动 UI
-
-第一次测试：
-
-```bash
 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
-持久 endpoint：
+持久部署：
 
 ```bash
 COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
@@ -126,271 +58,184 @@ COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 Windows PowerShell：
 
 ```powershell
+modal run comfyui_modal.py --action sync --profile qwen-image
 $env:COMFY_PROFILE="qwen-image"
 modal serve comfyui_modal.py
 ```
 
-默认 GPU fallback：
+## 根据别人的工作流自动准备依赖
+
+支持 ComfyUI JSON，以及包含 `workflow` / `prompt` 文本元数据的 PNG。
+
+### 1. 解析并在 CPU 同步模型
+
+```bash
+modal run comfyui_modal.py \
+  --action workflow-sync \
+  --workflow examples/other-workflow.json
+```
+
+这个命令会：
+
+1. 在本地生成 `examples/other-workflow.lock.json`；
+2. 拒绝路径穿越、非 HTTP(S) URL、冲突目标和非法哈希；
+3. 把锁文件序列化给 CPU Function；
+4. 用 HF Xet 或 aria2 下载到 Modal Volume 并显式 `commit()`。
+
+只想检查依赖、不下载：
+
+```bash
+modal run comfyui_modal.py \
+  --action resolve \
+  --workflow examples/other-workflow.png
+```
+
+自定义锁文件路径可加 `--lock-out path/to/workflow.lock.json`。
+
+### 2. 构建节点并部署 GPU UI
+
+```bash
+COMFY_WORKFLOW_LOCK=examples/other-workflow.lock.json \
+COMFY_PROFILE=base \
+modal deploy comfyui_modal.py
+```
+
+Modal 会在 CPU Image build 中按锁文件里的 Comfy Registry `cnr_id` / `ver` 安装节点，并把锁文件嵌入 Image。GPU 容器启动时只检查模型是否存在且非空；缺失时立即失败并提示先运行 `workflow-sync`，不会偷偷下载。
+
+PowerShell：
+
+```powershell
+$env:COMFY_WORKFLOW_LOCK="examples/other-workflow.lock.json"
+$env:COMFY_PROFILE="base"
+modal deploy comfyui_modal.py
+```
+
+### 元数据限制
+
+自动下载依赖必须有可验证的来源。解析器优先使用 ComfyUI 工作流规范中的：
+
+- `properties.models[]`: `name`、`url`、`directory`，以及可选 SHA256；
+- `properties.cnr_id` / `properties.ver`: Comfy Registry 节点与版本。
+
+如果工作流只保存了 `model.safetensors` 文件名、没有下载 URL，锁文件会把它列入 `unresolved`，`workflow-sync` 会停止。这时请在锁文件的 `models` 中补充 `category`、`filename`、`url`、可选 `sha256`，并移除对应的 `unresolved` 项后重试。项目不会猜测同名模型，以免拉错多 GB 权重。
+
+没有 CNR 元数据的旧式或 Git-only custom node 无法从节点类型可靠反推仓库；请把它加入 `recipes.py` 的 `NODE_PACKS`。完整流程和锁文件说明见 [`docs/WORKFLOW_PREFETCH.md`](docs/WORKFLOW_PREFETCH.md)。
+
+## 下载与存储
 
 ```text
-L4 → L40S → RTX-PRO-6000
+Hugging Face  -> huggingface_hub + hf_xet
+Civitai       -> aria2c -x16 -s16
+普通 HTTP(S)  -> aria2c -x16 -s16
+                         |
+                         v
+                  Modal Volume
+                         |
+                         v
+                    GPU 只读取
 ```
 
-覆盖：
+- `/ComfyUI`：基础镜像、venv、CUDA / torch、稳定 custom nodes；
+- `/workspace/models`：模型；
+- `/workspace/input|output|user`：可变用户数据；
+- `/workspace/custom_nodes`：实验节点；
+- `/workspace/state/comfy.lock.json`：幂等同步状态；
+- `/workspace/logs/comfyui.log`：ComfyUI 日志。
 
-```bash
-MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py
+`extra_model_paths.yaml` 让 ComfyUI 读取 Volume 模型，不覆盖 Image 自带模型。HF 下载开启 `HF_XET_HIGH_PERFORMANCE=1`；失败时回退 aria2。同步 Function 使用 2 CPU / 2 GiB、最长 6 小时、指数退避重试，并限制为一个容器写同一 Volume。
+
+已运行的容器不会自动看到其他容器刚提交的 Volume 变更。工作流同步完成后再 deploy；如果 UI 已在运行，请让它启动新容器后再用新模型。
+
+## Profile 与 Recipe
+
+已有模型 Profile 包括 LTX 2.3、Nordy、Qwen Image、Flux、Wan 2.2 和原 Notebook 全量 Wan 组合。`wan22` 是较小的推荐组合；`wan22-notebook-full` 用于复刻原 Notebook 的启用节点。
+
+在 `recipes.py` 中定义模型：
+
+```python
+"my-model": {
+    "diffusion_models": (
+        M(
+            "https://huggingface.co/org/repo/resolve/main/model.safetensors",
+            filename="vendor/model.safetensors",
+            sha256="可选的64位SHA256",
+        ),
+    ),
+}
 ```
 
-也可以：
+定义固定版本节点：
 
-```bash
-MODAL_GPU=L4,L40S,RTX-PRO-6000 COMFY_PROFILE=wan22 modal serve comfyui_modal.py
+```python
+"my-nodes": (
+    N(
+        "https://github.com/example/ComfyUI-Example.git",
+        ref="v1.2.3",
+        requirements=("requirements.txt",),
+    ),
+)
 ```
 
-## 5. `.env` / Secret
+组合 Profile：
 
-最简单的个人开发方式：
+```python
+"my-profile": Profile(
+    model_packs=("my-model",),
+    node_packs=("my-nodes",),
+    comfy_args=("--preview-method", "auto"),
+    description="My workflow",
+)
+```
+
+Recipe 还支持模型 `extract=True`，以及节点的 `pip`、`pre_commands`、`commands`。压缩包会拒绝 ZIP symlink，并用安全 tar 过滤器解压。
+
+## Secret
+
+复制模板并只填写实际需要的值：
 
 ```bash
 cp .env.example .env
 ```
 
-Windows PowerShell：
+支持 `HF_TOKEN`、`CIVITAI_TOKEN`、`GITHUB_TOKEN` 及部分 custom node API Key。`.env` 被 Git 忽略；构建日志会隐藏 Civitai token，节点配置以 `0600` 权限生成。
 
-```powershell
-Copy-Item .env.example .env
-```
-
-然后编辑 `.env`。支持：
-
-```dotenv
-HF_TOKEN=...
-CIVITAI_TOKEN=...
-GITHUB_TOKEN=...
-GEMINI_API_KEY=...
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-QWEN_API_KEY=...
-OLLAMA_URL=http://localhost:11434
-```
-
-如果没有设置 `MODAL_SECRET_NAME`，`comfyui_modal.py` 会自动用 `modal.Secret.from_dotenv(".env")` 把本地 `.env` 注入：
-
-- CPU 模型同步 Function；
-- GPU ComfyUI Function；
-- custom node 的 Image build 阶段。
-
-因此 `HF_TOKEN` 可访问 gated/private Hugging Face，`CIVITAI_TOKEN` 用于 Civitai，`GITHUB_TOKEN` 可用于 private custom-node repo。GitHub 建议使用只读、repo-scoped 的 fine-grained token。
-
-`.env` 已加入 `.gitignore`，`.env.example` 只保存占位符。不要把真实 Key 写进 `recipes.py` 或提交到 Git。
-
-### 可选：转成持久 Modal Secret
-
-如果你不想每台开发机都保留 `.env` 注入，可以一次创建：
+生产环境建议创建 named Secret：
 
 ```bash
 modal secret create comfyui-secrets --from-dotenv .env --force
+MODAL_SECRET_NAME=comfyui-secrets COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 ```
 
-然后：
+优先级为 named Modal Secret、当前目录 `.env`、无 Secret。原 Notebook 中的明文 token 未迁移；若旧 token 仍有效，应在对应平台轮换。
+
+## 运行参数
+
+| 环境变量 | 默认值 | 作用 |
+|---|---:|---|
+| `MODAL_APP_NAME` | `comfyui-ashleykza-cu128` | Modal App 名称 |
+| `MODAL_VOLUME_NAME` | `comfyui-ashleykza-workspace` | 持久 Volume 名称 |
+| `COMFY_IMAGE` | `ghcr.io/...:cu128-py312-v0.32.0` | ComfyUI 基础镜像 |
+| `COMFY_PROFILE` | `base` | Recipe Profile |
+| `COMFY_WORKFLOW_LOCK` | 空 | 构建时工作流锁文件 |
+| `MODAL_GPU` | `L4,L40S,RTX-PRO-6000` | GPU fallback 顺序 |
+| `COMFY_TIMEOUT_SECONDS` | `86400` | Function 最长存活时间 |
+| `COMFY_STARTUP_TIMEOUT_SECONDS` | `900` | 容器 / Web server 启动上限 |
+| `COMFY_SCALEDOWN_SECONDS` | `300` | 空闲缩容窗口 |
+| `COMFY_MAX_INPUTS` | `20` | 单容器最大并发输入 |
+| `COMFY_TARGET_INPUTS` | `10` | 触发扩容的目标并发 |
+| `COMFY_REQUIRE_PROXY_AUTH` | `false` | 要求 Modal 代理认证头 |
+| `MODAL_SECRET_NAME` | 空 | named Modal Secret |
+| `EXTRA_ARGS` | 空 | 追加 ComfyUI CLI 参数 |
+
+`COMFY_REQUIRE_PROXY_AUTH=true` 会要求请求携带 `Modal-Key` / `Modal-Secret` 头，普通浏览器直接打开会不方便，因此保留公开 endpoint 作为兼容默认。面向公网部署时，应明确选择认证策略且不要在 ComfyUI 中暴露敏感文件。
+
+## 开发与验证
 
 ```bash
-MODAL_SECRET_NAME=comfyui-secrets \
-COMFY_PROFILE=nordy-kontext-views \
-modal deploy comfyui_modal.py
+python -m compileall -q .
+python -m unittest discover -s tests -v
 ```
 
-PowerShell：
+GitHub Actions 还会运行 Ruff。依赖采用精确版本以利用 Modal Image 分层缓存并减少漂移。升级 SDK 前先检查官方 `llms.txt` 与 changelog，并用独立的规范化 commit 提交。
 
-```powershell
-$env:MODAL_SECRET_NAME="comfyui-secrets"
-$env:COMFY_PROFILE="nordy-kontext-views"
-modal deploy comfyui_modal.py
-```
-
-优先级是：
-
-```text
-MODAL_SECRET_NAME 指定的 named Secret
-        >
-本地 .env
-        >
-无 Secret
-```
-
-如果 `ComfyUI-OllamaGemini` 被选入 Image，运行时会从这些环境变量生成它的 `config.json`，不会把 API Key 写进仓库。
-
-> 原 Notebook 中出现过明文 token。若那些 token 仍有效，建议在对应平台轮换。
-
-## 6. 最常修改的文件：`recipes.py`
-
-### 新模型包
-
-```python
-MODEL_PACKS = {
-    # ...
-    "my-model": {
-        "diffusion_models": (
-            M("https://huggingface.co/.../model.safetensors"),
-        ),
-        "text_encoders": (
-            M("https://huggingface.co/.../encoder.safetensors"),
-        ),
-        "vae": (
-            M("https://huggingface.co/.../vae.safetensors"),
-        ),
-    },
-}
-```
-
-支持显式文件名 / 哈希：
-
-```python
-M(
-    "https://example.com/download?id=123",
-    filename="my_model.safetensors",
-    sha256="...",
-)
-```
-
-压缩包需要自动解压：
-
-```python
-M(
-    "https://example.com/assets.zip",
-    extract=True,
-)
-```
-
-### 新节点包
-
-```python
-NODE_PACKS = {
-    # ...
-    "my-nodes": (
-        N(
-            "https://github.com/example/ComfyUI-Example.git",
-            requirements=("requirements.txt",),
-        ),
-    ),
-}
-```
-
-特殊 pip：
-
-```python
-N(
-    "https://github.com/example/node.git",
-    pip=("some-package", "another-package"),
-)
-```
-
-特殊安装命令：
-
-```python
-N(
-    "https://github.com/example/node.git",
-    requirements=("requirements.txt",),
-    commands=("$PY install.py",),
-)
-```
-
-固定 branch / tag：
-
-```python
-N(
-    "https://github.com/example/node.git",
-    ref="v1.2.3",
-)
-```
-
-### 新 Profile
-
-```python
-PROFILES = {
-    # ...
-    "my-profile": Profile(
-        model_packs=("my-model",),
-        node_packs=("my-nodes",),
-        comfy_args=("--preview-method", "auto"),
-        description="My workflow",
-    ),
-}
-```
-
-然后：
-
-```bash
-modal run comfyui_modal.py --action sync --profile my-profile
-COMFY_PROFILE=my-profile modal serve comfyui_modal.py
-```
-
-## 7. Wan 两种模式
-
-推荐：
-
-```bash
-COMFY_PROFILE=wan22
-```
-
-只构建 Wan 常用核心节点，减少 build 时间和依赖冲突。
-
-如果要复刻原 Notebook `wan工作流` cell 的全部**启用**节点：
-
-```bash
-COMFY_PROFILE=wan22-notebook-full
-```
-
-原 cell 中已经注释掉的 `comfyui_LLM_party` 仍保持禁用。
-
-## 8. 自定义运行参数
-
-```bash
-EXTRA_ARGS='--lowvram --preview-method auto' \
-COMFY_PROFILE=qwen-image \
-modal serve comfyui_modal.py
-```
-
-Profile 参数先加载，`EXTRA_ARGS` 再追加。
-
-## 9. Civitai 特殊 URL
-
-原 Notebook 的 `nordy-kontext-views` 中有 Civitai API 下载地址，没有显式文件名。Recipe 保留了原 URL。
-
-如果下载端点返回的名字不适合作为 ComfyUI 文件名，直接在 `recipes.py` 改成：
-
-```python
-M(
-    "https://civitai.com/api/download/models/...",
-    filename="明确的文件名.safetensors",
-)
-```
-
-无需修改 downloader。
-
-## 10. 为什么不把所有东西塞进 `comfyui_modal.py`
-
-主脚本只负责 Modal：
-
-```text
-Modal resources
-GPU fallback
-Volume
-sync function
-web_server
-```
-
-所有经常变化的内容都在：
-
-```text
-recipes.py
-```
-
-所有很少变化的机制都在：
-
-```text
-comfy_engine.py
-```
-
-这使 Notebook 从“执行脚本集合”变成可复现、可组合、可版本控制的 ComfyUI 配方库。
+Modal API 采用依据和保留的架构取舍见 [`docs/MODAL_AUDIT.md`](docs/MODAL_AUDIT.md)。

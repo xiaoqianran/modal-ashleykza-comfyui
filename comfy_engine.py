@@ -9,10 +9,13 @@ import subprocess
 import tarfile
 import time
 import zipfile
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from workflow_resolver import validate_workflow_lock
 
 
 LOCK_SCHEMA = 1
@@ -22,8 +25,14 @@ def _quote(value: str | Path) -> str:
     return shlex.quote(str(value))
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
-    printable = " ".join(_quote(part) for part in cmd)
+def _run(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    display_cmd: list[str] | None = None,
+) -> None:
+    printable = " ".join(_quote(part) for part in (display_cmd or cmd))
     print(f"$ {printable}", flush=True)
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
 
@@ -39,7 +48,15 @@ def redact_url(url: str) -> str:
     parsed = urlparse(url)
     query = parse_qs(parsed.query, keep_blank_values=True)
     for key in tuple(query):
-        if key.lower() in {"token", "auth", "authorization"}:
+        if key.lower() in {
+            "access_token",
+            "api_key",
+            "apikey",
+            "auth",
+            "authorization",
+            "key",
+            "token",
+        }:
             query[key] = ["***"]
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
@@ -86,6 +103,9 @@ def _extract_archive(path: Path) -> None:
         with zipfile.ZipFile(path) as archive:
             for item in archive.infolist():
                 _safe_member_path(target_dir, item.filename)
+                unix_mode = item.external_attr >> 16
+                if unix_mode and (unix_mode & 0o170000) == 0o120000:
+                    raise RuntimeError(f"Archive symlinks are not allowed: {item.filename}")
             archive.extractall(target_dir)
         path.unlink()
         return
@@ -95,7 +115,7 @@ def _extract_archive(path: Path) -> None:
         with tarfile.open(path, "r:*") as archive:
             for item in archive.getmembers():
                 _safe_member_path(target_dir, item.name)
-            archive.extractall(target_dir)
+            archive.extractall(target_dir, filter="data")
         path.unlink()
 
 
@@ -240,16 +260,18 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
         "--file-allocation=none",
         "--summary-interval=1",
         "--console-log-level=notice",
-        "-d", str(target_dir),
+        "-d", str(target.parent),
         "-o", target.name,
         url,
     ]
-    _run(cmd)
+    display_cmd = [*cmd[:-1], redact_url(url)]
+    _run(cmd, display_cmd=display_cmd)
 
 
 def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / asset_filename(asset)
+    target.parent.mkdir(parents=True, exist_ok=True)
 
     if _is_asset_current(target, asset, lock_entry):
         print(f"[SKIP] {target}")
@@ -330,6 +352,77 @@ def sync_profile_models(profile_name: str, workspace: str | Path = "/workspace")
     return {"profile": profile_name, "downloaded": completed, "total": len(wanted)}
 
 
+def sync_workflow_models(
+    workflow_lock: Mapping[str, Any],
+    workspace: str | Path = "/workspace",
+) -> dict:
+    """Download every resolved workflow model into the persistent workspace.
+
+    The lock is produced locally and serialized into the CPU-only Modal Function,
+    so arbitrary local workflow files never need to be mounted in a GPU container.
+    """
+    validate_workflow_lock(workflow_lock, require_resolved=True)
+    workspace = Path(workspace)
+    ensure_workspace_layout(workspace)
+    state_lock = _load_lock(workspace)
+    workflow = workflow_lock.get("workflow", {})
+    workflow_name = str(workflow.get("name", "workflow"))
+    workflow_sha256 = str(workflow.get("sha256", ""))
+
+    completed = 0
+    for model in workflow_lock["models"]:
+        category = model["category"]
+        filename = model["filename"]
+        asset = ModelAsset(
+            url=model["url"],
+            filename=filename,
+            sha256=model.get("sha256"),
+        )
+        rel_key = f"models/{category}/{filename}"
+        entry = state_lock["assets"].get(rel_key)
+        new_entry = download_asset(
+            asset,
+            workspace / "models" / category,
+            lock_entry=entry,
+        )
+        new_entry = dict(new_entry)
+        workflows = set(new_entry.get("workflows", []))
+        workflows.add(workflow_sha256 or workflow_name)
+        new_entry["workflows"] = sorted(workflows)
+        state_lock["assets"][rel_key] = new_entry
+        _save_lock(workspace, state_lock)
+        completed += 1
+
+    return {
+        "workflow": workflow_name,
+        "workflow_sha256": workflow_sha256,
+        "synced": completed,
+        "total": len(workflow_lock["models"]),
+    }
+
+
+def verify_workflow_models(
+    workflow_lock: Mapping[str, Any],
+    workspace: str | Path = "/workspace",
+) -> dict:
+    """Fail fast when a GPU runtime is missing CPU-prefetched workflow models."""
+    validate_workflow_lock(workflow_lock, require_resolved=True)
+    workspace = Path(workspace)
+    missing = []
+    for model in workflow_lock["models"]:
+        relative = Path("models") / model["category"] / model["filename"]
+        target = workspace / relative
+        if not target.is_file() or target.stat().st_size <= 0:
+            missing.append(relative.as_posix())
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(
+            "Workflow models were not prefetched into the Modal Volume: "
+            f"{joined}. Run action=workflow-sync before starting the GPU endpoint."
+        )
+    return {"verified": len(workflow_lock["models"]), "missing": []}
+
+
 def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[str]:
     """Translate declarative node recipes into idempotent image-build shell commands."""
     recipes: list[NodeRecipe] = []
@@ -394,6 +487,53 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
         steps.append("rm -f /tmp/comfy-git-askpass")
         commands.append("; ".join(steps))
 
+    return commands
+
+
+def build_registry_node_commands(
+    custom_nodes: Iterable[Mapping[str, Any]],
+    *,
+    comfy_cli_version: str = "1.16.0",
+) -> list[str]:
+    """Install workflow-declared CNR nodes in CPU-backed Image build layers."""
+    nodes = list(custom_nodes)
+    if not nodes:
+        return []
+
+    bootstrap = "; ".join(
+        (
+            "set -eux",
+            'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
+            '[ -x "$PY" ] || PY=python3',
+            f'"$PY" -m pip install --no-cache-dir comfy-cli=={_quote(comfy_cli_version)}',
+        )
+    )
+    commands = [bootstrap]
+
+    for node in nodes:
+        node_id = str(node["id"])
+        version = node.get("version")
+        install = [
+            'COMFY=/ComfyUI/venv/bin/comfy; [ -x "$COMFY" ] || COMFY=comfy',
+            f'"$COMFY" --workspace=/ComfyUI node registry-install {_quote(node_id)}',
+        ]
+        if version:
+            install[-1] += f" --version {_quote(str(version))}"
+        qnode = _quote(node_id)
+        commands.append(
+            "; ".join(
+                (
+                    "set -eux",
+                    "mkdir -p /ComfyUI/custom_nodes",
+                    (
+                        "if ! find /ComfyUI/custom_nodes -mindepth 1 -maxdepth 1 "
+                        f"-type d -iname {qnode} -print -quit | grep -q .; then "
+                        + "; ".join(install)
+                        + "; fi"
+                    ),
+                )
+            )
+        )
     return commands
 
 
@@ -474,10 +614,12 @@ def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
     if not any(values[key] for key in ("GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "QWEN_API_KEY")):
         return
 
-    (node / "config.json").write_text(
+    config_path = node / "config.json"
+    config_path.write_text(
         json.dumps(values, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    config_path.chmod(0o600)
     print("Wrote secret-backed ComfyUI-OllamaGemini/config.json")
 
 
