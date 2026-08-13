@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "id": "flux2-dev",
+  "title": "FLUX.2 [dev]",
+  "summary": "官方文生图模板（fp8 mixed + Mistral TE）。约 71GB 显存，必须 RTX-PRO-6000。",
+  "kind": "t2i",
+  "mode": "workflow",
+  "workflow": "examples/flux2-dev-t2i.json",
+  "lock": "examples/flux2-dev-t2i.lock.json",
+  "gpu": "RTX-PRO-6000",
+  "gpu_choices": ["RTX-PRO-6000"],
+  "client_id": "studio-flux2-dev",
+  "filename_prefix": "Flux2_dev_studio",
+  "io": {"images_in": 0},
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。转换后绑 RandomNoise / sampler 上已有的 seed 键。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    }
+  ]
+}

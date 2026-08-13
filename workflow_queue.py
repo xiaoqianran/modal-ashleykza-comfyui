@@ -302,8 +302,11 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
     return prompt
 
 
-SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced"}
+SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced"}
+SEED_TYPES = SAMPLER_TYPES | {"RandomNoise"}
+SCHEDULER_TYPES = {"Flux2Scheduler"}
 NUMBER_KEYS = {"seed", "steps", "cfg", "denoise", "width", "height"}
+SEED_INPUT_KEYS = ("seed", "noise_seed")
 
 
 def bind_number_inputs(prompt: dict[str, Any], values: Mapping[str, Any]) -> dict[str, Any]:
@@ -320,11 +323,18 @@ def bind_number_inputs(prompt: dict[str, Any], values: Mapping[str, Any]) -> dic
             continue
         inputs = node.setdefault("inputs", {})
         class_type = str(node.get("class_type") or "")
-        if class_type in SAMPLER_TYPES:
-            for key in ("seed", "steps", "cfg", "denoise"):
+        if class_type in SEED_TYPES and "seed" in wanted:
+            for key in SEED_INPUT_KEYS:
+                if key in inputs:
+                    inputs[key] = wanted["seed"]
+        if class_type in SAMPLER_TYPES | SCHEDULER_TYPES:
+            for key in ("steps", "cfg", "denoise"):
                 if key in wanted and key in inputs:
                     inputs[key] = wanted[key]
-        if class_type.startswith("Empty") and "Latent" in class_type:
+        if (
+            (class_type.startswith("Empty") and "Latent" in class_type)
+            or class_type in SCHEDULER_TYPES
+        ):
             for key in ("width", "height"):
                 if key in wanted and key in inputs:
                     inputs[key] = wanted[key]

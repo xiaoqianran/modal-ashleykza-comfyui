@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "id": "qwen-image-2512",
+  "title": "Qwen-Image-2512",
+  "summary": "官方文生图模板（fp8 + Lightning LoRA，默认关）。约 32GB 显存；本仓实测用 RTX-PRO-6000。",
+  "kind": "t2i",
+  "mode": "workflow",
+  "workflow": "examples/qwen-image-2512.json",
+  "lock": "examples/qwen-image-2512.lock.json",
+  "gpu": "RTX-PRO-6000",
+  "gpu_choices": ["RTX-PRO-6000", "L40S"],
+  "client_id": "studio-qwen-image-2512",
+  "filename_prefix": "Qwen2512_studio",
+  "io": {"images_in": 0},
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "negative",
+      "type": "text",
+      "bind": "negative",
+      "title": "负向提示词",
+      "default": "低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感。构图混乱。文字模糊，扭曲"
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 1328,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 1328,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 50,
+      "minimum": 1,
+      "maximum": 60
+    },
+    {
+      "id": "cfg",
+      "type": "float",
+      "bind": "cfg",
+      "title": "CFG",
+      "default": 4.0,
+      "minimum": 1.0,
+      "maximum": 12.0,
+      "step": 0.5
+    }
+  ]
+}

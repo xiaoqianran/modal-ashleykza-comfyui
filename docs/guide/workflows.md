@@ -165,6 +165,44 @@ python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
 
 空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。测试请用完即停，不要把 L40S 挂着。
 
+## 仓库示例：FLUX.2 [dev] 文生图
+
+| 文件 | 作用 |
+|---|---|
+| `examples/flux2-dev-t2i.json` | 官方 UI 工作流 `image_flux2_text_to_image`（subgraph） |
+| `examples/flux2-dev-t2i.lock.json` | 解析锁：fp8 mixed DiT + Mistral TE + small decoder VAE |
+| `catalog/flux2-dev.json` | Studio 契约，默认 **RTX-PRO-6000**（约 71GB） |
+
+锁内 `custom_nodes` 为空。`POST /prompt` 不能直接吃这份 UI JSON；无 UI 时用 `python3 -m workflow_queue`。不要用 T4 / L40S。VAE 在 `black-forest-labs/FLUX.2-small-decoder`，hydrate 需要已授权的 `HF_TOKEN`。跑完立刻停掉 `modal serve`。
+
+```bash
+modal run hydrate_modal.py --workflow examples/flux2-dev-t2i.json
+MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/flux2-dev-t2i.json \
+  --prompt "a celadon teapot on wet slate" \
+  --out artifacts/flux2-dev
+```
+
+## 仓库示例：Qwen-Image-2512 文生图
+
+| 文件 | 作用 |
+|---|---|
+| `examples/qwen-image-2512.json` | 官方 UI 工作流 `image_qwen_Image_2512`（subgraph） |
+| `examples/qwen-image-2512.lock.json` | 解析锁：fp8 DiT + Qwen2.5-VL TE + Lightning LoRA（模板里默认关） |
+| `catalog/qwen-image-2512.json` | Studio 契约，默认 **RTX-PRO-6000**（约 32GB，L40S 也可） |
+
+同样走通用 `workflow_queue`，不要再写 `queue_qwen.py`。
+
+```bash
+modal run hydrate_modal.py --workflow examples/qwen-image-2512.json
+MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/qwen-image-2512.json \
+  --prompt "雨夜霓虹巷口，红风衣，电影感" \
+  --out artifacts/qwen-image-2512
+```
+
 ## 自定义工作流
 
 1. 在本地 ComfyUI 导出 API / workflow JSON（或带嵌入工作流的 PNG）。

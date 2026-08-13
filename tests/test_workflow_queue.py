@@ -53,6 +53,8 @@ class WorkflowInspectTests(unittest.TestCase):
             "ltx-2.5-t2v-i2v-distilled.json",
             "triposplat-image-to-gaussian-splat.json",
             "pixal3d-image-to-3d.json",
+            "flux2-dev-t2i.json",
+            "qwen-image-2512.json",
         ):
             payload = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
             inspect = workflow_queue.inspect_workflow(payload)
@@ -102,6 +104,31 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["9"]["inputs"]["cfg"], 4.0)
         self.assertEqual(prompt["8"]["inputs"]["width"], 1024)
         self.assertEqual(prompt["8"]["inputs"]["batch_size"], 1)
+
+    def test_bind_number_inputs_flux2_random_noise_and_scheduler(self):
+        prompt = {
+            "25": {
+                "class_type": "RandomNoise",
+                "inputs": {"noise_seed": 1, "noise_seed_control": "randomize"},
+            },
+            "47": {
+                "class_type": "EmptyFlux2LatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            },
+            "48": {
+                "class_type": "Flux2Scheduler",
+                "inputs": {"steps": 20, "width": 512, "height": 512},
+            },
+        }
+        workflow_queue.bind_number_inputs(
+            prompt,
+            {"seed": 99, "steps": 8, "width": 1024, "height": 768},
+        )
+        self.assertEqual(prompt["25"]["inputs"]["noise_seed"], 99)
+        self.assertEqual(prompt["47"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["47"]["inputs"]["height"], 768)
+        self.assertEqual(prompt["48"]["inputs"]["steps"], 8)
+        self.assertEqual(prompt["48"]["inputs"]["width"], 1024)
 
     def test_to_api_prompt_passthrough(self):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}

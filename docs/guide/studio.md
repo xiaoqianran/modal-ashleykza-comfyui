@@ -17,7 +17,7 @@ python -m studio
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方是 **Z-Image**（默认）。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：用配方里的默认卡。Z-Image 是 **T4**。Pixal3D / TripoSplat 是 **L40S**，不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
+4. **启动 GPU**：用配方里的默认卡。Z-Image 是 **T4**。Pixal3D / TripoSplat 是 **L40S**。FLUX.2 [dev] / Qwen-Image-2512 是 **RTX-PRO-6000**。不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. Z-Image：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
