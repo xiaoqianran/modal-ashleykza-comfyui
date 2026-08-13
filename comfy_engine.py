@@ -1090,16 +1090,11 @@ def ensure_pixal3d_runtime(
     python = _comfy_python(comfy_root)
     changed = False
     requirements = node_dir / "requirements.txt"
-    if requirements.is_file() and not _module_available("moge", python):
-        filtered = Path("/tmp/pixal3d-requirements.txt")
-        lines = [
-            line
-            for line in requirements.read_text(encoding="utf-8").splitlines()
-            if not line.strip().startswith("natten")
-        ]
-        filtered.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print("[PIXAL3D] pip install requirements (skip natten; using NAF fallback)", flush=True)
-        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(filtered)])
+    if requirements.is_file() and (
+        not _module_available("moge", python) or not _module_available("natten", python)
+    ):
+        print("[PIXAL3D] pip install requirements.txt (natten needs cmake in the Image)", flush=True)
+        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
         changed = True
 
     _ensure_cuda_build_tools()

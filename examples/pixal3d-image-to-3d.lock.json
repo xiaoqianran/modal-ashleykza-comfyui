@@ -2,7 +2,7 @@
   "schema": 1,
   "workflow": {
     "name": "pixal3d-image-to-3d.json",
-    "sha256": "8722a383357aef9488019698457e17e9a04d25b63faa84af2551179163df4f6a"
+    "sha256": "f5dfe7c39e868700a8dc1eab88de87fbff56a1ef85e5c516b4b8a707cff2e555"
   },
   "models": [
     {
@@ -132,6 +132,41 @@
       "url": "https://huggingface.co/camenduru/dinov3-vitl16-pretrain-lvd1689m/resolve/main/preprocessor_config.json"
     },
     {
+      "category": "Pixal3D",
+      "filename": "briaai_RMBG-2.0/BiRefNet_config.py",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/briaai/RMBG-2.0/resolve/main/BiRefNet_config.py"
+    },
+    {
+      "category": "Pixal3D",
+      "filename": "briaai_RMBG-2.0/birefnet.py",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/briaai/RMBG-2.0/resolve/main/birefnet.py"
+    },
+    {
+      "category": "Pixal3D",
+      "filename": "briaai_RMBG-2.0/config.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/briaai/RMBG-2.0/resolve/main/config.json"
+    },
+    {
+      "category": "Pixal3D",
+      "filename": "briaai_RMBG-2.0/model.safetensors",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/briaai/RMBG-2.0/resolve/main/model.safetensors"
+    },
+    {
+      "category": "Pixal3D",
+      "filename": "briaai_RMBG-2.0/preprocessor_config.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/briaai/RMBG-2.0/resolve/main/preprocessor_config.json"
+    },
+    {
       "category": "geometry_estimation",
       "filename": "moge_1_vitl_fp16.safetensors",
       "sha256": null,
@@ -150,7 +185,6 @@
     {
       "id": "Pixal3D-ComfyUI",
       "version": "0.2.4",
-      "url": "https://github.com/Saganaki22/Pixal3D-ComfyUI.git",
       "node_types": [
         "Pixal3DEnvironmentCheck",
         "Pixal3DExportGLB",

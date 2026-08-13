@@ -78,7 +78,15 @@ node_commands = (
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
-    .apt_install("git", "ca-certificates")
+    # cmake/ninja are required when lock CNR packs (Pixal3D) compile natten / CUDA extensions.
+    .apt_install(
+        "git",
+        "ca-certificates",
+        "cmake",
+        "ninja-build",
+        "build-essential",
+        "python3-dev",
+    )
     # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
     .run_commands(
         "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"

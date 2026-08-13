@@ -119,7 +119,7 @@ python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
 | `examples/pixal3d-image-to-3d.json` | 官方 UI 工作流（[Saganaki22/Pixal3D-ComfyUI](https://github.com/Saganaki22/Pixal3D-ComfyUI)） |
 | `examples/pixal3d-image-to-3d.lock.json` | **手修**锁：Pixal3D / DINOv3 / RMBG-2.0 / MoGe + CNR 节点 |
 
-锁里 Pixal3D 用 **git clone**（`url`），不用 Registry 安装：CNR 会 pip 装 `natten` 源码包，镜像没有 cmake 会失败。示例走 `naf_mode=fallback_if_missing`。GPU 启动时再补 FlashAttention / `flex_gemm` / `cumesh` / `o_voxel` / `drtk`。
+锁里是 Registry id `Pixal3D-ComfyUI@0.2.4` 与 `comfyui-custom-scripts@1.2.5`。GPU Image 默认带 `cmake` / `ninja-build` / `build-essential`，CNR 编译 `natten` 和 FlashAttention / `flex_gemm` 等 CUDA 扩展才过得去。Storage 增加了 `Pixal3D/` 与 `geometry_estimation/`。`briaai/RMBG-2.0` 在 Hugging Face 上 gated，hydrate 需要已授权的 `HF_TOKEN`。建议 **L40S**（工作流 `1024_cascade`，约 20–32GB 显存）。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/pixal3d-image-to-3d.json
