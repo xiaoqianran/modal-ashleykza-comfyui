@@ -169,11 +169,18 @@ def convert_with_browser(base: str, workflow: dict) -> dict:
         page.set_default_timeout(180_000)
         page.goto(base, wait_until="domcontentloaded")
         page.wait_for_function(
-            """() => Boolean(window.comfyAPI?.app?.app?.loadGraphData)""",
+            """() => {
+                const app = window.comfyAPI?.app?.app;
+                return Boolean(
+                    app?.vueAppReady
+                    && app?.canvas
+                    && (app.graph || app.rootGraphInternal)
+                    && typeof app.loadGraphData === 'function'
+                );
+            }""",
             timeout=180_000,
         )
-        # Give node defs / subgraph registry time to finish loading.
-        page.wait_for_timeout(4000)
+        page.wait_for_timeout(1000)
         result = page.evaluate(
             """async (workflow) => {
                 const app = window.comfyAPI?.app?.app;
