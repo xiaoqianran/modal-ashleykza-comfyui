@@ -172,6 +172,14 @@ class WorkflowResolverTests(unittest.TestCase):
         self.assertIn("registry-install comfyui-kjnodes --version 1.2.3", commands[1])
         self.assertNotIn("nvidia", "\n".join(commands).lower())
 
+    def test_local_latest_registry_build_uses_unpinned_comfy_cli(self):
+        commands = comfy_engine.build_registry_node_commands(
+            [{"id": "comfyui-kjnodes", "version": "1.2.3"}],
+            comfy_cli_version=None,
+        )
+        self.assertIn("comfy-cli", commands[0])
+        self.assertNotIn("comfy-cli==", commands[0])
+
 
 if __name__ == "__main__":
     unittest.main()

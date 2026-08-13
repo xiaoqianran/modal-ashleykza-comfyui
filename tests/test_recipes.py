@@ -109,14 +109,14 @@ class RecipeTests(unittest.TestCase):
             self.assertEqual(commands[0][commands[0].index("-d") + 1], str(target_dir / "vendor"))
 
     def test_node_build_supports_github_token_without_embedding_value(self):
-        commands = comfy_engine.build_node_commands(["qwen-image"])
+        commands = comfy_engine.build_node_commands(["qwen-image-extra"])
         joined = "\n".join(commands)
         self.assertIn("GITHUB_TOKEN", joined)
         self.assertIn("x-access-token", joined)
         self.assertNotIn("github_pat_", joined)
 
     def test_github_token_handling_happens_before_xtrace(self):
-        command = comfy_engine.build_node_commands(["qwen-image"])[0]
+        command = comfy_engine.build_node_commands(["qwen-image-extra"])[0]
         self.assertLess(command.index("set -eu"), command.index("GITHUB_TOKEN"))
         self.assertLess(command.index("GITHUB_TOKEN"), command.index("set -x"))
 
@@ -139,6 +139,18 @@ class RecipeTests(unittest.TestCase):
 
         self.assertNotIn("top-secret-token", output.getvalue())
         self.assertIn("token=%2A%2A%2A", output.getvalue())
+
+    def test_extra_nodes_do_not_duplicate_base_snapshot(self):
+        import base_nodes
+
+        base = {name.casefold() for name in base_nodes.BASE_NODE_NAMES}
+        for pack_name, pack in recipes.NODE_PACKS.items():
+            for node in pack:
+                self.assertTrue(node.name)
+                self.assertNotIn(node.name.casefold(), base, (pack_name, node.name))
+
+    def test_wan_lean_profile_needs_no_extra_nodes(self):
+        self.assertEqual(recipes.PROFILES["wan22"].node_packs, ())
 
 
 if __name__ == "__main__":

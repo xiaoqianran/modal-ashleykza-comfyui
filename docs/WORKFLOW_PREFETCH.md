@@ -17,7 +17,7 @@ COMFY_WORKFLOW_LOCK=path/to/workflow.lock.json \
 modal deploy comfyui_modal.py
 ```
 
-第一条命令在本地解析文件，然后调用 `sync_workflow` CPU Function。第二条命令让 Modal 重新构建 Runtime Image；锁定的 CNR 节点在 Image build 中安装。
+第一条命令在本地解析文件，然后调用 `sync_workflow` CPU Function。第二条命令让 Modal 重新构建 Runtime Image；锁定的 CNR 节点在 Image build 中安装。本地 `modal serve` 会 `force_build` 这些节点层，因此每次都是 GitHub / Registry 当前版本。
 
 ## 解析规则
 

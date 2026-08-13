@@ -1,10 +1,14 @@
 """Deploy ashleykleynhans/comfyui on Modal with declarative recipes.
 
 Architecture:
-- Image: immutable ComfyUI runtime + selected stable custom nodes.
+- Image: Ashley runtime + 130 GitHub base nodes + profile extras + workflow CNR nodes.
 - Volume: models / input / output / user / optional user nodes / logs / lock state.
 - CPU sync function: downloads models without paying for GPU time.
 - GPU web server: only prepares paths and starts ComfyUI.
+
+Local ``modal serve`` rebuilds node clone/registry layers so GitHub HEAD and
+unpinned registry versions are current. ``modal deploy`` keeps the Image cache
+unless ``COMFY_LATEST=1``.
 
 Examples:
     modal run comfyui_modal.py --action profiles
@@ -24,6 +28,7 @@ from pathlib import Path
 
 import modal
 
+from base_nodes import INSTALLER_REMOTE_PATH, build_base_nodes_commands
 from comfy_engine import (
     build_node_commands,
     build_registry_node_commands,
@@ -40,7 +45,6 @@ from workflow_resolver import (
     validate_workflow_lock,
     write_workflow_lock,
 )
-
 
 SETTINGS = ModalSettings.from_env(os.environ)
 APP_NAME = SETTINGS.app_name
@@ -59,21 +63,16 @@ BUILD_WORKFLOW_LOCK = (
     if WORKFLOW_LOCK_SOURCE and modal.is_local()
     else None
 )
+FORCE_LATEST = SETTINGS.latest_dependencies
+BASE_NODES_ENABLED = SETTINGS.base_nodes_enabled
 
 GPU = list(SETTINGS.gpu)
 
+# Always use a named Modal Secret so local/remote dependency graphs match.
+# Conditional from_dotenv(.env) breaks hydration: .env exists locally but not
+# inside the remote container, so Modal sees a different object graph.
 SECRET_NAME = SETTINGS.secret_name
-DOTENV_PATH = Path(".env")
-
-# Secret priority:
-#   1) named Modal Secret (best for shared/prod deployments)
-#   2) local .env (best for personal development; never commit it)
-if SECRET_NAME:
-    APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)]
-elif DOTENV_PATH.is_file():
-    APP_SECRETS = [modal.Secret.from_dotenv(str(DOTENV_PATH))]
-else:
-    APP_SECRETS = []
+APP_SECRETS = [modal.Secret.from_name(SECRET_NAME)]
 
 app = modal.App(APP_NAME)
 workspace_vol = modal.Volume.from_name(
@@ -85,22 +84,61 @@ workspace_vol = modal.Volume.from_name(
 # Stable profile nodes and workflow-declared CNR nodes are installed in CPU Image builds.
 node_commands = build_node_commands(PROFILE.node_packs)
 registry_node_commands = build_registry_node_commands(
-    BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else ()
+    BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
+    comfy_cli_version=None if FORCE_LATEST else "1.16.0",
 )
 
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
-    .apt_install("git")
+    .apt_install("git", "ca-certificates")
+    # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
+    .run_commands(
+        "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"
+    )
 )
+
+if BASE_NODES_ENABLED:
+    # Copy the installer into the image before RUN steps that invoke it.
+    # Modal does not support shell heredocs inside run_commands (Dockerfile parser).
+    # force_build on local serve reclones GitHub default-branch HEAD.
+    runtime_image = (
+        runtime_image
+        .add_local_file(
+            local_path=str(Path(__file__).resolve().parent / "base_nodes.py"),
+            remote_path=INSTALLER_REMOTE_PATH,
+            copy=True,
+        )
+        .run_commands(
+            *build_base_nodes_commands(),
+            secrets=APP_SECRETS,
+            force_build=FORCE_LATEST,
+        )
+        # Some node requirements pull the PyPI `pathlib` backport, which shadows
+        # stdlib pathlib and crashes Python 3.12 (`from collections import Sequence`).
+        .run_commands(
+            "set -eu; "
+            "/ComfyUI/venv/bin/python3 -m pip uninstall -y pathlib pathlib2 enum34 typing || true; "
+            "rm -f /ComfyUI/venv/lib/python3.*/site-packages/pathlib.py "
+            "/ComfyUI/venv/lib/python3.*/site-packages/pathlib.pyc "
+            "/ComfyUI/venv/lib/python3.*/site-packages/__pycache__/pathlib*.pyc"
+        )
+    )
 
 for node_command in node_commands:
     # GITHUB_TOKEN from APP_SECRETS is available only during the build and is
     # not baked into the resulting Image. Public repos work without it.
-    runtime_image = runtime_image.run_commands(node_command, secrets=APP_SECRETS)
+    runtime_image = runtime_image.run_commands(
+        node_command,
+        secrets=APP_SECRETS,
+        force_build=FORCE_LATEST,
+    )
 
 for registry_command in registry_node_commands:
-    runtime_image = runtime_image.run_commands(registry_command)
+    runtime_image = runtime_image.run_commands(
+        registry_command,
+        force_build=FORCE_LATEST,
+    )
 
 if BUILD_WORKFLOW_LOCK:
     runtime_image = runtime_image.add_local_file(
@@ -116,10 +154,12 @@ runtime_image = (
             "DISABLE_AUTOLAUNCH": "1",
             "DISABLE_SYNC": "1",
             "PYTHONUNBUFFERED": "1",
+            "COMFY_NO_TELEMETRY": "1",
         }
     )
     # Modal 1.x no longer automounts arbitrary imported local modules.
     .add_local_python_source(
+        "base_nodes",
         "recipes",
         "workflow_resolver",
         "comfy_engine",
@@ -275,8 +315,10 @@ Profile:   {PROFILE_NAME}
 GPU:       {GPU}
 Port:      {COMFY_PORT}
 Volume:    {SETTINGS.volume_name}
-Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
+Secret:    {SECRET_NAME}
 Workflow:  {WORKFLOW_LOCK_SOURCE or '(none)'}
+BaseNodes: {BASE_NODES_ENABLED}
+Latest:    {FORCE_LATEST}
 ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
 
 1. List profiles:
@@ -289,15 +331,17 @@ ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
    modal run comfyui_modal.py --action resolve --workflow workflow.json
    modal run comfyui_modal.py --action workflow-sync --workflow workflow.json
 
-4. Interactive UI:
+4. Interactive UI (always reclones GitHub HEAD / latest CNR nodes):
+   python -m pip install -U modal
    COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
-5. Persistent endpoint:
+5. Persistent endpoint (cached Image unless COMFY_LATEST=1):
    COMFY_PROFILE=qwen-image COMFY_WORKFLOW_LOCK=workflow.lock.json modal deploy comfyui_modal.py
 
 Optional:
    MODAL_GPU=L40S COMFY_PROFILE=wan22 modal serve comfyui_modal.py
    EXTRA_ARGS='--lowvram' COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
    MODAL_SECRET_NAME=comfyui-secrets COMFY_PROFILE=nordy-kontext-views modal deploy comfyui_modal.py
+   COMFY_LATEST=0 modal serve comfyui_modal.py
 """.strip()
     )
