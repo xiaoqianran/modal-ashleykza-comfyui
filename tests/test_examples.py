@@ -33,6 +33,24 @@ class ExampleLockTests(unittest.TestCase):
         )
         self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
 
+    def test_triposplat_lock_matches_resolve(self):
+        source = ROOT / "examples" / "triposplat-image-to-gaussian-splat.json"
+        lock_path = ROOT / "examples" / "triposplat-image-to-gaussian-splat.lock.json"
+        resolved = workflow_resolver.resolve_workflow(source)
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertEqual(resolved["unresolved"], [])
+        self.assertEqual(committed["unresolved"], [])
+        self.assertEqual(committed["custom_nodes"], [])
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        self.assertEqual(
+            {(m["category"], m["filename"]) for m in resolved["models"]},
+            {(m["category"], m["filename"]) for m in committed["models"]},
+        )
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertIn(("background_removal", "birefnet.safetensors"), names)
+        self.assertIn(("diffusion_models", "triposplat_fp16.safetensors"), names)
+        self.assertIn("background_removal", recipes.MODEL_DIRS)
+
     def test_ltx_lock_is_curated_and_matches_workflow_hash(self):
         source = ROOT / "examples" / "ltx-2.5-t2v-i2v-distilled.json"
         lock_path = ROOT / "examples" / "ltx-2.5-t2v-i2v-distilled.lock.json"

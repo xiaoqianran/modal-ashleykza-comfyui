@@ -91,6 +91,27 @@ MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
 python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow examples/ltx-2.5-t2v-i2v-distilled.json
 ```
 
+## 仓库示例：TripoSplat 图生 Gaussian Splat
+
+| 文件 | 作用 |
+|---|---|
+| `examples/triposplat-image-to-gaussian-splat.json` | 官方 UI 工作流（subgraph，frontend 1.44.19） |
+| `examples/triposplat-image-to-gaussian-splat.lock.json` | 解析锁：BiRefNet + TripoSplat 权重 |
+
+Ashley 0.32.0 已有核心节点（`TripoSplatConditioning`、`SplatToFile3D`、`SaveGLB` 等），锁里 `custom_nodes` 为空。`background_removal/` 已加入 Storage 目录。官方模板把 `SplatToMesh` / 第二路 `SaveGLB` 设成 bypass；原生输出仍是 `spz` + 已启用的 `SaveGLB`。
+
+`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `scripts/queue_triposplat.py`：展平 subgraph、可选打开 mesh/GLB、排队、把模型拉到 `artifacts/triposplat`。这不是部署必需步骤。建议 **L40S**（约 48GB），不要让默认 GPU fallback 落到 T4。
+
+```bash
+modal run hydrate_modal.py --workflow examples/triposplat-image-to-gaussian-splat.json
+MODAL_GPU=L40S modal serve comfyui_modal.py
+python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
+  --workflow examples/triposplat-image-to-gaussian-splat.json \
+  --images img1.png img2.png img3.png
+```
+
+`--no-glb` 可关掉 mesh 重建（省显存）。空闲 scaledown 默认 5 秒。
+
 ## 自定义工作流
 
 1. 在本地 ComfyUI 导出 API / workflow JSON（或带嵌入工作流的 PNG）。

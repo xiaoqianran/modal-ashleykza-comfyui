@@ -1,0 +1,46 @@
+{
+  "custom_nodes": [],
+  "models": [
+    {
+      "category": "background_removal",
+      "filename": "birefnet.safetensors",
+      "sha256": null,
+      "source": "node:LoadBackgroundRemovalModel",
+      "url": "https://huggingface.co/Comfy-Org/BiRefNet/resolve/main/background_removal/birefnet.safetensors"
+    },
+    {
+      "category": "clip_vision",
+      "filename": "dino_v3_vit_h.safetensors",
+      "sha256": null,
+      "source": "node:CLIPVisionLoader",
+      "url": "https://huggingface.co/VAST-AI/TripoSplat/resolve/main/clip_vision/dino_v3_vit_h.safetensors"
+    },
+    {
+      "category": "diffusion_models",
+      "filename": "triposplat_fp16.safetensors",
+      "sha256": null,
+      "source": "node:UNETLoader",
+      "url": "https://huggingface.co/VAST-AI/TripoSplat/resolve/main/diffusion_models/triposplat_fp16.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "flux2-vae.safetensors",
+      "sha256": null,
+      "source": "node:VAELoader",
+      "url": "https://huggingface.co/VAST-AI/TripoSplat/resolve/main/vae/flux2-vae.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "triposplat_vae_decoder_fp16.safetensors",
+      "sha256": null,
+      "source": "node:VAELoader",
+      "url": "https://huggingface.co/VAST-AI/TripoSplat/resolve/main/vae/triposplat_vae_decoder_fp16.safetensors"
+    }
+  ],
+  "schema": 1,
+  "unresolved": [],
+  "workflow": {
+    "name": "triposplat-image-to-gaussian-splat.json",
+    "sha256": "409e4735ef39ada5d93f6ad79153abe07bd0a3f643175eef46c37b626d729e0e"
+  }
+}
