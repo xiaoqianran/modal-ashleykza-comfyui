@@ -72,7 +72,7 @@ COMFY_HYDRATE_WORKERS=8 modal run comfyui_modal.py \
   --workflow examples/z-image-base.json
 ```
 
-GPU 启动前请先 hydrate。不要在 GPU `serve` 里等下载。Z-Image bf16 建议：
+CPU hydrate (`modal run --action hydrate`) only builds the debian-slim download Image. The GPU ComfyUI Image, including optional GitHub node clones, is built only for `modal serve` / `modal deploy`. GPU 启动前请先 hydrate，不要在 GPU 容器里等下载。Z-Image bf16 建议：
 
 ```bash
 COMFY_BASE_NODES=0 MODAL_GPU=L4 modal serve comfyui_modal.py
