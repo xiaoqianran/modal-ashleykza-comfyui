@@ -78,7 +78,8 @@ node_commands = (
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
-    # cmake/ninja are required when lock CNR packs (Pixal3D) compile natten / CUDA extensions.
+    # cmake/ninja remain for Pixal3D CUDA extensions (flex_gemm / cumesh / o-voxel / drtk).
+    # natten and flash-attn use prebuilt wheels at GPU start, not source builds.
     .apt_install(
         "git",
         "ca-certificates",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -38,6 +39,13 @@ LOCK_SCHEMA = 1
 LAUNCH_STATE_SCHEMA = 1
 LAUNCH_STATE_FILE = "launch.json"
 WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
+NATTEN_WHEEL_INDEX = "https://whl.natten.org"
+NATTEN_DEFAULT_VERSION = "0.21.6"
+FLASH_ATTN_TORCH211_WHEEL = (
+    "https://github.com/lesj0610/flash-attention/releases/download/"
+    "v2.8.3-cu12-torch2.11/"
+    "flash_attn-2.8.3%2Bcu12torch2.11cxx11abiTRUE-cp{py}-cp{py}-linux_x86_64.whl"
+)
 
 
 def _quote(value: str | Path) -> str:
@@ -1050,6 +1058,67 @@ def _find_pixal3d_node_dir(custom_nodes_dir: Path) -> Path | None:
     return None
 
 
+def natten_wheel_spec(
+    torch_version: str, natten_version: str = NATTEN_DEFAULT_VERSION
+) -> str:
+    """Map ``2.11.0+cu128`` to ``0.21.6+torch2110cu128`` for whl.natten.org."""
+    public = torch_version.split()[0]
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\+cu(\d+))?", public)
+    if match is None:
+        raise ValueError(f"unrecognized torch version: {torch_version}")
+    major, minor, patch, cuda = match.groups()
+    local = f"torch{major}{minor}{patch}"
+    if cuda:
+        local += f"cu{cuda}"
+    return f"{natten_version}+{local}"
+
+
+def flash_attn_wheel_url(python_version: str, torch_version: str) -> str | None:
+    """Prebuilt flash-attn 2.8.3 for Ashley's torch 2.11 + CUDA 12.8 stack."""
+    python_mm = ".".join(python_version.split(".")[:2])
+    torch_mm = ".".join(torch_version.split("+")[0].split(".")[:2])
+    if torch_mm != "2.11" or python_mm not in {"3.10", "3.11", "3.12", "3.13"}:
+        return None
+    return FLASH_ATTN_TORCH211_WHEEL.format(py=python_mm.replace(".", ""))
+
+
+def requirements_without_packages(text: str, skip: frozenset[str]) -> str:
+    kept: list[str] = []
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            kept.append(line)
+            continue
+        package = re.split(r"[<>=!~\[\s]", stripped, maxsplit=1)[0].strip().lower()
+        if package in skip:
+            continue
+        kept.append(line)
+    return "".join(kept)
+
+
+def natten_requirement_version(
+    text: str, default: str = NATTEN_DEFAULT_VERSION
+) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("natten"):
+            match = re.search(r"==\s*([0-9][0-9.]*)", stripped)
+            if match:
+                return match.group(1)
+    return default
+
+
+def _python_text(python: str, code: str) -> str:
+    result = subprocess.run(
+        [python, "-c", code],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return result.stdout.strip()
+
+
 def _ensure_cuda_build_tools() -> None:
     cuda_bin = Path("/usr/local/cuda/bin")
     if cuda_bin.is_dir():
@@ -1073,37 +1142,27 @@ def _ensure_cuda_build_tools() -> None:
     )
 
 
-def ensure_pixal3d_runtime(
-    comfy_root: str | Path,
-    custom_nodes_dir: str | Path,
+def _install_natten_wheel(
+    python: str, natten_version: str = NATTEN_DEFAULT_VERSION
 ) -> bool:
-    """Install Pixal3D Python deps and CUDA kernels into the Image venv.
-
-    Kernels are not in ``requirements.txt``; they must match the running Torch.
-    Returns True if anything was installed (ComfyUI should restart).
-    """
-    comfy_root = Path(comfy_root)
-    node_dir = _find_pixal3d_node_dir(Path(custom_nodes_dir))
-    if node_dir is None:
+    try:
+        spec = natten_wheel_spec(
+            _python_text(python, "import torch; print(torch.__version__)"),
+            natten_version,
+        )
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        OSError,
+        ValueError,
+    ) as exc:
+        print(f"[PIXAL3D] cannot map torch to a natten wheel ({exc})", flush=True)
         return False
-
-    python = _comfy_python(comfy_root)
-    changed = False
-    requirements = node_dir / "requirements.txt"
-    if requirements.is_file() and (
-        not _module_available("moge", python) or not _module_available("natten", python)
-    ):
-        print("[PIXAL3D] pip install requirements.txt (natten needs cmake in the Image)", flush=True)
-        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
-        changed = True
-
-    _ensure_cuda_build_tools()
-
-    attention_ok = _module_available("flash_attn", python) or _module_available(
-        "flash_attn_interface", python
+    print(
+        f"[PIXAL3D] pip install natten=={spec} from {NATTEN_WHEEL_INDEX}",
+        flush=True,
     )
-    if not attention_ok:
-        print("[PIXAL3D] pip install flash-attn", flush=True)
+    try:
         _run(
             [
                 python,
@@ -1111,10 +1170,118 @@ def ensure_pixal3d_runtime(
                 "pip",
                 "install",
                 "--no-cache-dir",
-                "--no-build-isolation",
-                "flash-attn",
+                "--only-binary=:all:",
+                f"natten=={spec}",
+                "-f",
+                NATTEN_WHEEL_INDEX,
             ]
         )
+    except subprocess.CalledProcessError:
+        print("[PIXAL3D] natten wheel missing; will fall back to sdist", flush=True)
+        return False
+    return _module_available("natten", python)
+
+
+def _install_flash_attn_wheel(python: str) -> bool:
+    try:
+        python_version = _python_text(
+            python,
+            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+        )
+        torch_version = _python_text(python, "import torch; print(torch.__version__)")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[PIXAL3D] cannot map torch to a flash-attn wheel ({exc})", flush=True)
+        return False
+    url = flash_attn_wheel_url(python_version, torch_version)
+    if url is None:
+        print(
+            f"[PIXAL3D] no flash-attn wheel for python {python_version} torch {torch_version}",
+            flush=True,
+        )
+        return False
+    print(f"[PIXAL3D] pip install flash-attn wheel {url}", flush=True)
+    try:
+        _run([python, "-m", "pip", "install", "--no-cache-dir", url])
+    except subprocess.CalledProcessError:
+        print(
+            "[PIXAL3D] flash-attn wheel install failed; will fall back to source",
+            flush=True,
+        )
+        return False
+    return _module_available("flash_attn", python) or _module_available(
+        "flash_attn_interface", python
+    )
+
+
+def ensure_pixal3d_prebuilt_wheels(comfy_root: str | Path) -> bool:
+    """Install official/community CUDA wheels before CNR can compile sdists."""
+    python = _comfy_python(Path(comfy_root))
+    changed = False
+    if not _module_available("natten", python):
+        changed = _install_natten_wheel(python) or changed
+    attention_ok = _module_available("flash_attn", python) or _module_available(
+        "flash_attn_interface", python
+    )
+    if not attention_ok:
+        changed = _install_flash_attn_wheel(python) or changed
+    return changed
+
+
+def ensure_pixal3d_runtime(
+    comfy_root: str | Path,
+    custom_nodes_dir: str | Path,
+) -> bool:
+    """Install Pixal3D Python deps and CUDA kernels into the Image venv.
+
+    natten / flash-attn use prebuilt wheels. Remaining kernels (flex_gemm,
+    cumesh, o-voxel, drtk) still compile against the running Torch.
+    Returns True if anything was installed (ComfyUI should restart).
+    """
+    comfy_root = Path(comfy_root)
+    python = _comfy_python(comfy_root)
+    changed = ensure_pixal3d_prebuilt_wheels(comfy_root)
+    node_dir = _find_pixal3d_node_dir(Path(custom_nodes_dir))
+    if node_dir is None:
+        return changed
+
+    requirements = node_dir / "requirements.txt"
+    if requirements.is_file() and (
+        not _module_available("moge", python) or not _module_available("natten", python)
+    ):
+        filtered = Path("/tmp/pixal3d-requirements-no-natten.txt")
+        source = requirements.read_text(encoding="utf-8")
+        filtered.write_text(
+            requirements_without_packages(source, frozenset({"natten"})),
+            encoding="utf-8",
+        )
+        print("[PIXAL3D] pip install requirements.txt (natten uses a prebuilt wheel)", flush=True)
+        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(filtered)])
+        changed = True
+        if not _module_available("natten", python):
+            pin = natten_requirement_version(source)
+            print(f"[PIXAL3D] compiling natten=={pin} from source", flush=True)
+            _ensure_cuda_build_tools()
+            _run([python, "-m", "pip", "install", "--no-cache-dir", f"natten=={pin}"])
+
+    _ensure_cuda_build_tools()
+
+    attention_ok = _module_available("flash_attn", python) or _module_available(
+        "flash_attn_interface", python
+    )
+    if not attention_ok:
+        if not _install_flash_attn_wheel(python):
+            print("[PIXAL3D] pip install flash-attn from source", flush=True)
+            _run(
+                [
+                    python,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--no-cache-dir",
+                    "--no-build-isolation",
+                    "flash-attn",
+                ]
+            )
         changed = True
 
     tmp = Path("/tmp/pixal3d_extensions")
@@ -1292,6 +1459,10 @@ def apply_volume_launch(
     newly: list[str] = []
     nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
     installer = install_nodes or install_registry_nodes
+    wheels_changed = False
+    if install_lock_nodes and _lock_has_pixal3d(nodes):
+        # Wheel first so CNR ``pip install -r requirements.txt`` does not compile natten.
+        wheels_changed = ensure_pixal3d_prebuilt_wheels(comfy_root)
     if install_lock_nodes and nodes:
         newly = installer(
             nodes,
@@ -1316,6 +1487,7 @@ def apply_volume_launch(
         or process.poll() is not None
         or previous_fingerprint != fingerprint
         or bool(newly)
+        or wheels_changed
         or runtime_changed
     )
     if need_restart:
