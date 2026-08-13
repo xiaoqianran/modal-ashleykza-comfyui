@@ -25,6 +25,7 @@ known-first-party = [
     "recipes",
     "storage",
     "studio",
+    "template_analyzer",
     "workflow_queue",
     "workflow_resolver",
 ]

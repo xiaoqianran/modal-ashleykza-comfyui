@@ -10,7 +10,7 @@ CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。�
     modal run hydrate_modal.py --workflow examples/z-image-base.json
     ```
 
-    解析 JSON（或带工作流的 PNG）：模型 URL、CNR 插件 id。模型并行下载；插件写入 `.lock.json` 和 Volume state。`modal serve` 时按 CNR 往 Volume 安装，不打进 Image。
+    解析 JSON（或带工作流的 PNG）：`models[]` 里的 URL、Note 里能对上文件名的 HuggingFace / Civitai 直链、CNR 插件 id。模型并行下载；插件写入 `.lock.json` 和 Volume state。`modal serve` 时按 CNR 往 Volume 安装，不打进 Image。猜不出来的下载源不会编造，见 [工作流与锁文件](workflows.md)。
 
 === "Profile"
 

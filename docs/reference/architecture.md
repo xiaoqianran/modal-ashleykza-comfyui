@@ -6,7 +6,7 @@ hydrate_modal.py      CPU App：hydrate / resolve / profiles / outputs / repair
 modal_config.py       常量、路径、环境变量
 storage.py            Volume 路径与 extra_model_paths.yaml
 comfy_engine.py       下载、校验、启动 ComfyUI
-workflow_resolver.py  工作流 → 锁文件
+workflow_resolver.py  工作流 → 锁文件（只绑定 JSON 里已有的 URL / CNR）
 recipes.py            profile / model pack / node pack
 base_nodes.py         基础自定义节点安装
 scripts/              无 UI 时的排队/取件辅助（不是部署必需）

@@ -135,14 +135,209 @@ class WorkflowResolverTests(unittest.TestCase):
             with self.assertRaises(workflow_resolver.WorkflowResolutionError):
                 workflow_resolver.resolve_workflow(path)
 
-    def test_rejects_non_http_model_url(self):
+    def test_skips_non_http_model_url_without_aborting_the_lock(self):
         workflow = _sample_workflow()
         workflow["nodes"][0]["properties"]["models"][0]["url"] = "file:///etc/passwd"
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "workflow.json"
             path.write_text(json.dumps(workflow), encoding="utf-8")
-            with self.assertRaises(workflow_resolver.WorkflowResolutionError):
-                workflow_resolver.resolve_workflow(path)
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["models"], [])
+        self.assertEqual(lock["custom_nodes"][0]["id"], "comfyui-kjnodes")
+        self.assertTrue(
+            any(item.get("code") == "invalid_model_declaration" for item in lock["warnings"])
+        )
+
+    def test_keeps_one_cnr_version_and_records_the_conflict(self):
+        workflow = _sample_workflow()
+        workflow["nodes"].append(
+            {
+                "id": 4,
+                "type": "KJNodeB",
+                "widgets_values": [],
+                "properties": {
+                    "cnr_id": "comfyui-kjnodes",
+                    "ver": "00da1910634fbf314d407608efb281ae6f7f1ba2",
+                },
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["custom_nodes"][0]["version"], "1.2.3")
+        conflict = next(item for item in lock["warnings"] if item["code"] == "version_conflict")
+        self.assertEqual(conflict["id"], "comfyui-kjnodes")
+        self.assertEqual(conflict["kept"], "1.2.3")
+        self.assertIn("00da1910634fbf314d407608efb281ae6f7f1ba2", conflict["dropped"])
+
+    def test_normalizes_huggingface_query_and_blob_urls(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "CLIPLoader",
+                    "widgets_values": ["t5xxl_fp16.safetensors"],
+                    "properties": {
+                        "cnr_id": "comfy-core",
+                        "models": [
+                            {
+                                "name": "t5xxl_fp16.safetensors",
+                                "directory": "text_encoders",
+                                "url": (
+                                    "https://huggingface.co/comfyanonymous/flux_text_encoders"
+                                    "/resolve/main/t5xxl_fp16.safetensors?download=true"
+                                ),
+                            },
+                            {
+                                "name": "t5xxl_fp16.safetensors",
+                                "directory": "text_encoders",
+                                "url": (
+                                    "https://huggingface.co/comfyanonymous/flux_text_encoders"
+                                    "/blob/main/t5xxl_fp16.safetensors"
+                                ),
+                            },
+                        ],
+                    },
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(len(lock["models"]), 1)
+        self.assertEqual(lock["unresolved"], [])
+        self.assertEqual(
+            lock["models"][0]["url"],
+            "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors",
+        )
+        self.assertFalse(any(item.get("code") == "url_conflict" for item in lock["warnings"]))
+
+    def test_binds_huggingface_url_from_markdown_note_by_basename(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "UNETLoader",
+                    "widgets_values": ["mage_flow_turbo_int8_convrot.safetensors"],
+                    "properties": {"cnr_id": "comfy-core"},
+                },
+                {
+                    "id": 2,
+                    "type": "MarkdownNote",
+                    "widgets_values": [
+                        "Download [weights](https://huggingface.co/Comfy-Org/Mage-Flow/blob/main/"
+                        "diffusion_models/mage_flow_turbo_int8_convrot.safetensors)."
+                    ],
+                },
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["unresolved"], [])
+        self.assertEqual(lock["models"][0]["category"], "diffusion_models")
+        self.assertEqual(lock["models"][0]["filename"], "mage_flow_turbo_int8_convrot.safetensors")
+        self.assertEqual(lock["models"][0]["source"], "note")
+        self.assertIn("/resolve/", lock["models"][0]["url"])
+
+    def test_note_url_without_folder_stays_unresolved_but_keeps_the_url(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "DownloadAndLoadMelBandRoFormerModel",
+                    "widgets_values": ["MelBandRoformer_fp16.safetensors"],
+                    "properties": {"cnr_id": "comfy-core"},
+                },
+                {
+                    "id": 2,
+                    "type": "MarkdownNote",
+                    "widgets_values": [
+                        "https://huggingface.co/Kijai/MelBandRoFormer_comfy/resolve/main/"
+                        "MelBandRoformer_fp16.safetensors"
+                    ],
+                },
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["models"], [])
+        self.assertEqual(lock["unresolved"][0]["reason"], "missing_category")
+        self.assertIn("huggingface.co", lock["unresolved"][0]["url"])
+        self.assertTrue(any(item.get("code") == "missing_category" for item in lock["warnings"]))
+
+    def test_unknown_model_directory_is_a_warning_not_a_hard_fail(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "CheckpointLoaderSimple",
+                    "widgets_values": ["ok.safetensors"],
+                    "properties": {
+                        "cnr_id": "comfy-core",
+                        "models": [
+                            {
+                                "name": "mystery.bin",
+                                "directory": "models/not_a_real_folder",
+                                "url": "https://huggingface.co/example/mystery.bin",
+                            },
+                            {
+                                "name": "ok.safetensors",
+                                "directory": "checkpoints",
+                                "url": "https://huggingface.co/example/ok.safetensors",
+                            },
+                        ],
+                    },
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["models"][0]["filename"], "ok.safetensors")
+        self.assertEqual(lock["unresolved"], [])
+        self.assertTrue(
+            any(item.get("code") == "unsupported_directory" for item in lock["warnings"])
+        )
+
+    def test_real_url_conflict_drops_the_file_instead_of_aborting(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "CLIPLoader",
+                    "widgets_values": ["t5xxl_fp16.safetensors"],
+                    "properties": {
+                        "cnr_id": "comfy-core",
+                        "models": [
+                            {
+                                "name": "t5xxl_fp16.safetensors",
+                                "directory": "text_encoders",
+                                "url": "https://huggingface.co/org-a/t5xxl_fp16.safetensors",
+                            },
+                            {
+                                "name": "t5xxl_fp16.safetensors",
+                                "directory": "text_encoders",
+                                "url": "https://huggingface.co/org-b/t5xxl_fp16.safetensors",
+                            },
+                        ],
+                    },
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["models"], [])
+        self.assertEqual(lock["unresolved"][0]["filename"], "t5xxl_fp16.safetensors")
+        self.assertTrue(any(item.get("code") == "url_conflict" for item in lock["warnings"]))
 
     def test_rejects_tampered_lock_destination(self):
         with tempfile.TemporaryDirectory() as directory:

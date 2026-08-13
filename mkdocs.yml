@@ -86,6 +86,7 @@ nav:
       - 核心概念: guide/concepts.md
       - Hydrate Storage: guide/hydrate.md
       - 工作流与锁文件: guide/workflows.md
+      - 官方模板分析: guide/templates.md
       - GPU 部署: guide/deploy.md
       - 配方: guide/recipes.md
       - Studio: guide/studio.md

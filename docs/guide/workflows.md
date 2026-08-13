@@ -30,6 +30,8 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
 
+官方模板很多时，先 `python3 -m template_analyzer` 分类，不要每个都手写适配。见 [官方模板分析](templates.md)。
+
 ## 生成锁文件
 
 ```bash
@@ -38,14 +40,17 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 
 默认写出 `examples/z-image-base.lock.json`。`--workflow` 不带 `--action resolve` 时会再下载模型。`custom_nodes` 由 GPU 启动时装到 `/workspace/custom_nodes`，不写进 Image。
 
-解析器遍历：
+解析器只做**确定性绑定**，不为每个 JSON 写适配：
 
-- 普通 ComfyUI `nodes` 与嵌套子图
-- API prompt 的 `class_type` 节点
-- 根级或节点级 `models` 数组
-- widget / API input 中的常见模型后缀
+| 自动写入锁 | 不猜 / 记 `unresolved` 或 `warnings` |
+|---|---|
+| `models[]` 里的 name + directory + http(s) URL | 只有文件名，JSON / Note 里都没有可下载 URL |
+| Note / MarkdownNote 里 HuggingFace、Civitai 链接，basename 对得上 widget | 对上了 URL 但看不出 `models/<目录>`（锁里会带上 URL，等人补目录） |
+| `cnr_id` + `ver`（版本打架时留一版，优先 semver） | 没有 `cnr_id` 的自定义节点 |
+| `?download=true` / `/blob/` 规范化后的同一地址 | 同一目标两个不同 URL 且哈希也对不上 |
+| 官方目录：`audio_encoders`、`detection`、`frame_interpolation`、`optical_flow`、`model_patches` 等 | 未知目录；`api_*` 云端工作流 |
 
-只找到文件名而没有 URL 时，记入 `unresolved`，**不会猜测下载源**。`hydrate` 在 `require_resolved=True` 时遇到未解析项会失败。
+`hydrate` 在 `require_resolved=True` 时遇到 `unresolved` 会失败。`warnings`（例如 CNR 版本冲突选了哪一版）**不**阻止下载。边界说明见 [官方模板分析](templates.md)。
 
 ## 锁文件 schema 1
 
@@ -65,7 +70,8 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
     }
   ],
   "custom_nodes": [],
-  "unresolved": []
+  "unresolved": [],
+  "warnings": []
 }
 ```
 
