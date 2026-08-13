@@ -86,6 +86,27 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["14"]["inputs"]["text"], "blur")
         self.assertEqual(prompt["13"]["inputs"]["clip"], ["1", 0])
 
+    def test_bind_text_prefers_user_prompt_widget_over_linked_clip(self):
+        prompt = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": ["19", 0], "clip": ["1", 0]},
+                "_meta": {"title": "CLIP Text Encode (Prompt)"},
+            },
+            "19": {
+                "class_type": "PrimitiveStringMultiline",
+                "inputs": {"value": "old"},
+                "_meta": {"title": "Text String (User Prompt)"},
+            },
+        }
+        workflow_queue.bind_text_prompt(prompt, text="a celadon teapot")
+        self.assertEqual(prompt["19"]["inputs"]["value"], "a celadon teapot")
+        self.assertEqual(prompt["6"]["inputs"]["text"], ["19", 0])
+
+    def test_graph_to_prompt_waits_for_loaded_node_types(self):
+        self.assertIn("expectedTypes.every", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("loaded_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+
     def test_bind_number_inputs_only_touches_existing_keys(self):
         prompt = {
             "9": {

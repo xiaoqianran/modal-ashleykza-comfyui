@@ -209,9 +209,21 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 |---|---|
 | `examples/krea2-turbo-t2i.json` | 官方 UI 工作流 `image_krea2_turbo_t2i`（subgraph） |
 | `examples/krea2-turbo-t2i.lock.json` | 解析锁：fp8 Turbo DiT + Qwen3VL-4B TE + Qwen Image VAE |
-| `catalog/krea2-turbo.json` | Studio 契约，默认 **RTX-PRO-6000**（L40S 也可） |
+| `catalog/krea2-turbo.json` | Studio 契约，默认 **RTX-PRO-6000**（约 17GB，L40S 也可） |
 
 官方 Turbo **8 步**，prompt enhancement 默认开。锁内 `custom_nodes` 为空。同样走 `python3 -m workflow_queue`，不要再写 `queue_krea.py`。风格 LoRA 在模板里默认关，锁里仍有 `krea2_darkbrush` 一份。跑完立刻停掉 `modal serve`。
+
+2026-08-13 在 **NVIDIA RTX PRO 6000 Blackwell**（96GB，ComfyUI 0.32.0）上同一组 5 条提示词 **5/5 success**，占用约 **17.4GB** 显存：
+
+| # | 提示词（摘要） | 秒数 |
+|---:|---|---:|
+| 1 | 青瓷壶 | **39.2**（冷加载 + prompt enhance） |
+| 2 | 雨夜红风衣 | 19.7 |
+| 3 | 梯田日出 | 9.0 |
+| 4 | 窗边橘猫 | 8.9 |
+| 5 | 青花瓷荔枝汽水 | 17.6 |
+
+稳态大约 **9–20 s/张**（含官方默认的 LLM prompt enhancement；短英文提示更快）。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/krea2-turbo-t2i.json
