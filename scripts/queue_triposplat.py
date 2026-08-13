@@ -6,12 +6,19 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import sys
 import time
 import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from workflow_queue import convert_ui_workflow as convert_with_browser  # noqa: E402
 
 CLIENT_ID = "triposplat-agent"
 ENABLE_GLB_TYPES = {"SplatToMesh", "SaveGLB"}
@@ -64,79 +71,6 @@ def enable_glb_export(workflow: dict) -> dict:
             if isinstance(node, dict) and node.get("type") in ENABLE_GLB_TYPES:
                 node["mode"] = 0
     return workflow
-
-
-def convert_with_browser(base: str, workflow: dict) -> dict:
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path="/usr/bin/google-chrome",
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
-        )
-        page = browser.new_page()
-        page.set_default_timeout(180_000)
-        page.goto(base, wait_until="domcontentloaded")
-        page.wait_for_function(
-            """() => {
-                const app = window.comfyAPI?.app?.app;
-                return Boolean(
-                    app?.vueAppReady
-                    && app?.canvas
-                    && (app.graph || app.rootGraphInternal)
-                    && typeof app.loadGraphData === 'function'
-                );
-            }""",
-            timeout=180_000,
-        )
-        page.wait_for_timeout(1000)
-        result = page.evaluate(
-            """async (workflow) => {
-                const app = window.comfyAPI?.app?.app;
-                if (!app) return { ok: false, error: 'comfyAPI.app.app missing' };
-                try {
-                    await app.loadGraphData(workflow);
-                    await new Promise((resolve) => setTimeout(resolve, 1500));
-                    const converted = await app.graphToPrompt();
-                    const prompt = converted?.output || converted;
-                    const missing = [];
-                    const nodes = app.graph?.nodes || app.graph?._nodes || [];
-                    for (const node of nodes) {
-                        const type = node.type || node.comfyClass || '';
-                        if (String(type).toLowerCase().includes('missing')) {
-                            missing.push({ id: node.id, type, title: node.title });
-                        }
-                    }
-                    if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
-                        return { ok: false, error: 'graphToPrompt failed', missing };
-                    }
-                    return {
-                        ok: true,
-                        prompt,
-                        missing,
-                        node_count: Object.keys(prompt).length,
-                    };
-                } catch (error) {
-                    return { ok: false, error: String((error && error.stack) || error) };
-                }
-            }""",
-            workflow,
-        )
-        browser.close()
-    if not result.get("ok"):
-        raise RuntimeError(f"browser convert failed: {result}")
-    print(
-        json.dumps(
-            {
-                "converted": True,
-                "node_count": result.get("node_count"),
-                "missing": result.get("missing"),
-            }
-        ),
-        flush=True,
-    )
-    return result["prompt"]
 
 
 def upload_image(base: str, path: Path) -> str:
