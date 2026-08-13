@@ -44,7 +44,9 @@ jobs:
           path: dist/Studio-windows.zip
           if-no-files-found: error
       - name: Publish GitHub Release
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+        if: >
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/studio-v')) ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('studio-windows-{0}', github.run_number) }}
