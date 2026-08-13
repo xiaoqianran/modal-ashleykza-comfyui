@@ -169,43 +169,40 @@ def convert_with_browser(base: str, workflow: dict) -> dict:
         page.set_default_timeout(180_000)
         page.goto(base, wait_until="domcontentloaded")
         page.wait_for_function(
-            """() => Boolean(
-                window.app?.loadGraphData
-                || window.app?.graph
-                || document.querySelector('canvas')
-            )""",
+            """() => Boolean(window.comfyAPI?.app?.app?.loadGraphData)""",
             timeout=180_000,
         )
         # Give node defs / subgraph registry time to finish loading.
         page.wait_for_timeout(4000)
         result = page.evaluate(
             """async (workflow) => {
-                const app = window.app;
-                if (!app) return { ok: false, error: 'window.app missing' };
-                if (typeof app.loadGraphData === 'function') {
+                const app = window.comfyAPI?.app?.app;
+                if (!app) return { ok: false, error: 'comfyAPI.app.app missing' };
+                try {
                     await app.loadGraphData(workflow);
-                } else {
-                    return { ok: false, error: 'loadGraphData missing' };
-                }
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                let prompt = null;
-                if (typeof app.graphToPrompt === 'function') {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
                     const converted = await app.graphToPrompt();
-                    prompt = converted?.output || converted;
-                }
-                const missing = [];
-                const graph = app.graph;
-                const nodes = graph?.nodes || graph?._nodes || [];
-                for (const node of nodes) {
-                    const type = node.type || node.comfyClass || '';
-                    if (String(type).toLowerCase().includes('missing')) {
-                        missing.push({ id: node.id, type, title: node.title });
+                    const prompt = converted?.output || converted;
+                    const missing = [];
+                    const nodes = app.graph?.nodes || app.graph?._nodes || [];
+                    for (const node of nodes) {
+                        const type = node.type || node.comfyClass || '';
+                        if (String(type).toLowerCase().includes('missing')) {
+                            missing.push({ id: node.id, type, title: node.title });
+                        }
                     }
+                    if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
+                        return { ok: false, error: 'graphToPrompt failed', missing };
+                    }
+                    return {
+                        ok: true,
+                        prompt,
+                        missing,
+                        node_count: Object.keys(prompt).length,
+                    };
+                } catch (error) {
+                    return { ok: false, error: String((error && error.stack) || error) };
                 }
-                if (!prompt || typeof prompt !== 'object') {
-                    return { ok: false, error: 'graphToPrompt failed', missing };
-                }
-                return { ok: true, prompt, missing, node_count: Object.keys(prompt).length };
             }""",
             workflow,
         )
@@ -294,12 +291,11 @@ def main() -> None:
     workflow_path = Path(args.workflow)
     workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
     patched = patch_workflow(workflow)
-    patched_path = Path(args.patched_out) if args.patched_out else workflow_path.with_suffix(".compat.json")
-    patched_path.write_text(json.dumps(patched, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(json.dumps({"patched": str(patched_path)}), flush=True)
-
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    patched_path = Path(args.patched_out) if args.patched_out else out / "ltx25.compat.json"
+    patched_path.write_text(json.dumps(patched, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(json.dumps({"patched": str(patched_path)}), flush=True)
     wait_ready(base)
     prompt = convert_with_browser(base, patched)
     api_path = out / "ltx25.api.json"
