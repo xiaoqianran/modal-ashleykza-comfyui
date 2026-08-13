@@ -8,6 +8,7 @@ from recipes import MODEL_DIRS, ModelAsset
 from storage import (
     DEFAULT_STORAGE_ROOT,
     DEFAULT_STORAGE_VOLUME,
+    PathError,
     canonical_relpath,
     download_target,
     ensure_storage_layout,
@@ -18,6 +19,7 @@ from storage import (
     repair_storage_layout,
     repair_workspace_layout,
     resolve_model_file,
+    safe_dest_file,
     storage_model_path,
     workspace_dir,
     workspace_file,
@@ -386,6 +388,18 @@ class OutputManifestTests(unittest.TestCase):
             self.assertEqual(names, ["clip.mp4", "sub/note.txt"])
             sizes = {name: size for name, _mtime, size in manifest}
             self.assertEqual(sizes["clip.mp4"], 4)
+
+
+class SafeDestFileTests(unittest.TestCase):
+    def test_keeps_basename_and_rejects_escape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            dest = Path(directory)
+            path = safe_dest_file(dest, "output/clip.mp4")
+            self.assertEqual(path, (dest / "clip.mp4").resolve())
+            with self.assertRaises(PathError):
+                safe_dest_file(dest, "..")
+            with self.assertRaises(PathError):
+                safe_dest_file(dest, "")
 
 
 if __name__ == "__main__":

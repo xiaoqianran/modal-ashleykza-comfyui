@@ -23,7 +23,7 @@
 | `COMFY_STARTUP_TIMEOUT_SECONDS` | `900` | 启动探测超时 |
 | `COMFY_MAX_INPUTS` | `20` | 单容器最大并发输入 |
 | `COMFY_TARGET_INPUTS` | `10` | 扩容阈值（不超过 max） |
-| `COMFY_REQUIRE_PROXY_AUTH` | `false` | Modal 代理认证 |
+| `COMFY_REQUIRE_PROXY_AUTH` | `false` | Modal 代理认证。公网 URL 默认无密码，生产环境请设 `true` |
 | `COMFY_MEMORY_SNAPSHOT` | `true` | `modal deploy` 后保存 CPU 快照 |
 | `COMFY_GPU_SNAPSHOT` | `true` | GPU 快照；依赖 memory snapshot |
 

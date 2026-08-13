@@ -14,7 +14,7 @@
 4. `modal run hydrate_modal.py --action resolve --workflow <file>` 查看 `unresolved`
 5. 补 URL 后重新 `hydrate`
 
-GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再开新的 GPU 容器；已运行的容器看不到尚未 `commit` / 尚未重建的 Volume 快照。
+GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再开新的 GPU 容器；已运行的容器在缩容后会 `Volume.reload()` 读到新的 `launch.json`。`modal serve` 没有持久快照，换工作流后重启 serve 即可。`modal deploy` 的 memory snapshot 只冻结 ComfyUI 进程；`snap=False` 仍会读最新 Volume。
 
 ## 模型或成片套了两层目录
 

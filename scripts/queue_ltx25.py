@@ -7,6 +7,7 @@ import argparse
 import json
 import struct
 import time
+import urllib.parse
 import urllib.request
 import uuid
 import zlib
@@ -322,6 +323,17 @@ def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict:
     raise TimeoutError(f"prompt {prompt_id} did not finish")
 
 
+def _safe_dest(dest: Path, filename: str) -> Path:
+    dest = dest.resolve()
+    name = Path(str(filename).replace("\\", "/")).name
+    if not name or name in {".", ".."}:
+        raise ValueError(f"unsafe output filename: {filename!r}")
+    path = (dest / name).resolve()
+    if path != dest and dest not in path.parents:
+        raise ValueError(f"output path escapes destination: {filename!r}")
+    return path
+
+
 def download_outputs(base: str, history: dict, dest: Path) -> list[Path]:
     saved: list[Path] = []
     dest.mkdir(parents=True, exist_ok=True)
@@ -332,11 +344,14 @@ def download_outputs(base: str, history: dict, dest: Path) -> list[Path]:
             for item in node_output.get(key) or []:
                 if not isinstance(item, dict) or not item.get("filename"):
                     continue
-                query = (
-                    f"filename={item['filename']}&subfolder={item.get('subfolder', '')}"
-                    f"&type={item.get('type', 'output')}"
+                query = urllib.parse.urlencode(
+                    {
+                        "filename": item["filename"],
+                        "subfolder": item.get("subfolder") or "",
+                        "type": item.get("type") or "output",
+                    }
                 )
-                path = dest / item["filename"]
+                path = _safe_dest(dest, str(item["filename"]))
                 with urllib.request.urlopen(f"{base}/view?{query}", timeout=300) as response:
                     path.write_bytes(response.read())
                 saved.append(path)
@@ -351,7 +366,7 @@ def main() -> None:
         "--workflow",
         default="examples/ltx-2.5-t2v-i2v-distilled.json",
     )
-    parser.add_argument("--out", default="/opt/cursor/artifacts/ltx25")
+    parser.add_argument("--out", default="artifacts/ltx25")
     parser.add_argument("--patched-out", default="")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")

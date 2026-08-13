@@ -72,6 +72,25 @@ modal deploy comfyui_modal.py
 
 对应文件：`examples/z-image-base.json` 与 `examples/z-image-base.lock.json`。
 
+官方 UI JSON 里还有 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph。Ashley 0.32.0 默认 Image **不含**这些节点（`COMFY_BASE_NODES` 默认关，锁里也没有 CNR id）。在网页里打开这份 JSON 可能会看到红节点。无 UI 批量出图用 `scripts/run_z_image_prompts.py`（只用核心 `SaveImage` / `UNETLoader`）。
+
+## 仓库示例：LTX-2.5 distilled
+
+| 文件 | 作用 |
+|---|---|
+| `examples/ltx-2.5-t2v-i2v-distilled.json` | 官方 UI 工作流（subgraph，frontend 1.48.7） |
+| `examples/ltx-2.5-t2v-i2v-distilled.lock.json` | **手修**锁：去掉 resolve 扫到的无关权重 |
+
+不要对 LTX JSON 盲目 `--action resolve`：自动解析会把 `ViT-B-32.pt`、非 distilled transformer 等写进 `unresolved`，hydrate **不会**用这份不完整结果覆盖已校验通过的手修锁。改了 JSON 就要同步改锁。
+
+`POST /prompt` 不能直接吃这份 UI JSON。网页里点 Queue 会先 `graphToPrompt()`。无 UI 时用 `scripts/queue_ltx25.py`：补 0.32.0 缺的节点、展平 subgraph、修正 widget 槽位、排队、把成片拉到 `artifacts/ltx25`。这不是部署必需步骤。
+
+```bash
+modal run hydrate_modal.py --workflow examples/ltx-2.5-t2v-i2v-distilled.json
+MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow examples/ltx-2.5-t2v-i2v-distilled.json
+```
+
 ## 自定义工作流
 
 1. 在本地 ComfyUI 导出 API / workflow JSON（或带嵌入工作流的 PNG）。

@@ -260,8 +260,9 @@ class RegistryVolumeInstallTests(unittest.TestCase):
         )
         self.assertNotIn("build_registry_node_commands", text)
         self.assertNotIn("workflow.lock.json", text)
-        self.assertIn("install_registry_nodes", text)
-        self.assertIn("load_launch_state", text)
+        self.assertIn("apply_volume_launch", text)
+        self.assertIn("snap=False", text)
+        self.assertIn("models_vol.reload()", text)
 
 
 if __name__ == "__main__":

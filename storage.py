@@ -98,6 +98,21 @@ def workspace_file(workspace: str | Path, name: str, filename: str) -> Path:
     return workspace_dir(workspace, name) / relative
 
 
+def safe_dest_file(dest_dir: str | Path, filename: str) -> Path:
+    """Join a ComfyUI output name under ``dest_dir`` without leaving it.
+
+    Only the basename is kept so ``../`` or absolute names cannot escape.
+    """
+    dest = Path(dest_dir).resolve()
+    name = Path(str(filename).replace("\\", "/")).name
+    if not name or name in {".", ".."}:
+        raise PathError(f"Unsafe output filename: {filename!r}")
+    path = (dest / name).resolve()
+    if path != dest and dest not in path.parents:
+        raise PathError(f"Output path escapes destination: {filename!r}")
+    return path
+
+
 def download_target(target_dir: str | Path, filename: str) -> Path:
     """Final file path for a download into ``target_dir``.
 

@@ -427,14 +427,69 @@ def load_workflow_lock(path: str | Path, *, require_resolved: bool = False) -> d
     return lock
 
 
-def write_workflow_lock(workflow_path: str | Path, output_path: str | Path) -> dict[str, Any]:
-    lock = resolve_workflow(workflow_path)
+def workflow_file_sha256(path: str | Path) -> str:
+    return _sha256_bytes(Path(path).read_bytes())
+
+
+def lock_matches_workflow(lock: Mapping[str, Any], workflow_path: str | Path) -> bool:
+    recorded = (lock.get("workflow") or {}).get("sha256") if isinstance(lock, Mapping) else None
+    if not isinstance(recorded, str) or not recorded:
+        return False
+    return recorded == workflow_file_sha256(workflow_path)
+
+
+def select_workflow_lock(
+    workflow_path: str | Path,
+    lock_path: str | Path,
+) -> tuple[dict[str, Any], str]:
+    """Pick a lock that still matches the workflow JSON.
+
+    Reuse a fully resolved on-disk lock when its ``workflow.sha256`` matches.
+    That keeps curated locks (LTX-2.5) from being overwritten by a noisy
+    re-resolve. If the JSON changed, resolve again — but never replace a
+    curated resolved lock with an unresolved auto-resolve.
+    """
+    workflow_path = Path(workflow_path)
+    lock_path = Path(lock_path)
+    existing: dict[str, Any] | None = None
+    if lock_path.is_file():
+        try:
+            existing = load_workflow_lock(lock_path, require_resolved=False)
+        except (WorkflowResolutionError, OSError):
+            existing = None
+
+    if existing is not None and lock_matches_workflow(existing, workflow_path):
+        validate_workflow_lock(existing, require_resolved=True)
+        return existing, "reused"
+
+    fresh = resolve_workflow(workflow_path)
+    existing_is_curated = bool(
+        existing is not None
+        and not existing.get("unresolved")
+        and existing.get("models")
+    )
+    if existing_is_curated and fresh.get("unresolved"):
+        raise WorkflowResolutionError(
+            f"{workflow_path} changed (sha256 mismatch) but auto-resolve still "
+            f"has unresolved models. Update {lock_path} by hand; hydrate will "
+            "not overwrite a curated resolved lock with an incomplete resolve."
+        )
+    validate_workflow_lock(fresh, require_resolved=True)
+    return fresh, "resolved"
+
+
+def dump_workflow_lock(lock: Mapping[str, Any], output_path: str | Path) -> dict[str, Any]:
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
+    payload = dict(lock)
     temporary.write_text(
-        json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     temporary.replace(output)
-    return lock
+    return payload
+
+
+def write_workflow_lock(workflow_path: str | Path, output_path: str | Path) -> dict[str, Any]:
+    return dump_workflow_lock(resolve_workflow(workflow_path), output_path)

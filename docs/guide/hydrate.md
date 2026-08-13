@@ -32,7 +32,8 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 | `--profile` | 配方名 → profile 模式（默认 `base`） |
 | `--lock-out` | 锁文件路径；默认把工作流后缀改成 `.lock.json` |
 | `--skip-lock-nodes` | 写入 launch.json，让 GPU 启动时跳过 CNR |
-| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info`、`outputs`、`repair` |
+| `--install-nodes` | hydrate 上无效；配方额外包请在 GPU serve/deploy 设 `COMFY_INSTALL_NODES=1` |
+| `--action` | `hydrate`（默认）、`sync` / `workflow-sync`、`resolve`、`profiles`、`info`、`outputs`、`repair` |
 
 给了 `--workflow` 就是 workflow 模式，不再用 profile 拉模型包。
 

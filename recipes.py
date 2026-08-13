@@ -81,12 +81,11 @@ MODEL_PACKS: Mapping[str, Mapping[str, tuple[ModelAsset, ...]]] = {
         "diffusion_models": (M("https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/resolve/main/flux1-kontext-dev.safetensors"),),
         "text_encoders": (M("https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors"),),
         "upscale_models": (
-            M("https://civitai.com/api/download/models/1Q404291?type=Archive&format=Other"),
             M("https://huggingface.co/Akumetsu971/SD_Anime_Futuristic_Armor/resolve/main/4x_NMKD-Siax_200k.pth"),
         ),
         "loras": (
             M("https://civitai.com/api/download/models/1956822?type=Model&format=SafeTensor"),
-            M("https://huggingface.co/saquiboye/omini-kontext/blob/main/spatial-character-test.safetensors"),
+            M("https://huggingface.co/saquiboye/omini-kontext/resolve/main/spatial-character-test.safetensors"),
         ),
     },
     "nordy-clothes": {
@@ -187,8 +186,13 @@ NODE_PACKS: Mapping[str, tuple[NodeRecipe, ...]] = {
 
 
 PROFILES: Mapping[str, Profile] = {
-    "base": Profile(description="Ashley runtime + 130 GitHub base nodes (latest HEAD on modal serve)."),
-    "ltx23": Profile(model_packs=("ltx23",), description="LTX 2.3 model pack on the common base nodes."),
+    "base": Profile(
+        description="Ashley runtime only; 130 GitHub base nodes need COMFY_BASE_NODES=1."
+    ),
+    "ltx23": Profile(
+        model_packs=("ltx23",),
+        description="LTX 2.3 model pack. Wan/KJ-style nodes are not included unless COMFY_BASE_NODES=1.",
+    ),
     "nordy-kontext-views": Profile(
         model_packs=("nordy-kontext-views",),
         node_packs=("flux-kontext-extra",),
@@ -214,7 +218,7 @@ PROFILES: Mapping[str, Profile] = {
     "wan22": Profile(
         model_packs=("wan22",),
         comfy_args=("--preview-method", "auto"),
-        description="Recommended Wan 2.2 profile; Wan/KJ/VHS/GGUF nodes already live in base.",
+        description="Wan 2.2 models. Wan/KJ/VHS/GGUF nodes need COMFY_BASE_NODES=1.",
     ),
     "wan22-notebook-full": Profile(
         model_packs=("wan22",),

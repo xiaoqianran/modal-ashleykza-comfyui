@@ -1,14 +1,15 @@
 # 架构
 
 ```text
-comfyui_modal.py      GPU App：Cls UI + web_server
-hydrate_modal.py      CPU App：hydrate / resolve / profiles
+comfyui_modal.py      GPU App：Cls UI + web_server（端口 3001）
+hydrate_modal.py      CPU App：hydrate / resolve / profiles / outputs / repair
 modal_config.py       常量、路径、环境变量
 storage.py            Volume 路径与 extra_model_paths.yaml
 comfy_engine.py       下载、校验、启动 ComfyUI
 workflow_resolver.py  工作流 → 锁文件
 recipes.py            profile / model pack / node pack
 base_nodes.py         基础自定义节点安装
+scripts/              无 UI 时的排队/取件辅助（不是部署必需）
 examples/             示例 workflow / lock
 docs/                 本站点 Markdown
 mkdocs.yml            MkDocs Material 配置
@@ -20,8 +21,9 @@ mkdocs.yml            MkDocs Material 配置
 
 - `enable_memory_snapshot=True`（可用 `COMFY_MEMORY_SNAPSHOT=0` 关闭）
 - `experimental_options={"enable_gpu_snapshot": True}`（可用 `COMFY_GPU_SNAPSHOT=0` 关闭）
-- `@modal.enter(snap=True) start()`：读 Volume launch.json、校验模型、`prepare_runtime`、按需把 CNR 装到 workspace、启动 ComfyUI、等待就绪
-- `@modal.web_server ui()`：空方法，端口已在 listen
+- `@modal.enter(snap=True) snapshot_runtime()`：按当时的 Volume launch.json 装 CNR 并启动 ComfyUI（写入 deploy 快照）
+- `@modal.enter(snap=False) apply_launch()`：`Volume.reload()` 后按**当前** launch.json 校验/装 CNR；指纹变化或新装节点时重启 ComfyUI
+- `@modal.web_server ui()`：空方法，端口 **3001** 已在 listen
 - `@modal.exit() stop()`：`commit()` workspace Volume，再终止 ComfyUI
 - `@modal.concurrent` + `max_containers=1`
 
