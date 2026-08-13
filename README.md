@@ -394,3 +394,15 @@ comfy_engine.py
 ```
 
 这使 Notebook 从“执行脚本集合”变成可复现、可组合、可版本控制的 ComfyUI 配方库。
+
+## 开发与验证
+
+项目固定使用 Python 3.12 和 Modal 1.5.4。无需安装第三方测试框架即可运行核心单元测试：
+
+```bash
+python -m compileall -q .
+python -m unittest discover -s tests -v
+```
+
+GitHub Actions 还会运行 Ruff 静态检查。升级 Modal SDK 时应先核对官方
+[`llms.txt`](https://modal.com/llms.txt) 与 Python SDK changelog，再单独提交版本升级。
