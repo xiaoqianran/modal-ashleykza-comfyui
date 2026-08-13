@@ -86,6 +86,19 @@ class ExampleLockTests(unittest.TestCase):
         self.assertIn(("text_encoders", "mistral_3_small_flux2_bf16.safetensors"), names)
         self.assertIn(("vae", "full_encoder_small_decoder.safetensors"), names)
 
+    def test_krea2_turbo_lock_matches_resolve(self):
+        source = ROOT / "examples" / "krea2-turbo-t2i.json"
+        lock_path = ROOT / "examples" / "krea2-turbo-t2i.lock.json"
+        resolved = workflow_resolver.resolve_workflow(source)
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertEqual(resolved["unresolved"], [])
+        self.assertEqual(committed["custom_nodes"], [])
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertIn(("diffusion_models", "krea2_turbo_fp8_scaled.safetensors"), names)
+        self.assertIn(("text_encoders", "qwen3vl_4b_fp8_scaled.safetensors"), names)
+        self.assertIn(("vae", "qwen_image_vae.safetensors"), names)
+
     def test_qwen_image_2512_lock_matches_resolve(self):
         source = ROOT / "examples" / "qwen-image-2512.json"
         lock_path = ROOT / "examples" / "qwen-image-2512.lock.json"

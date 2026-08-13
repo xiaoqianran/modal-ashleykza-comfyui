@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Krea-2 Turbo 仍是提示词。不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -21,6 +21,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | Z-Image | T4 | 提示词 |
 | FLUX.2 [dev] | RTX-PRO-6000 | 提示词 |
 | Qwen-Image-2512 | RTX-PRO-6000 | 提示词 |
+| Krea-2 Turbo | RTX-PRO-6000 | 提示词 |
 | Pixal3D | L40S | 上传图 |
 | TripoSplat | L40S | 上传图 |
 
@@ -29,7 +30,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：用配方里的默认卡。Z-Image 是 **T4**。Pixal3D / TripoSplat 是 **L40S**。FLUX.2 [dev] / Qwen-Image-2512 是 **RTX-PRO-6000**。不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
+4. **启动 GPU**：用配方里的默认卡。Z-Image 是 **T4**。Pixal3D / TripoSplat 是 **L40S**。FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo 是 **RTX-PRO-6000**。不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。

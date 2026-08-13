@@ -35,27 +35,36 @@ GRAPH_TO_PROMPT_JS = """
 async (workflow) => {
     const app = window.comfyAPI?.app?.app;
     if (!app) return { ok: false, error: 'comfyAPI.app.app missing' };
+    const graphNodes = () => app.graph?.nodes || app.graph?._nodes || [];
+    const expectedTypes = [...new Set((workflow?.nodes || []).map((node) => node.type).filter(Boolean))];
     try {
         await app.loadGraphData(workflow);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        let loadedTypes = [];
+        for (let i = 0; i < 40; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            loadedTypes = graphNodes().map((node) => String(node.type || node.comfyClass || ''));
+            const ready = expectedTypes.length > 0 && expectedTypes.every((type) => loadedTypes.includes(type));
+            if (ready) break;
+        }
         const converted = await app.graphToPrompt();
         const prompt = converted?.output || converted;
         const missing = [];
-        const nodes = app.graph?.nodes || app.graph?._nodes || [];
-        for (const node of nodes) {
+        for (const node of graphNodes()) {
             const type = node.type || node.comfyClass || '';
             if (String(type).toLowerCase().includes('missing')) {
                 missing.push({ id: node.id, type, title: node.title });
             }
         }
         if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
-            return { ok: false, error: 'graphToPrompt failed', missing };
+            return { ok: false, error: 'graphToPrompt failed', missing, loadedTypes, expectedTypes };
         }
         return {
             ok: true,
             prompt,
             missing,
             node_count: Object.keys(prompt).length,
+            loaded_types: loadedTypes,
+            expected_types: expectedTypes,
         };
     } catch (error) {
         return { ok: false, error: String((error && error.stack) || error) };
@@ -294,6 +303,7 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
                 "converted": True,
                 "node_count": result.get("node_count"),
                 "missing": result.get("missing"),
+                "loaded_types": result.get("loaded_types"),
             }
         ),
         flush=True,
@@ -403,6 +413,24 @@ def _text_input_key(node: dict[str, Any]) -> str:
     return "value"
 
 
+def _text_is_widget(node: dict[str, Any]) -> bool:
+    key = _text_input_key(node)
+    return not isinstance((node.get("inputs") or {}).get(key), list)
+
+
+def _prefer_text_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Prefer the user-facing string widget, not a CLIPTextEncode fed by a link."""
+    titled = [
+        node
+        for node in nodes
+        if "user prompt" in _node_title(node).lower() and _text_is_widget(node)
+    ]
+    if titled:
+        return titled
+    widgets = [node for node in nodes if _text_is_widget(node)]
+    return widgets or nodes
+
+
 def bind_text_prompt(
     prompt: dict[str, Any],
     text: str | None = None,
@@ -418,6 +446,7 @@ def bind_text_prompt(
         bucket = negatives if _is_negative_title(_node_title(node)) else positives
         bucket.append(node)
     if text is not None:
+        positives = _prefer_text_nodes(positives)
         if not positives:
             raise RuntimeError("converted prompt has no text node to bind")
         key = _text_input_key(positives[0])
@@ -425,6 +454,7 @@ def bind_text_prompt(
     if negative is not None:
         if not negatives and len(positives) > 1:
             negatives = positives[1:]
+        negatives = _prefer_text_nodes(negatives)
         if not negatives:
             raise RuntimeError("converted prompt has no negative text node to bind")
         key = _text_input_key(negatives[0])

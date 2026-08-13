@@ -1,0 +1,40 @@
+{
+  "custom_nodes": [],
+  "models": [
+    {
+      "category": "diffusion_models",
+      "filename": "krea2_turbo_fp8_scaled.safetensors",
+      "sha256": null,
+      "source": "node:UNETLoader",
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_fp8_scaled.safetensors"
+    },
+    {
+      "category": "loras",
+      "filename": "krea2_darkbrush.safetensors",
+      "sha256": null,
+      "source": "node:LoraLoaderModelOnly",
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_darkbrush.safetensors"
+    },
+    {
+      "category": "text_encoders",
+      "filename": "qwen3vl_4b_fp8_scaled.safetensors",
+      "sha256": null,
+      "source": "node:CLIPLoader",
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "qwen_image_vae.safetensors",
+      "sha256": null,
+      "source": "node:VAELoader",
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors"
+    }
+  ],
+  "schema": 1,
+  "unresolved": [],
+  "warnings": [],
+  "workflow": {
+    "name": "krea2-turbo-t2i.json",
+    "sha256": "d04b37d8345b1bf6aa247ef182a4454e0221730cf353379af27b20e932e9f11f"
+  }
+}
