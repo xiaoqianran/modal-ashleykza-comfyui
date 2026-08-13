@@ -55,6 +55,7 @@ jobs:
             只下载这一个 `Studio.exe`，双击即可。不要再解一堆目录。
             第一次会把运行时写到 `%LOCALAPPDATA%\ComfyStudio`。
             需要本机联网、Modal 账号、Hugging Face token。
+            走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 `modal[api-proxy-support]`）。
             工作流配方还需要本机 Chrome 或 Edge。GPU 仍在 Modal 上。
       - name: Publish tagged release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/studio-v')
@@ -65,4 +66,5 @@ jobs:
             只下载这一个 `Studio.exe`，双击即可。不要再解一堆目录。
             第一次会把运行时写到 `%LOCALAPPDATA%\ComfyStudio`。
             需要本机联网、Modal 账号、Hugging Face token。
+            走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 `modal[api-proxy-support]`）。
             工作流配方还需要本机 Chrome 或 Edge。GPU 仍在 Modal 上。
