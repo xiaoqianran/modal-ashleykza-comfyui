@@ -294,6 +294,9 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
 
     Modern huggingface_hub installs hf_xet automatically. The Modal sync Image
     enables HF_XET_HIGH_PERFORMANCE=1, so this is the preferred path for HF.
+
+    Downloads into /tmp first. ``--local-dir <category>`` plus a repo path of
+    ``<category>/<file>`` would nest directories on the Volume and break.
     """
     parsed = _parse_hf_url(asset.url)
     hf = shutil.which("hf") or shutil.which("huggingface-cli")
@@ -301,7 +304,12 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
         raise RuntimeError("Hugging Face CLI/Xet downloader is unavailable for this URL.")
 
     repo_id, revision, file_path = parsed
-    before = {p.resolve() for p in target_dir.rglob("*") if p.is_file()}
+    tmp_root = Path("/tmp/hf-download") / hashlib.sha256(
+        f"{repo_id}:{revision}:{file_path}".encode()
+    ).hexdigest()[:16]
+    if tmp_root.exists():
+        shutil.rmtree(tmp_root)
+    tmp_root.mkdir(parents=True, exist_ok=True)
     cmd = [
         hf,
         "download",
@@ -312,32 +320,47 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
         "--repo-type",
         "model",
         "--local-dir",
-        str(target_dir),
+        str(tmp_root),
     ]
     env = os.environ.copy()
     env.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    token = (env.get("HF_TOKEN") or env.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    if token:
+        env.setdefault("HF_TOKEN", token)
+        env.setdefault("HUGGING_FACE_HUB_TOKEN", token)
     _run(cmd, env=env)
 
-    expected = target_dir / file_path
-    if expected.exists() and expected.resolve() != target.resolve():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        expected.replace(target)
-        parent = expected.parent
-        while parent != target_dir and parent.exists():
-            try:
-                parent.rmdir()
-            except OSError:
-                break
-            parent = parent.parent
+    expected = tmp_root / file_path
+    if not expected.is_file():
+        named = tmp_root / Path(file_path).name
+        if named.is_file():
+            expected = named
+        else:
+            matches = [
+                path
+                for path in tmp_root.rglob("*")
+                if path.is_file() and path.name == Path(file_path).name
+                and ".cache" not in path.parts
+            ]
+            if len(matches) != 1:
+                raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
+            expected = matches[0]
 
-    if not target.exists():
-        after = [p for p in target_dir.rglob("*") if p.is_file() and p.resolve() not in before]
-        after = [p for p in after if ".cache/huggingface" not in p.as_posix()]
-        if len(after) == 1:
-            after[0].replace(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        target.unlink()
+    shutil.move(str(expected), str(target))
+    shutil.rmtree(tmp_root, ignore_errors=True)
 
     if not target.exists():
         raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
+
+
+def _hf_auth_header() -> str | None:
+    token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    if not token:
+        return None
+    return f"Authorization: Bearer {token}"
 
 
 def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> None:
@@ -358,9 +381,15 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
         "--console-log-level=notice",
         "-d", str(target.parent),
         "-o", target.name,
-        url,
     ]
-    display_cmd = [*cmd[:-1], redact_url(url)]
+    header = _hf_auth_header() if "huggingface.co" in url else None
+    if header:
+        cmd.extend(["--header", header])
+    cmd.append(url)
+    display_cmd = list(cmd)
+    if header:
+        display_cmd[display_cmd.index(header)] = "Authorization: Bearer ***"
+    display_cmd[-1] = redact_url(url)
     _run(cmd, display_cmd=display_cmd)
 
 

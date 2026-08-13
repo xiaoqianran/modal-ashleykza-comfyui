@@ -20,7 +20,7 @@ import modal
 from comfy_engine import sync_profile_models, sync_workflow_models
 from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
-from workflow_resolver import validate_workflow_lock, write_workflow_lock
+from workflow_resolver import load_workflow_lock, validate_workflow_lock, write_workflow_lock
 
 SETTINGS = ModalSettings.from_env(os.environ)
 APP_NAME = f"{SETTINGS.app_name}-hydrate"
@@ -143,8 +143,16 @@ def sync_workflow(
 
 
 def _hydrate_workflow(settings: ModalSettings) -> dict:
-    lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
-    validate_workflow_lock(lock, require_resolved=True)
+    lock_path = Path(settings.workflow_lock_source)
+    lock = None
+    if lock_path.is_file():
+        try:
+            lock = load_workflow_lock(lock_path, require_resolved=True)
+        except Exception:
+            lock = None
+    if lock is None:
+        lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
+        validate_workflow_lock(lock, require_resolved=True)
     plugins = lock["custom_nodes"]
     result = {
         **sync_workflow.remote(

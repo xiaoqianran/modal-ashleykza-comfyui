@@ -1,0 +1,53 @@
+{
+  "custom_nodes": [],
+  "models": [
+    {
+      "category": "diffusion_models",
+      "filename": "ltx-2.5-22b-distilled-transformer-bf16.safetensors",
+      "sha256": null,
+      "source": "workflow.models",
+      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors"
+    },
+    {
+      "category": "latent_upscale_models",
+      "filename": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+      "sha256": null,
+      "source": "workflow.models",
+      "url": "https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
+    },
+    {
+      "category": "text_encoders",
+      "filename": "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors",
+      "sha256": null,
+      "source": "workflow.models",
+      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors"
+    },
+    {
+      "category": "text_encoders",
+      "filename": "gemma4_e2b_it_bf16.safetensors",
+      "sha256": null,
+      "source": "workflow.models",
+      "url": "https://huggingface.co/Comfy-Org/gemma-4/resolve/main/text_encoders/gemma4_e2b_it_bf16.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "ltx-2.5-audio-vae-bf16.safetensors",
+      "sha256": null,
+      "source": "workflow.models",
+      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/vae/ltx-2.5-audio-vae-bf16.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "ltx-2.5-video-vae-bf16.safetensors",
+      "sha256": null,
+      "source": "workflow.models",
+      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/vae/ltx-2.5-video-vae-bf16.safetensors"
+    }
+  ],
+  "schema": 1,
+  "unresolved": [],
+  "workflow": {
+    "name": "ltx-2.5-t2v-i2v-distilled.json",
+    "sha256": "925565101e735b9e9a78da039935113fb95be211b5124d65a585be67412c6e5c"
+  }
+}
