@@ -2,7 +2,7 @@
 
 在 Modal 上运行可复现的 ComfyUI，并把“解析别人的工作流、下载模型、安装自定义节点”前移到 CPU 阶段。GPU 容器只校验依赖、加载模型和执行推理，不在启动时联网下载资产。
 
-项目按 Modal 1.5.4 和 2026-08-13 的官方 [`llms.txt`](https://modal.com/llms.txt) 审计。
+项目按当前 Modal SDK（`modal>=1.5.4`，本地始终 `pip install -U modal`）和 2026-08-13 的官方 [`llms.txt`](https://modal.com/llms.txt) 审计。
 
 ## 工作方式
 
@@ -29,10 +29,10 @@ flowchart TD
 
 ## 快速开始
 
-要求 Python 3.12。项目固定 `modal==1.5.4`：
+要求 Python 3.12。本地始终安装**当前最新** Modal SDK：
 
 ```bash
-python -m pip install "modal==1.5.4"
+python -m pip install -U "modal>=1.5.4"
 modal setup
 ```
 
@@ -42,14 +42,14 @@ modal setup
 modal run comfyui_modal.py --action profiles
 ```
 
-先用 CPU 同步 Profile 模型，再启动 GPU UI：
+先用 CPU 同步 Profile 模型，再启动 GPU UI。`modal serve` 会忽略节点 clone / CNR 安装层的 Image 缓存，每次都拉 GitHub 默认分支 HEAD：
 
 ```bash
 modal run comfyui_modal.py --action sync --profile qwen-image
 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
-持久部署：
+持久部署默认复用 Image 缓存；若部署也要最新节点，加上 `COMFY_LATEST=1`：
 
 ```bash
 COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
@@ -199,14 +199,14 @@ cp .env.example .env
 
 支持 `HF_TOKEN`、`CIVITAI_TOKEN`、`GITHUB_TOKEN` 及部分 custom node API Key。`.env` 被 Git 忽略；构建日志会隐藏 Civitai token，节点配置以 `0600` 权限生成。
 
-生产环境建议创建 named Secret：
+本地和远程必须挂载**同一个 named Secret**，否则 Modal 会看到不同的依赖图。不要在 App 定义里直接 `Secret.from_dotenv(.env)`。默认 Secret 名是 `comfyui-creds`：
 
 ```bash
-modal secret create comfyui-secrets --from-dotenv .env --force
-MODAL_SECRET_NAME=comfyui-secrets COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+modal secret create comfyui-creds --from-dotenv .env --force
+COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
-优先级为 named Modal Secret、当前目录 `.env`、无 Secret。原 Notebook 中的明文 token 未迁移；若旧 token 仍有效，应在对应平台轮换。
+覆盖名称时同时设置 `MODAL_SECRET_NAME`。原 Notebook 中的明文 token 未迁移；若旧 token 仍有效，应在对应平台轮换。
 
 ## 运行参数
 
@@ -217,14 +217,16 @@ MODAL_SECRET_NAME=comfyui-secrets COMFY_PROFILE=qwen-image modal deploy comfyui_
 | `COMFY_IMAGE` | `ghcr.io/...:cu128-py312-v0.32.0` | ComfyUI 基础镜像 |
 | `COMFY_PROFILE` | `base` | Recipe Profile |
 | `COMFY_WORKFLOW_LOCK` | 空 | 构建时工作流锁文件 |
-| `MODAL_GPU` | `L4,L40S,RTX-PRO-6000` | GPU fallback 顺序 |
+| `MODAL_GPU` | `T4,L4,L40S,RTX-PRO-6000` | GPU fallback 顺序 |
 | `COMFY_TIMEOUT_SECONDS` | `86400` | Function 最长存活时间 |
 | `COMFY_STARTUP_TIMEOUT_SECONDS` | `900` | 容器 / Web server 启动上限 |
 | `COMFY_SCALEDOWN_SECONDS` | `300` | 空闲缩容窗口 |
 | `COMFY_MAX_INPUTS` | `20` | 单容器最大并发输入 |
 | `COMFY_TARGET_INPUTS` | `10` | 触发扩容的目标并发 |
 | `COMFY_REQUIRE_PROXY_AUTH` | `false` | 要求 Modal 代理认证头 |
-| `MODAL_SECRET_NAME` | 空 | named Modal Secret |
+| `MODAL_SECRET_NAME` | `comfyui-creds` | named Modal Secret |
+| `COMFY_BASE_NODES` | `true` | Image build 时克隆 130 个 GitHub 基础节点 |
+| `COMFY_LATEST` | `modal serve` 为 true | 忽略节点 clone / CNR 层缓存，始终拉最新 Git HEAD |
 | `EXTRA_ARGS` | 空 | 追加 ComfyUI CLI 参数 |
 
 `COMFY_REQUIRE_PROXY_AUTH=true` 会要求请求携带 `Modal-Key` / `Modal-Secret` 头，普通浏览器直接打开会不方便，因此保留公开 endpoint 作为兼容默认。面向公网部署时，应明确选择认证策略且不要在 ComfyUI 中暴露敏感文件。
@@ -236,6 +238,6 @@ python -m compileall -q .
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions 还会运行 Ruff。依赖采用精确版本以利用 Modal Image 分层缓存并减少漂移。升级 SDK 前先检查官方 `llms.txt` 与 changelog，并用独立的规范化 commit 提交。
+GitHub Actions 安装当前最新 Modal SDK，并用 Ruff 检查。`modal serve` 会强制重建节点 clone / CNR 层以拿到 GitHub HEAD；`modal deploy` 默认保留 Image 缓存。用 `COMFY_LATEST=0` 可以让本地 serve 也走缓存。
 
 Modal API 采用依据和保留的架构取舍见 [`docs/MODAL_AUDIT.md`](docs/MODAL_AUDIT.md)。

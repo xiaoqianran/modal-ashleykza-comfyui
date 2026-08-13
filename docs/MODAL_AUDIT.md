@@ -1,6 +1,6 @@
 # Modal 1.5 架构审计
 
-审计日期：2026-08-13。SDK 固定为 `modal==1.5.4`，依据 Modal 官方 [`llms.txt`](https://modal.com/llms.txt) 所列当前文档。
+审计日期：2026-08-13。本地与 CI 使用当前最新 Modal SDK（`modal>=1.5.4`），依据 Modal 官方 [`llms.txt`](https://modal.com/llms.txt) 所列当前文档。
 
 ## 已采用的官方模式
 
@@ -48,7 +48,10 @@ ComfyUI 的队列和可变用户目录不是无状态服务。即使 `@modal.con
 
 ## 版本与升级策略
 
-- Modal、comfy-cli、huggingface-hub 和 CI 工具都精确固定版本；
-- SDK 或基础 ComfyUI Image 升级应独立 commit，不与 Recipe 变更混合；
+- 本地和 CI 始终安装当前最新 Modal SDK（`python -m pip install -U modal`）；
+- `modal serve` 对节点 clone / CNR 安装层使用 `force_build=True`，每次拿到 GitHub 默认分支 HEAD；
+- `modal deploy` 默认保留 Image 缓存；需要刷新时设 `COMFY_LATEST=1`；
+- huggingface-hub 与 CI 中的 Ruff 仍精确固定，避免下载器与 lint 漂移；
+- 升级基础 ComfyUI Image 应独立 commit，不与 Recipe 变更混合；
 - 升级后至少运行 compileall、全部 unittest 和 Ruff；
 - 先在 `modal serve` 验证构建、Volume 挂载、WebSocket 和一个真实工作流，再发布 `modal deploy`。

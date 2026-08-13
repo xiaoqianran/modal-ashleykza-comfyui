@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 
 from recipes import MODEL_DIRS
 
-
 WORKFLOW_LOCK_SCHEMA = 1
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 MODEL_EXTENSIONS = {

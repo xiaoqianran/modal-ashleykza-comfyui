@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -161,72 +161,68 @@ MODEL_PACKS: Mapping[str, Mapping[str, tuple[ModelAsset, ...]]] = {
 }
 
 
+# Extra nodes only — the 130 GitHub base clones already cover Wan/KJ/VHS/GGUF/Manager.
 NODE_PACKS: Mapping[str, tuple[NodeRecipe, ...]] = {
-    "nordy-clothes": (
-        N("https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch.git"),
-        N("https://github.com/storyicon/comfyui_segment_anything.git", requirements=("requirements.txt",)),
-        N("https://github.com/kijai/ComfyUI-KJNodes.git", requirements=("requirements.txt",)),
-        N("https://github.com/cubiq/ComfyUI_essentials.git", requirements=("requirements.txt",)),
-        N("https://github.com/rgthree/rgthree-comfy.git"),
-        N("https://github.com/john-mnz/ComfyUI-Inspyrenet-Rembg.git", requirements=("requirements.txt",)),
+    "nordy-clothes-extra": (
         N("https://github.com/chrisgoringe/cg-use-everywhere.git"),
         N("https://github.com/TinyTerra/ComfyUI_tinyterraNodes.git"),
-        N("https://github.com/kijai/ComfyUI-SUPIR.git", requirements=("requirements.txt",)),
-        N("https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git", recursive=True),
     ),
-    "qwen-image": (N("https://github.com/HM-RunningHub/ComfyUI_RH_Qwen-Image.git", requirements=("requirements.txt",)),),
-    "flux-kontext": (N("https://github.com/Saquib764/omini-kontext.git", requirements=("requirements.txt",)),),
-    "wan-core": (
-        N("https://github.com/kijai/ComfyUI-WanVideoWrapper.git", requirements=("requirements.txt",)),
-        N("https://github.com/kijai/ComfyUI-KJNodes.git", requirements=("requirements.txt",)),
-        N("https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git", requirements=("requirements.txt",)),
-        N("https://github.com/city96/ComfyUI-GGUF.git", requirements=("requirements.txt",)),
-        N("https://github.com/Comfy-Org/ComfyUI-Manager.git", requirements=("requirements.txt",)),
+    "qwen-image-extra": (
+        N("https://github.com/HM-RunningHub/ComfyUI_RH_Qwen-Image.git", requirements=("requirements.txt",)),
     ),
-    "wan-notebook-full": (
-        N("https://github.com/kijai/ComfyUI-WanVideoWrapper.git", requirements=("requirements.txt",)),
-        N("https://github.com/kijai/ComfyUI-KJNodes.git", requirements=("requirements.txt",)),
-        N("https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git"),
-        N("https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git", requirements=("requirements.txt",)),
-        N("https://github.com/crystian/ComfyUI-Crystools.git", requirements=("requirements.txt",)),
-        N("https://github.com/Dontdrunk/ComfyUI-DD-Translation.git"),
-        N("https://github.com/city96/ComfyUI-GGUF.git", requirements=("requirements.txt",)),
-        N("https://github.com/Comfy-Org/ComfyUI-Manager.git", requirements=("requirements.txt",)),
-        N("https://github.com/Suzie1/ComfyUI_Comfyroll_CustomNodes.git"),
+    "flux-kontext-extra": (
+        N("https://github.com/Saquib764/omini-kontext.git", requirements=("requirements.txt",)),
+    ),
+    "wan-notebook-extra": (
         N("https://github.com/chrisgoringe/cg-use-everywhere.git"),
-        N("https://github.com/yolain/ComfyUI-Easy-Use.git", requirements=("requirements.txt",)),
-        N("https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git", requirements=("requirements-with-cupy.txt",), pre_commands=("$PY install.py",)),
-        N("https://github.com/jamesWalker55/comfyui-various.git"),
-        N("https://github.com/Fannovel16/comfyui_controlnet_aux.git", requirements=("requirements.txt",)),
-        N("https://github.com/chflame163/ComfyUI_LayerStyle.git", requirements=("requirements.txt",)),
-        N("https://github.com/RituCodeWeb/was-node-suite-comfyui.git", requirements=("requirements.txt",)),
-        N("https://github.com/rgthree/rgthree-comfy.git", requirements=("requirements.txt",)),
-        N("https://github.com/ltdrdata/ComfyUI-Impact-Pack", requirements=("requirements.txt",)),
         N("https://github.com/al-swaiti/ComfyUI-OllamaGemini.git", requirements=("requirements.txt",)),
         N("https://github.com/ClownsharkBatwing/RES4LYF", requirements=("requirements.txt",)),
-        N("https://github.com/AlekPet/ComfyUI_Custom_Nodes_AlekPet.git", pip=("argostranslate", "deep-translator", "googletrans-py")),
         N("https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet.git"),
-        N("https://github.com/sipherxyz/comfyui-art-venture.git", requirements=("requirements.txt",)),
         N("https://github.com/aiaiaikkk/ComfyUI-Curve.git", requirements=("requirements.txt",)),
-        N("https://github.com/kijai/ComfyUI-IC-Light.git", requirements=("requirements.txt",)),
-        N("https://github.com/huchenlei/ComfyUI-IC-Light-Native.git"),
-        N("https://github.com/cubiq/ComfyUI_essentials.git", requirements=("requirements.txt",)),
     ),
-    "nunchaku": (N("https://github.com/nunchaku-tech/ComfyUI-nunchaku.git", requirements=("requirements.txt",)),),
+    "nunchaku": (
+        N("https://github.com/nunchaku-tech/ComfyUI-nunchaku.git", requirements=("requirements.txt",)),
+    ),
 }
 
 
 PROFILES: Mapping[str, Profile] = {
-    "base": Profile(description="Bare ashleykleynhans ComfyUI image; no migrated models or nodes."),
-    "ltx23": Profile(model_packs=("ltx23",), description="LTX 2.3 model pack."),
-    "nordy-kontext-views": Profile(model_packs=("nordy-kontext-views",), node_packs=("flux-kontext",), description="Nordy/FLUX Kontext multi-view recipe."),
-    "nordy-clothes": Profile(model_packs=("nordy-clothes",), node_packs=("nordy-clothes",), description="Nordy clothing/inpaint recipe."),
-    "qwen-image": Profile(model_packs=("qwen-image",), node_packs=("qwen-image",), comfy_args=("--preview-method", "auto"), description="Qwen Image model + RunningHub custom node."),
+    "base": Profile(description="Ashley runtime + 130 GitHub base nodes (latest HEAD on modal serve)."),
+    "ltx23": Profile(model_packs=("ltx23",), description="LTX 2.3 model pack on the common base nodes."),
+    "nordy-kontext-views": Profile(
+        model_packs=("nordy-kontext-views",),
+        node_packs=("flux-kontext-extra",),
+        description="Nordy/FLUX Kontext multi-view recipe.",
+    ),
+    "nordy-clothes": Profile(
+        model_packs=("nordy-clothes",),
+        node_packs=("nordy-clothes-extra",),
+        description="Nordy clothing/inpaint recipe; only two nodes are extra beyond base.",
+    ),
+    "qwen-image": Profile(
+        model_packs=("qwen-image",),
+        node_packs=("qwen-image-extra",),
+        comfy_args=("--preview-method", "auto"),
+        description="Qwen Image + RunningHub node on the common base.",
+    ),
     "flux-krea": Profile(model_packs=("flux-krea",), description="FLUX.1 Krea model pack."),
-    "flux-kontext": Profile(model_packs=("flux-kontext",), node_packs=("flux-kontext",), description="FLUX Kontext model + omini-kontext."),
-    "wan22": Profile(model_packs=("wan22",), node_packs=("wan-core",), comfy_args=("--preview-method", "auto"), description="Recommended lean Wan 2.2 profile."),
-    "wan22-notebook-full": Profile(model_packs=("wan22",), node_packs=("wan-notebook-full",), comfy_args=("--preview-method", "auto"), description="Wan 2.2 with all active nodes from the notebook."),
-    "nunchaku": Profile(node_packs=("nunchaku",), description="Nunchaku custom node only."),
+    "flux-kontext": Profile(
+        model_packs=("flux-kontext",),
+        node_packs=("flux-kontext-extra",),
+        description="FLUX Kontext + omini-kontext on the common base.",
+    ),
+    "wan22": Profile(
+        model_packs=("wan22",),
+        comfy_args=("--preview-method", "auto"),
+        description="Recommended Wan 2.2 profile; Wan/KJ/VHS/GGUF nodes already live in base.",
+    ),
+    "wan22-notebook-full": Profile(
+        model_packs=("wan22",),
+        node_packs=("wan-notebook-extra",),
+        comfy_args=("--preview-method", "auto"),
+        description="Wan 2.2 plus the few notebook nodes absent from the common base.",
+    ),
+    "nunchaku": Profile(node_packs=("nunchaku",), description="Nunchaku custom node beyond the common base."),
 }
 
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 
 def _integer(
@@ -35,6 +37,24 @@ def _boolean(environ: Mapping[str, str], name: str, default: bool) -> bool:
     raise ValueError(f"{name} must be a boolean value, got {raw!r}.")
 
 
+def wants_latest_dependencies(
+    environ: Mapping[str, str],
+    argv: Sequence[str] | None = None,
+) -> bool:
+    """Return whether local Modal commands should ignore Image cache for Git clones.
+
+    ``modal serve`` always fetches the current GitHub HEAD / unpinned registry
+    versions. ``modal deploy`` keeps the Image cache unless ``COMFY_LATEST=1``.
+    """
+    raw = environ.get("COMFY_LATEST", "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    args = argv if argv is not None else sys.argv
+    return any(Path(arg).name == "serve" for arg in args)
+
+
 @dataclass(frozen=True)
 class ModalSettings:
     app_name: str
@@ -44,6 +64,8 @@ class ModalSettings:
     gpu: tuple[str, ...]
     secret_name: str
     workflow_lock_source: str
+    base_nodes_enabled: bool
+    latest_dependencies: bool
     ui_timeout_seconds: int
     ui_startup_timeout_seconds: int
     ui_scaledown_window_seconds: int
@@ -52,11 +74,15 @@ class ModalSettings:
     ui_requires_proxy_auth: bool
 
     @classmethod
-    def from_env(cls, environ: Mapping[str, str]) -> ModalSettings:
+    def from_env(
+        cls,
+        environ: Mapping[str, str],
+        argv: Sequence[str] | None = None,
+    ) -> ModalSettings:
         gpu_raw = environ.get("MODAL_GPU", "").strip()
         gpu = tuple(item.strip() for item in gpu_raw.split(",") if item.strip())
         if not gpu:
-            gpu = ("L4", "L40S", "RTX-PRO-6000")
+            gpu = ("T4", "L4", "L40S", "RTX-PRO-6000")
 
         max_inputs = _integer(
             environ,
@@ -87,8 +113,11 @@ class ModalSettings:
             or "comfyui-ashleykza-workspace",
             profile_name=environ.get("COMFY_PROFILE", "base").strip() or "base",
             gpu=gpu,
-            secret_name=environ.get("MODAL_SECRET_NAME", "").strip(),
+            secret_name=environ.get("MODAL_SECRET_NAME", "comfyui-creds").strip()
+            or "comfyui-creds",
             workflow_lock_source=environ.get("COMFY_WORKFLOW_LOCK", "").strip(),
+            base_nodes_enabled=_boolean(environ, "COMFY_BASE_NODES", True),
+            latest_dependencies=wants_latest_dependencies(environ, argv),
             ui_timeout_seconds=_integer(
                 environ,
                 "COMFY_TIMEOUT_SECONDS",

@@ -17,7 +17,6 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 from workflow_resolver import validate_workflow_lock
 
-
 LOCK_SCHEMA = 1
 
 
@@ -493,19 +492,20 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
 def build_registry_node_commands(
     custom_nodes: Iterable[Mapping[str, Any]],
     *,
-    comfy_cli_version: str = "1.16.0",
+    comfy_cli_version: str | None = "1.16.0",
 ) -> list[str]:
     """Install workflow-declared CNR nodes in CPU-backed Image build layers."""
     nodes = list(custom_nodes)
     if not nodes:
         return []
 
+    comfy_cli_spec = f"comfy-cli=={comfy_cli_version}" if comfy_cli_version else "comfy-cli"
     bootstrap = "; ".join(
         (
             "set -eux",
             'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
             '[ -x "$PY" ] || PY=python3',
-            f'"$PY" -m pip install --no-cache-dir comfy-cli=={_quote(comfy_cli_version)}',
+            f'"$PY" -m pip install --no-cache-dir {_quote(comfy_cli_spec)}',
         )
     )
     commands = [bootstrap]
