@@ -981,6 +981,159 @@ def install_registry_nodes(
     return installed
 
 
+def _comfy_python(comfy_root: Path) -> str:
+    for name in ("python3", "python"):
+        path = comfy_root / "venv" / "bin" / name
+        if path.is_file():
+            return str(path)
+    return "python3"
+
+
+def _module_available(name: str, python: str) -> bool:
+    try:
+        subprocess.run(
+            [python, "-c", f"import {name}"],
+            check=True,
+            capture_output=True,
+            timeout=60,
+        )
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def _lock_has_pixal3d(nodes: Iterable[Mapping[str, Any]]) -> bool:
+    return any("pixal3d" in str(node.get("id") or "").lower() for node in nodes)
+
+
+def _find_pixal3d_node_dir(custom_nodes_dir: Path) -> Path | None:
+    if not custom_nodes_dir.is_dir():
+        return None
+    for item in sorted(custom_nodes_dir.iterdir()):
+        if item.is_dir() and "pixal3d" in item.name.lower():
+            return item
+    return None
+
+
+def ensure_pixal3d_runtime(
+    comfy_root: str | Path,
+    custom_nodes_dir: str | Path,
+) -> bool:
+    """Install Pixal3D Python deps and CUDA kernels into the Image venv.
+
+    Kernels are not in ``requirements.txt``; they must match the running Torch.
+    Returns True if anything was installed (ComfyUI should restart).
+    """
+    comfy_root = Path(comfy_root)
+    node_dir = _find_pixal3d_node_dir(Path(custom_nodes_dir))
+    if node_dir is None:
+        return False
+
+    python = _comfy_python(comfy_root)
+    changed = False
+    requirements = node_dir / "requirements.txt"
+    if requirements.is_file() and not _module_available("moge", python):
+        print("[PIXAL3D] pip install -r requirements.txt", flush=True)
+        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
+        changed = True
+
+    attention_ok = _module_available("flash_attn", python) or _module_available(
+        "flash_attn_interface", python
+    )
+    if not attention_ok:
+        print("[PIXAL3D] pip install flash-attn", flush=True)
+        _run(
+            [
+                python,
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--no-build-isolation",
+                "flash-attn",
+            ]
+        )
+        changed = True
+
+    tmp = Path("/tmp/pixal3d_extensions")
+    tmp.mkdir(parents=True, exist_ok=True)
+    sources = (
+        (
+            "flex_gemm",
+            ("flex_gemm_ap", "flex_gemm"),
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "--recursive",
+                "--shallow-submodules",
+                "https://github.com/JeffreyXiang/FlexGEMM.git",
+            ],
+            None,
+        ),
+        (
+            "cumesh",
+            ("cumesh_vb", "cumesh"),
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "--recursive",
+                "--shallow-submodules",
+                "https://github.com/JeffreyXiang/CuMesh.git",
+            ],
+            None,
+        ),
+        (
+            "o_voxel",
+            ("o_voxel_vb_ap", "o_voxel"),
+            ["git", "clone", "--depth=1", "https://github.com/microsoft/TRELLIS.2.git"],
+            "o-voxel",
+        ),
+        (
+            "drtk",
+            ("drtk",),
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "--branch",
+                "stable",
+                "https://github.com/facebookresearch/DRTK.git",
+            ],
+            None,
+        ),
+    )
+    for label, imports, clone, subdir in sources:
+        if any(_module_available(name, python) for name in imports):
+            print(f"[PIXAL3D] {label} already importable", flush=True)
+            continue
+        dest = tmp / label
+        if dest.exists():
+            shutil.rmtree(dest)
+        print(f"[PIXAL3D] build {label}", flush=True)
+        _run([*clone, str(dest)])
+        install_path = str(dest / subdir) if subdir else str(dest)
+        _run(
+            [
+                python,
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--no-deps",
+                "--no-build-isolation",
+                install_path,
+            ]
+        )
+        changed = True
+        if not any(_module_available(name, python) for name in imports):
+            raise RuntimeError(
+                f"Pixal3D CUDA extension {label} installed but still not importable"
+            )
+    return changed
+
+
 def write_extra_model_paths(
     comfy_root: str | Path,
     workspace: str | Path,
@@ -1083,6 +1236,12 @@ def apply_volume_launch(
             comfy_root=comfy_root,
             custom_nodes_dir=workspace / "custom_nodes",
         )
+    runtime_changed = False
+    if install_lock_nodes and _lock_has_pixal3d(nodes):
+        runtime_changed = ensure_pixal3d_runtime(
+            comfy_root,
+            workspace / "custom_nodes",
+        )
     fingerprint = launch_fingerprint(
         launch,
         profile_name=profile_name,
@@ -1095,6 +1254,7 @@ def apply_volume_launch(
         or process.poll() is not None
         or previous_fingerprint != fingerprint
         or bool(newly)
+        or runtime_changed
     )
     if need_restart:
         stop_comfyui(process)

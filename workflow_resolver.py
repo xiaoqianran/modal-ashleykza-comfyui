@@ -27,7 +27,7 @@ MODEL_EXTENSIONS = {
 }
 CORE_NODE_IDS = {"comfy-core", "comfyui", "comfyui-core"}
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-CNR_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+CNR_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 NODE_CATEGORY_HINTS = {
     "checkpoint": "checkpoints",
