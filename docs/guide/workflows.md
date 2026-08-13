@@ -121,7 +121,7 @@ python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
 
 自动 `resolve` 扫不到这些权重（Loader 只写了 Hugging Face repo 名），也扫不到 Pixal3D 节点（JSON 里没有 `cnr_id`）。锁里是 Registry id `Pixal3D-ComfyUI@0.2.4` 与 `comfyui-custom-scripts@1.2.5`。Storage 增加了 `Pixal3D/` 与 `geometry_estimation/`。
 
-GPU 启动时装 CNR，并往 Image venv 里补 FlashAttention / `flex_gemm` / `cumesh` / `o_voxel` / `drtk`（须匹配当前 Torch/CUDA，首次会编译）。建议 **L40S**（工作流 `1024_cascade`，约 20–32GB 显存）。`RMBG-2.0` 在 Hugging Face 上是 gated，hydrate 需要已授权的 `HF_TOKEN`。
+GPU 启动时装 CNR，并往 Image venv 里补 FlashAttention / `flex_gemm` / `cumesh` / `o_voxel` / `drtk`（须匹配当前 Torch/CUDA，首次会编译）。建议 **L40S**（工作流 `1024_cascade`，约 20–32GB 显存）。示例把 `load_rembg=false`、`background_mode=none`，因为 `briaai/RMBG-2.0` 在 Hugging Face 上 gated；有授权可改回 `auto_remove`。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/pixal3d-image-to-3d.json
