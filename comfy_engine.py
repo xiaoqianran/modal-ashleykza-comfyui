@@ -9,10 +9,13 @@ import subprocess
 import tarfile
 import time
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from workflow_resolver import validate_workflow_lock
 
 
 LOCK_SCHEMA = 1
@@ -328,6 +331,55 @@ def sync_profile_models(profile_name: str, workspace: str | Path = "/workspace")
         completed += 1
 
     return {"profile": profile_name, "downloaded": completed, "total": len(wanted)}
+
+
+def sync_workflow_models(
+    workflow_lock: Mapping[str, Any],
+    workspace: str | Path = "/workspace",
+) -> dict:
+    """Download every resolved workflow model into the persistent workspace.
+
+    The lock is produced locally and serialized into the CPU-only Modal Function,
+    so arbitrary local workflow files never need to be mounted in a GPU container.
+    """
+    validate_workflow_lock(workflow_lock, require_resolved=True)
+    workspace = Path(workspace)
+    ensure_workspace_layout(workspace)
+    state_lock = _load_lock(workspace)
+    workflow = workflow_lock.get("workflow", {})
+    workflow_name = str(workflow.get("name", "workflow"))
+    workflow_sha256 = str(workflow.get("sha256", ""))
+
+    completed = 0
+    for model in workflow_lock["models"]:
+        category = model["category"]
+        filename = model["filename"]
+        asset = ModelAsset(
+            url=model["url"],
+            filename=filename,
+            sha256=model.get("sha256"),
+        )
+        rel_key = f"models/{category}/{filename}"
+        entry = state_lock["assets"].get(rel_key)
+        new_entry = download_asset(
+            asset,
+            workspace / "models" / category,
+            lock_entry=entry,
+        )
+        new_entry = dict(new_entry)
+        workflows = set(new_entry.get("workflows", []))
+        workflows.add(workflow_sha256 or workflow_name)
+        new_entry["workflows"] = sorted(workflows)
+        state_lock["assets"][rel_key] = new_entry
+        _save_lock(workspace, state_lock)
+        completed += 1
+
+    return {
+        "workflow": workflow_name,
+        "workflow_sha256": workflow_sha256,
+        "synced": completed,
+        "total": len(workflow_lock["models"]),
+    }
 
 
 def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[str]:

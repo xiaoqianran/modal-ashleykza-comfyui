@@ -9,6 +9,8 @@ Architecture:
 Examples:
     modal run comfyui_modal.py --action profiles
     modal run comfyui_modal.py --action sync --profile qwen-image
+    modal run comfyui_modal.py --action resolve --workflow workflow.json
+    modal run comfyui_modal.py --action workflow-sync --workflow workflow.json
 
     COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
     COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
@@ -22,8 +24,15 @@ from pathlib import Path
 
 import modal
 
-from comfy_engine import build_node_commands, prepare_runtime, start_comfyui, sync_profile_models
+from comfy_engine import (
+    build_node_commands,
+    prepare_runtime,
+    start_comfyui,
+    sync_profile_models,
+    sync_workflow_models,
+)
 from recipes import PROFILES, get_profile
+from workflow_resolver import resolve_workflow, validate_workflow_lock, write_workflow_lock
 
 
 APP_NAME = "comfyui-ashleykza-cu128"
@@ -95,9 +104,16 @@ runtime_image = (
 sync_image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("aria2", "ca-certificates")
-    .uv_pip_install("huggingface_hub")
+    .uv_pip_install("huggingface_hub[hf_xet]==1.27.0")
     .env({"HF_XET_HIGH_PERFORMANCE": "1"})
-    .add_local_python_source("recipes", "comfy_engine")
+    .add_local_python_source("recipes", "workflow_resolver", "comfy_engine")
+)
+
+SYNC_RETRIES = modal.Retries(
+    max_retries=3,
+    backoff_coefficient=2.0,
+    initial_delay=2.0,
+    max_delay=30.0,
 )
 
 
@@ -106,10 +122,29 @@ sync_image = (
     volumes={str(WORKSPACE): workspace_vol},
     secrets=APP_SECRETS,
     timeout=6 * 60 * MINUTES,
+    retries=SYNC_RETRIES,
+    cpu=2.0,
+    memory=2048,
     max_containers=1,
 )
 def sync_models(profile: str) -> dict:
     result = sync_profile_models(profile, WORKSPACE)
+    workspace_vol.commit()
+    return result
+
+
+@app.function(
+    image=sync_image,
+    volumes={str(WORKSPACE): workspace_vol},
+    secrets=APP_SECRETS,
+    timeout=6 * 60 * MINUTES,
+    retries=SYNC_RETRIES,
+    cpu=2.0,
+    memory=2048,
+    max_containers=1,
+)
+def sync_workflow(workflow_lock: dict) -> dict:
+    result = sync_workflow_models(workflow_lock, WORKSPACE)
     workspace_vol.commit()
     return result
 
@@ -143,8 +178,10 @@ def ui():
 def main(
     action: str = "info",
     profile: str = PROFILE_NAME,
+    workflow: str = "",
+    lock_out: str = "",
 ):
-    """Local control entrypoint. action: info | profiles | sync"""
+    """Local control entrypoint for profiles and workflow dependency prefetching."""
     action = action.strip().lower()
 
     if action == "profiles":
@@ -163,8 +200,32 @@ def main(
         print(result)
         return
 
+    if action == "resolve":
+        if not workflow:
+            raise ValueError("--workflow is required for action=resolve")
+        output = lock_out or str(Path(workflow).with_suffix(".lock.json"))
+        lock = write_workflow_lock(workflow, output)
+        print(
+            {
+                "lock": output,
+                "models": len(lock["models"]),
+                "custom_nodes": len(lock["custom_nodes"]),
+                "unresolved": lock["unresolved"],
+            }
+        )
+        return
+
+    if action == "workflow-sync":
+        if not workflow:
+            raise ValueError("--workflow is required for action=workflow-sync")
+        lock = resolve_workflow(workflow)
+        validate_workflow_lock(lock, require_resolved=True)
+        result = sync_workflow.remote(lock)
+        print(result)
+        return
+
     if action != "info":
-        raise ValueError("action must be one of: info, profiles, sync")
+        raise ValueError("action must be one of: info, profiles, sync, resolve, workflow-sync")
 
     print(
         f"""
@@ -182,10 +243,14 @@ Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
 2. Sync models without GPU:
    modal run comfyui_modal.py --action sync --profile qwen-image
 
-3. Interactive UI:
+3. Resolve and sync a workflow without GPU:
+   modal run comfyui_modal.py --action resolve --workflow workflow.json
+   modal run comfyui_modal.py --action workflow-sync --workflow workflow.json
+
+4. Interactive UI:
    COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
-4. Persistent endpoint:
+5. Persistent endpoint:
    COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 
 Optional:

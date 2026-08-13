@@ -4,7 +4,9 @@ import tempfile
 import unittest
 import zlib
 from pathlib import Path
+from unittest.mock import patch
 
+import comfy_engine
 import workflow_resolver
 
 
@@ -114,6 +116,41 @@ class WorkflowResolverTests(unittest.TestCase):
             path.write_text(json.dumps(workflow), encoding="utf-8")
             with self.assertRaises(workflow_resolver.WorkflowResolutionError):
                 workflow_resolver.resolve_workflow(path)
+
+    def test_rejects_tampered_lock_destination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(_sample_workflow()), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        lock["models"][0]["filename"] = "../../escape.safetensors"
+        with self.assertRaises(workflow_resolver.WorkflowResolutionError):
+            workflow_resolver.validate_workflow_lock(lock)
+
+    def test_syncs_locked_models_into_workspace(self):
+        workflow = _sample_workflow()
+        workflow["nodes"][2]["widgets_values"] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "workflow.json"
+            source.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(source)
+
+            def fake_download(asset, target_dir, lock_entry=None):
+                target = target_dir / comfy_engine.asset_filename(asset)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"model")
+                return {"url": asset.url, "path": str(target), "size": 5}
+
+            with patch.object(comfy_engine, "download_asset", fake_download):
+                result = comfy_engine.sync_workflow_models(lock, root / "workspace")
+
+            target = root / "workspace/models/checkpoints/qwen/model.safetensors"
+            state = json.loads((root / "workspace/state/comfy.lock.json").read_text())
+            target_exists = target.is_file()
+
+        self.assertTrue(target_exists)
+        self.assertEqual(result["synced"], 1)
+        self.assertIn("models/checkpoints/qwen/model.safetensors", state["assets"])
 
 
 if __name__ == "__main__":

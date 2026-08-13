@@ -27,6 +27,7 @@ MODEL_EXTENSIONS = {
 }
 CORE_NODE_IDS = {"comfy-core", "comfyui", "comfyui-core"}
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+CNR_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 
 NODE_CATEGORY_HINTS = {
     "checkpoint": "checkpoints",
@@ -364,6 +365,43 @@ def validate_workflow_lock(lock: Mapping[str, Any], *, require_resolved: bool = 
     unresolved = lock.get("unresolved")
     if not isinstance(unresolved, list):
         raise WorkflowResolutionError("Workflow lock requires an unresolved array.")
+
+    destinations: set[tuple[str, str]] = set()
+    for model in lock["models"]:
+        if not isinstance(model, Mapping):
+            raise WorkflowResolutionError("Each locked model must be an object.")
+        category = model.get("category")
+        filename = model.get("filename")
+        if category not in MODEL_DIRS or not isinstance(filename, str):
+            raise WorkflowResolutionError("Locked model has an invalid category or filename.")
+        normalized_filename = _safe_relative(filename, field="locked model filename").as_posix()
+        if normalized_filename != filename.replace("\\", "/"):
+            raise WorkflowResolutionError(f"Locked model filename is not normalized: {filename!r}")
+        _model_url(model.get("url"))
+        sha256 = model.get("sha256")
+        if sha256 is not None and (not isinstance(sha256, str) or not SHA256_RE.fullmatch(sha256)):
+            raise WorkflowResolutionError("Locked model SHA256 is invalid.")
+        destination = (category, normalized_filename)
+        if destination in destinations:
+            raise WorkflowResolutionError(
+                f"Duplicate locked model destination: models/{category}/{normalized_filename}"
+            )
+        destinations.add(destination)
+
+    node_ids: set[str] = set()
+    for node in lock["custom_nodes"]:
+        if not isinstance(node, Mapping) or not isinstance(node.get("id"), str):
+            raise WorkflowResolutionError("Each locked custom node requires an id.")
+        node_id = node["id"]
+        if not CNR_ID_RE.fullmatch(node_id):
+            raise WorkflowResolutionError(f"Invalid Comfy Registry id: {node_id!r}")
+        version = node.get("version")
+        if version is not None and (not isinstance(version, str) or len(version) > 128):
+            raise WorkflowResolutionError(f"Invalid version for custom node {node_id!r}.")
+        if node_id in node_ids:
+            raise WorkflowResolutionError(f"Duplicate custom node id: {node_id!r}")
+        node_ids.add(node_id)
+
     if require_resolved and unresolved:
         names = ", ".join(str(item.get("filename", "unknown")) for item in unresolved)
         raise WorkflowResolutionError(f"Workflow still has unresolved model dependencies: {names}")
