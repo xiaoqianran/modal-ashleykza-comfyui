@@ -82,6 +82,27 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["14"]["inputs"]["text"], "blur")
         self.assertEqual(prompt["13"]["inputs"]["clip"], ["1", 0])
 
+    def test_bind_number_inputs_only_touches_existing_keys(self):
+        prompt = {
+            "9": {
+                "class_type": "KSampler",
+                "inputs": {"seed": 1, "steps": 20, "cfg": 4.0, "model": ["1", 0]},
+            },
+            "8": {
+                "class_type": "EmptySD3LatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            },
+        }
+        workflow_queue.bind_number_inputs(
+            prompt,
+            {"seed": 99, "steps": 8, "width": 1024, "foo": 1},
+        )
+        self.assertEqual(prompt["9"]["inputs"]["seed"], 99)
+        self.assertEqual(prompt["9"]["inputs"]["steps"], 8)
+        self.assertEqual(prompt["9"]["inputs"]["cfg"], 4.0)
+        self.assertEqual(prompt["8"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["8"]["inputs"]["batch_size"], 1)
+
     def test_to_api_prompt_passthrough(self):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}
         self.assertEqual(workflow_queue.to_api_prompt(None, payload), payload)

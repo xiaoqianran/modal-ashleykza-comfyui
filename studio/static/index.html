@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Studio · Z-Image</title>
+  <title>Studio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,620&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -20,6 +20,9 @@
       </div>
     </div>
     <div class="top-meta">
+      <label class="recipe-pick">配方
+        <select id="recipe"></select>
+      </label>
       <span id="recipe-chip" class="chip">Z-Image</span>
       <span id="status-pill" class="pill">未连接</span>
     </div>
@@ -76,10 +79,16 @@
     <section class="stage">
       <div class="panel prompt-panel">
         <div class="stage-head">
-          <h2>批量提示词</h2>
+          <h2 id="recipe-heading">Z-Image</h2>
+          <p id="recipe-summary" class="hint">文生图。打开后默认选中 Z-Image。</p>
+        </div>
+        <div id="uploads" class="uploads" hidden></div>
+        <div id="prompt-wrap">
+          <label>提示词
+            <textarea id="prompts" rows="12" placeholder="雨后的上海侧街，霓虹倒影，35mm 纪实&#10;青瓷茶器静物，窗光，博物馆图录构图"></textarea>
+          </label>
           <p class="hint">一行一条。需要多行同一条时，用单独一行 <code>---</code> 分隔。</p>
         </div>
-        <textarea id="prompts" rows="12" placeholder="雨后的上海侧街，霓虹倒影，35mm 纪实&#10;青瓷茶器静物，窗光，博物馆图录构图"></textarea>
         <div class="params" id="params"></div>
         <div class="row">
           <button type="button" id="generate" class="btn primary grow">生成</button>

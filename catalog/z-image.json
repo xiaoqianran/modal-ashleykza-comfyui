@@ -1,29 +1,36 @@
 {
+  "schema": 1,
   "id": "z-image",
   "title": "Z-Image",
   "summary": "文生图。权重来自 Comfy-Org，锁内无自定义节点。",
+  "kind": "t2i",
+  "mode": "graph",
   "workflow": "examples/z-image-base.json",
   "lock": "examples/z-image-base.lock.json",
   "gpu": "T4",
   "gpu_choices": ["T4", "L4", "L40S"],
   "client_id": "studio-z-image",
   "filename_prefix": "Z_image_studio",
+  "io": {"images_in": 0},
   "params": [
     {
       "id": "prompt",
       "type": "text",
+      "bind": "prompt",
       "title": "提示词",
       "required": true
     },
     {
       "id": "negative",
       "type": "text",
+      "bind": "negative",
       "title": "负向提示词",
       "default": ""
     },
     {
       "id": "seed",
       "type": "int",
+      "bind": "seed",
       "title": "种子",
       "default": -1,
       "minimum": -1,
@@ -32,6 +39,7 @@
     {
       "id": "width",
       "type": "int",
+      "bind": "width",
       "title": "宽",
       "default": 1024,
       "minimum": 512,
@@ -41,6 +49,7 @@
     {
       "id": "height",
       "type": "int",
+      "bind": "height",
       "title": "高",
       "default": 1024,
       "minimum": 512,
@@ -50,6 +59,7 @@
     {
       "id": "steps",
       "type": "int",
+      "bind": "steps",
       "title": "步数",
       "default": 25,
       "minimum": 1,
@@ -58,6 +68,7 @@
     {
       "id": "cfg",
       "type": "float",
+      "bind": "cfg",
       "title": "CFG",
       "default": 4.0,
       "minimum": 1.0,
