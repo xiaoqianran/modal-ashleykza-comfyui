@@ -43,15 +43,22 @@ jobs:
           name: Studio-windows
           path: dist/Studio-windows.zip
           if-no-files-found: error
-      - name: Publish GitHub Release
-        if: >
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/studio-v')) ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')
+      - name: Publish draft from workflow_dispatch
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('studio-windows-{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || format('Studio Windows #{0}', github.run_number) }}
-          draft: ${{ github.event_name != 'push' }}
+          tag_name: studio-windows-${{ github.run_number }}
+          name: Studio Windows ${{ github.run_number }}
+          draft: true
+          files: dist/Studio-windows.zip
+          body: |
+            解压后双击 `Studio.exe`。需要本机联网、Modal 账号，以及 Hugging Face token。
+            工作流配方（FLUX / Qwen / Krea / Pixal3D / TripoSplat）还需要本机 Chrome 或 Edge。
+            GPU 仍在 Modal 上，本机 exe 只是控制台。
+      - name: Publish tagged release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/studio-v')
+        uses: softprops/action-gh-release@v2
+        with:
           files: dist/Studio-windows.zip
           body: |
             解压后双击 `Studio.exe`。需要本机联网、Modal 账号，以及 Hugging Face token。
