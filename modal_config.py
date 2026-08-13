@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
 
 def _integer(
@@ -41,18 +39,13 @@ def wants_latest_dependencies(
     environ: Mapping[str, str],
     argv: Sequence[str] | None = None,
 ) -> bool:
-    """Return whether local Modal commands should ignore Image cache for Git clones.
+    """Rebuild Image clone layers only when COMFY_LATEST is explicitly on.
 
-    ``modal serve`` always fetches the current GitHub HEAD / unpinned registry
-    versions. ``modal deploy`` keeps the Image cache unless ``COMFY_LATEST=1``.
+    Models live on a persistent Modal Volume. ``hydrate`` / ``workflow-sync``
+    fill that Volume on CPU; serve/deploy should not re-download them.
     """
-    raw = environ.get("COMFY_LATEST", "").strip().lower()
-    if raw in {"1", "true", "yes", "on"}:
-        return True
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    args = argv if argv is not None else sys.argv
-    return any(Path(arg).name == "serve" for arg in args)
+    del argv  # kept for call-site compatibility
+    return _boolean(environ, "COMFY_LATEST", False)
 
 
 @dataclass(frozen=True)
@@ -60,6 +53,9 @@ class ModalSettings:
     app_name: str
     image_tag: str
     volume_name: str
+    models_volume_name: str
+    storage_root: str
+    hydrate_workers: int
     profile_name: str
     gpu: tuple[str, ...]
     secret_name: str
@@ -111,6 +107,20 @@ class ModalSettings:
                 "comfyui-ashleykza-workspace",
             ).strip()
             or "comfyui-ashleykza-workspace",
+            models_volume_name=environ.get(
+                "MODAL_MODELS_VOLUME",
+                "comfyui-ashleykza-models",
+            ).strip()
+            or "comfyui-ashleykza-models",
+            storage_root=environ.get("COMFY_STORAGE_ROOT", "/mnt/comfy-storage").strip()
+            or "/mnt/comfy-storage",
+            hydrate_workers=_integer(
+                environ,
+                "COMFY_HYDRATE_WORKERS",
+                4,
+                minimum=1,
+                maximum=16,
+            ),
             profile_name=environ.get("COMFY_PROFILE", "base").strip() or "base",
             gpu=gpu,
             secret_name=environ.get("MODAL_SECRET_NAME", "comfyui-creds").strip()

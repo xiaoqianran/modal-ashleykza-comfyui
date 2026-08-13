@@ -9,15 +9,15 @@
 ## 两阶段命令
 
 ```bash
-modal run comfyui_modal.py \
-  --action workflow-sync \
+modal run hydrate_modal.py \
+  --action hydrate \
   --workflow path/to/workflow.json
 
 COMFY_WORKFLOW_LOCK=path/to/workflow.lock.json \
 modal deploy comfyui_modal.py
 ```
 
-第一条命令在本地解析文件，然后调用 `sync_workflow` CPU Function。第二条命令让 Modal 重新构建 Runtime Image；锁定的 CNR 节点在 Image build 中安装。本地 `modal serve` 会 `force_build` 这些节点层，因此每次都是 GitHub / Registry 当前版本。
+第一条命令在本地解析文件，然后调用 CPU hydrate，把模型并行写入 `comfyui-ashleykza-models` Volume。第二条命令构建 Runtime Image；锁定的 CNR 节点在 Image build 中安装。默认复用 Image 缓存；只有 `COMFY_LATEST=1` 才强制重克隆 GitHub / Registry。模型路径映射见 [`STORAGE.md`](STORAGE.md)。
 
 ## 解析规则
 
@@ -73,7 +73,7 @@ modal deploy comfyui_modal.py
 
 ## 幂等与一致性
 
-- 同步结果记录在 `/workspace/state/comfy.lock.json`；
+- 同步结果记录在 `/mnt/comfy-storage/.state/comfy.lock.json`；
 - 有 SHA256 时按哈希验证，无哈希时按 URL 与文件大小复用；
 - 每完成一个模型就原子更新状态锁，长任务中断后可以继续；
 - Function 成功后显式提交 Volume；

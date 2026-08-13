@@ -1,7 +1,7 @@
 [project]
 name = "modal-ashleykza-comfyui"
-version = "0.2.1"
-description = "Reproducible ComfyUI recipes and workflow prefetching on Modal"
+version = "0.3.0"
+description = "Reproducible ComfyUI recipes and Modal Storage hydrate"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,5 +22,6 @@ known-first-party = [
     "comfyui_modal",
     "modal_config",
     "recipes",
+    "storage",
     "workflow_resolver",
 ]
