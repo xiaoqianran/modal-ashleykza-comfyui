@@ -11,4 +11,7 @@ site/
 artifacts/
 .studio.env
 .studio/
+dist/
+build/
+*.spec
 

@@ -39,7 +39,7 @@ modal serve comfyui_modal.py
 python -m studio
 ```
 
-Windows 也可以双击仓库根目录的 `open-studio.bat`。打开 `http://127.0.0.1:8787`，默认就是 Z-Image。下拉里还有 FLUX.2 [dev]、Qwen-Image-2512、Krea-2 Turbo、Pixal3D、TripoSplat。密钥写在 `.studio.env`，不会进 Git。见文档「Studio」。
+Windows 也可以双击仓库根目录的 `open-studio.bat`。没有 Python 时下载 Releases 里的 `Studio-windows.zip`，解压后双击 `Studio.exe`。打开 `http://127.0.0.1:8787`，默认就是 Z-Image。下拉里还有 FLUX.2 [dev]、Qwen-Image-2512、Krea-2 Turbo、Pixal3D、TripoSplat。密钥写在 `.studio.env`（便携版在 `app/.studio.env`），不会进 Git。见文档「Studio」。
 
 后面加工作流不必再写一份 queue 脚本。先 `--inspect`，再 hydrate，再用 `python3 -m workflow_queue` 交给 ComfyUI 自己做 `graphToPrompt()`。官方那几百份模板先用 `python3 -m template_analyzer` 分类。解析器只绑定 JSON 里已经写明的 URL / CNR，不会为每个模板猜下载源。本机 App：`python -m studio`，打开后默认 Z-Image 配置；换配方只加 `catalog/<id>.json`。
 

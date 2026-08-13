@@ -37,6 +37,16 @@ class SaveKeysTests(unittest.TestCase):
             dumped = json.dumps({"studio": text})
             self.assertNotIn("MODAL_TOKEN_SECRET=", dumped)
 
+    def test_chmod_oserror_is_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".studio.env"
+            with (
+                patch("studio.keys.STUDIO_ENV_PATH", path),
+                patch("pathlib.Path.chmod", side_effect=OSError("unsupported")),
+            ):
+                save_keys({"HF_TOKEN": "hf_test_token_value"})
+            self.assertIn("HF_TOKEN=hf_test_token_value", path.read_text(encoding="utf-8"))
+
 
 class StudioLaunchTests(unittest.TestCase):
     def test_parse_args_defaults_open_browser(self):

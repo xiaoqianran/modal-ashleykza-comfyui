@@ -64,7 +64,10 @@ def save_keys(updates: dict[str, str]) -> dict[str, str]:
         if current.get(key):
             lines.append(f"{key}={current[key]}")
     STUDIO_ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    STUDIO_ENV_PATH.chmod(0o600)
+    try:
+        STUDIO_ENV_PATH.chmod(0o600)
+    except OSError:
+        pass
     return load_keys()
 
 

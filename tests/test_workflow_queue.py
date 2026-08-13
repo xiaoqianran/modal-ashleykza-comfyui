@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -235,6 +237,40 @@ class WorkflowBindTests(unittest.TestCase):
         payload = json.loads(buffer.getvalue())
         self.assertEqual(payload["format"], "ui")
         self.assertTrue(payload["nodes"])
+
+
+class ChromePathTests(unittest.TestCase):
+    def test_comfy_chrome_override_wins_when_file_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            chrome = Path(directory) / "chrome.exe"
+            chrome.write_text("", encoding="utf-8")
+            with patch.dict(os.environ, {"COMFY_CHROME": str(chrome)}, clear=False):
+                self.assertEqual(workflow_queue.chrome_executable(), str(chrome))
+
+    def test_windows_edge_is_among_candidates(self):
+        local = r"C:\Users\demo\AppData\Local"
+        with patch.dict(os.environ, {"LOCALAPPDATA": local, "COMFY_CHROME": ""}, clear=False):
+            paths = [str(item) for item in workflow_queue.chrome_search_paths()]
+        self.assertTrue(
+            any(
+                item.replace("\\", "/").endswith("Microsoft/Edge/Application/msedge.exe")
+                for item in paths
+            )
+        )
+        self.assertTrue(
+            any(
+                item.replace("\\", "/").endswith("Google/Chrome/Application/chrome.exe")
+                for item in paths
+            )
+        )
+
+    def test_missing_browser_returns_none(self):
+        with (
+            patch.dict(os.environ, {"COMFY_CHROME": "", "LOCALAPPDATA": ""}, clear=False),
+            patch("workflow_queue.shutil.which", return_value=None),
+            patch("pathlib.Path.is_file", return_value=False),
+        ):
+            self.assertIsNone(workflow_queue.chrome_executable())
 
 
 if __name__ == "__main__":

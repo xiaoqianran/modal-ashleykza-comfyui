@@ -11,6 +11,7 @@ import argparse
 import json
 import mimetypes
 import os
+import shutil
 import time
 import urllib.error
 import urllib.parse
@@ -264,16 +265,67 @@ def inspect_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     return {"format": "ui", "nodes": nodes}
 
 
+def chrome_search_paths() -> list[Path]:
+    paths: list[Path] = []
+    override = os.environ.get("COMFY_CHROME", "").strip()
+    if override:
+        paths.append(Path(override))
+    paths.extend(
+        Path(item)
+        for item in (
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Microsoft Edge.app/Contents/Microsoft Edge",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        )
+    )
+    local_app = os.environ.get("LOCALAPPDATA", "").strip()
+    if local_app:
+        root = Path(local_app)
+        paths.append(root / "Google" / "Chrome" / "Application" / "chrome.exe")
+        paths.append(root / "Microsoft" / "Edge" / "Application" / "msedge.exe")
+    for name in (
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "chrome",
+        "msedge",
+    ):
+        found = shutil.which(name)
+        if found:
+            paths.append(Path(found))
+    return paths
+
+
+def chrome_executable() -> str | None:
+    seen: set[str] = set()
+    for path in chrome_search_paths():
+        resolved = str(path)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if path.is_file():
+            return resolved
+    return None
+
+
 def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
     """Flatten subgraphs the same way the ComfyUI Queue button does."""
     from playwright.sync_api import sync_playwright
 
-    chrome = os.environ.get("COMFY_CHROME", "/usr/bin/google-chrome")
     launch: dict[str, Any] = {
         "headless": True,
         "args": ["--no-sandbox", "--disable-dev-shm-usage"],
     }
-    if Path(chrome).is_file():
+    chrome = chrome_executable()
+    if chrome:
         launch["executable_path"] = chrome
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(**launch)
