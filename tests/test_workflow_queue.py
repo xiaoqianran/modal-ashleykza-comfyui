@@ -1,6 +1,7 @@
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import workflow_queue
 
@@ -133,6 +134,28 @@ class WorkflowBindTests(unittest.TestCase):
     def test_to_api_prompt_passthrough(self):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}
         self.assertEqual(workflow_queue.to_api_prompt(None, payload), payload)
+
+    def test_wait_history_fails_fast_when_prompt_never_enters_queue(self):
+        clock = {"t": 0.0}
+
+        def fake_http(url: str, payload=None, timeout: int = 120):
+            del payload, timeout
+            if url.endswith("/queue"):
+                return {"queue_running": [], "queue_pending": []}
+            return {}
+
+        with (
+            patch.object(workflow_queue, "http_json", fake_http),
+            patch.object(workflow_queue.time, "sleep", lambda seconds: clock.__setitem__("t", clock["t"] + seconds)),
+            patch.object(workflow_queue.time, "time", lambda: clock["t"]),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "never appeared"):
+                workflow_queue.wait_history(
+                    "http://comfy",
+                    "missing-id",
+                    timeout=120,
+                    lost_after=4,
+                )
 
     def test_inspect_cli_does_not_need_base_url(self):
         import io
