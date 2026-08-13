@@ -19,7 +19,10 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from workflow_queue import convert_ui_workflow as convert_with_browser  # noqa: E402
+from workflow_queue import (  # noqa: E402,I001
+    convert_ui_workflow as convert_with_browser,
+    wait_history,
+)
 
 CLIENT_ID = "ltx25-agent"
 MISSING_API_TYPES = {"GemmaAPITextEncode"}
@@ -222,39 +225,6 @@ def fix_converted_prompt(prompt: dict, dummy_image: str) -> dict:
     if isinstance(i2v, dict) and i2v.get("class_type") == "LTXVImgToVideoInplace":
         i2v.setdefault("inputs", {})["strength"] = 0.7
     return prompt
-
-
-def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict:
-    deadline = time.time() + timeout
-    last_status = None
-    while time.time() < deadline:
-        try:
-            queue = _http_json(f"{base}/queue", timeout=30)
-            history = _http_json(f"{base}/history/{prompt_id}", timeout=30)
-        except Exception as exc:  # noqa: BLE001
-            print(json.dumps({"poll_error": str(exc)}), flush=True)
-            time.sleep(2)
-            continue
-        item = history.get(prompt_id)
-        running = (queue.get("queue_running") or []) + (queue.get("queue_pending") or [])
-        status = {
-            "running": len(queue.get("queue_running") or []),
-            "pending": len(queue.get("queue_pending") or []),
-            "done": bool(item),
-        }
-        if status != last_status:
-            print(json.dumps({"queue": status}), flush=True)
-            last_status = status
-        if item:
-            return item
-        if not running:
-            # Prompt may have failed without history yet.
-            time.sleep(2)
-            history = _http_json(f"{base}/history/{prompt_id}", timeout=30)
-            if prompt_id in history:
-                return history[prompt_id]
-        time.sleep(2)
-    raise TimeoutError(f"prompt {prompt_id} did not finish")
 
 
 def _safe_dest(dest: Path, filename: str) -> Path:

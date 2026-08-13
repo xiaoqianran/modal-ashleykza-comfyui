@@ -1,0 +1,40 @@
+{
+  "custom_nodes": [],
+  "models": [
+    {
+      "category": "diffusion_models",
+      "filename": "flux2_dev_fp8mixed.safetensors",
+      "sha256": null,
+      "source": "node:UNETLoader",
+      "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/diffusion_models/flux2_dev_fp8mixed.safetensors"
+    },
+    {
+      "category": "loras",
+      "filename": "Flux_2-Turbo-LoRA_comfyui.safetensors",
+      "sha256": null,
+      "source": "node:LoraLoaderModelOnly",
+      "url": "https://huggingface.co/ByteZSzn/Flux.2-Turbo-ComfyUI/resolve/main/Flux_2-Turbo-LoRA_comfyui.safetensors"
+    },
+    {
+      "category": "text_encoders",
+      "filename": "mistral_3_small_flux2_bf16.safetensors",
+      "sha256": null,
+      "source": "node:CLIPLoader",
+      "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "full_encoder_small_decoder.safetensors",
+      "sha256": null,
+      "source": "node:VAELoader",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors"
+    }
+  ],
+  "schema": 1,
+  "unresolved": [],
+  "warnings": [],
+  "workflow": {
+    "name": "flux2-dev-t2i.json",
+    "sha256": "440a33ed8079a602c420910afc0cf860e4d3ed4114f5df10399a80b9237b48fa"
+  }
+}

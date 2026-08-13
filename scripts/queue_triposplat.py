@@ -18,7 +18,10 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from workflow_queue import convert_ui_workflow as convert_with_browser  # noqa: E402
+from workflow_queue import (  # noqa: E402,I001
+    convert_ui_workflow as convert_with_browser,
+    wait_history,
+)
 
 CLIENT_ID = "triposplat-agent"
 ENABLE_GLB_TYPES = {"SplatToMesh", "SaveGLB"}
@@ -116,32 +119,6 @@ def _safe_dest(dest: Path, filename: str) -> Path:
     if path != dest and dest not in path.parents:
         raise ValueError(f"output path escapes destination: {filename!r}")
     return path
-
-
-def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict:
-    deadline = time.time() + timeout
-    last_status = None
-    while time.time() < deadline:
-        try:
-            queue = _http_json(f"{base}/queue", timeout=30)
-            history = _http_json(f"{base}/history/{prompt_id}", timeout=30)
-        except Exception as exc:  # noqa: BLE001
-            print(json.dumps({"poll_error": str(exc)}), flush=True)
-            time.sleep(2)
-            continue
-        item = history.get(prompt_id)
-        status = {
-            "running": len(queue.get("queue_running") or []),
-            "pending": len(queue.get("queue_pending") or []),
-            "done": bool(item),
-        }
-        if status != last_status:
-            print(json.dumps({"queue": status}), flush=True)
-            last_status = status
-        if item:
-            return item
-        time.sleep(2)
-    raise TimeoutError(f"prompt {prompt_id} did not finish")
 
 
 def download_outputs(base: str, history: dict, dest: Path) -> list[Path]:

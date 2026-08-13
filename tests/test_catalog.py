@@ -24,6 +24,8 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(ids[0], DEFAULT_CATALOG_ID)
         self.assertIn("pixal3d", ids)
         self.assertIn("triposplat", ids)
+        self.assertIn("flux2-dev", ids)
+        self.assertIn("qwen-image-2512", ids)
         self.assertEqual(items[0]["kind"], "t2i")
         self.assertEqual(items[0]["io"]["images_in"], 0)
 
@@ -103,6 +105,23 @@ class CatalogTests(unittest.TestCase):
         )
         self.assertEqual(graph["12"]["inputs"]["image"], "chair.png")
         self.assertEqual(api_prompt["12"]["inputs"]["image"], "old.png")
+
+    def test_flux2_and_qwen2512_are_workflow_mode_on_pro6000(self):
+        flux = load_catalog("flux2-dev")
+        qwen = load_catalog("qwen-image-2512")
+        self.assertEqual(flux["mode"], "workflow")
+        self.assertEqual(qwen["mode"], "workflow")
+        self.assertNotIn("graph", flux)
+        self.assertNotIn("graph", qwen)
+        self.assertEqual(flux["gpu"], "RTX-PRO-6000")
+        self.assertEqual(flux["gpu_choices"], ["RTX-PRO-6000"])
+        self.assertEqual(qwen["gpu"], "RTX-PRO-6000")
+        self.assertIn("RTX-PRO-6000", qwen["gpu_choices"])
+        self.assertNotIn("T4", flux["gpu_choices"])
+        self.assertTrue(public_catalog(flux)["io"]["prompt"])
+        self.assertTrue(public_catalog(qwen)["io"]["prompt"])
+        self.assertTrue(public_catalog(qwen)["io"]["negative"])
+        self.assertFalse(public_catalog(flux)["io"]["negative"])
 
     def test_rejects_path_escape_in_workflow_field(self):
         catalog = dict(load_catalog("z-image"))

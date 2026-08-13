@@ -98,9 +98,29 @@ def wait_ready(base: str, timeout: int = 900) -> dict[str, Any]:
     raise TimeoutError(f"ComfyUI not ready: {last_error}")
 
 
-def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict[str, Any]:
+def queue_prompt_ids(queue: Any) -> set[str]:
+    """ComfyUI ``/queue`` items are ``[number, prompt_id, prompt, extra]``."""
+    ids: set[str] = set()
+    if not isinstance(queue, Mapping):
+        return ids
+    for key in ("queue_running", "queue_pending"):
+        for item in queue.get(key) or ():
+            if isinstance(item, list | tuple) and len(item) >= 2:
+                ids.add(str(item[1]))
+    return ids
+
+
+def wait_history(
+    base: str,
+    prompt_id: str,
+    timeout: int = 45 * 60,
+    *,
+    lost_after: int = 60,
+) -> dict[str, Any]:
     deadline = time.time() + timeout
     last_status: dict[str, Any] | None = None
+    seen_in_queue = False
+    missing_since: float | None = None
     root = base.rstrip("/")
     while time.time() < deadline:
         try:
@@ -110,7 +130,12 @@ def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict[str,
             print(json.dumps({"poll_error": str(exc)}), flush=True)
             time.sleep(2)
             continue
-        item = history.get(prompt_id) if isinstance(history, dict) else None
+        if not isinstance(queue, Mapping):
+            queue = {}
+        if not isinstance(history, Mapping):
+            history = {}
+        item = history.get(prompt_id)
+        in_queue = prompt_id in queue_prompt_ids(queue)
         status = {
             "running": len(queue.get("queue_running") or []),
             "pending": len(queue.get("queue_pending") or []),
@@ -121,6 +146,24 @@ def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict[str,
             last_status = status
         if item:
             return item
+        if in_queue:
+            seen_in_queue = True
+            missing_since = None
+        else:
+            if missing_since is None:
+                missing_since = time.time()
+            elif time.time() - missing_since >= lost_after:
+                if seen_in_queue:
+                    raise RuntimeError(
+                        f"prompt {prompt_id} left /queue without /history "
+                        f"after {lost_after}s. GPU container likely recycled "
+                        "(scaledown_window=5s). Re-queue and keep polling."
+                    )
+                raise RuntimeError(
+                    f"prompt {prompt_id} never appeared in /queue or /history "
+                    f"after {lost_after}s. GPU container likely recycled "
+                    "(scaledown_window=5s). Re-queue and keep polling."
+                )
         time.sleep(2)
     raise TimeoutError(f"prompt {prompt_id} did not finish within {timeout}s")
 
@@ -302,8 +345,11 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
     return prompt
 
 
-SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced"}
+SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced"}
+SEED_TYPES = SAMPLER_TYPES | {"RandomNoise"}
+SCHEDULER_TYPES = {"Flux2Scheduler"}
 NUMBER_KEYS = {"seed", "steps", "cfg", "denoise", "width", "height"}
+SEED_INPUT_KEYS = ("seed", "noise_seed")
 
 
 def bind_number_inputs(prompt: dict[str, Any], values: Mapping[str, Any]) -> dict[str, Any]:
@@ -320,11 +366,18 @@ def bind_number_inputs(prompt: dict[str, Any], values: Mapping[str, Any]) -> dic
             continue
         inputs = node.setdefault("inputs", {})
         class_type = str(node.get("class_type") or "")
-        if class_type in SAMPLER_TYPES:
-            for key in ("seed", "steps", "cfg", "denoise"):
+        if class_type in SEED_TYPES and "seed" in wanted:
+            for key in SEED_INPUT_KEYS:
+                if key in inputs:
+                    inputs[key] = wanted["seed"]
+        if class_type in SAMPLER_TYPES | SCHEDULER_TYPES:
+            for key in ("steps", "cfg", "denoise"):
                 if key in wanted and key in inputs:
                     inputs[key] = wanted[key]
-        if class_type.startswith("Empty") and "Latent" in class_type:
+        if (
+            (class_type.startswith("Empty") and "Latent" in class_type)
+            or class_type in SCHEDULER_TYPES
+        ):
             for key in ("width", "height"):
                 if key in wanted and key in inputs:
                     inputs[key] = wanted[key]

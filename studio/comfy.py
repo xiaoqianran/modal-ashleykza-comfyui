@@ -2,53 +2,33 @@
 
 from __future__ import annotations
 
-import json
-import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+import workflow_queue
+
 
 def http_json(url: str, payload: dict | None = None, timeout: int = 120) -> Any:
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"} if data else {},
-        method="GET" if data is None else "POST",
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        body = response.read()
-    return json.loads(body.decode("utf-8") or "{}")
+    return workflow_queue.http_json(url, payload, timeout=timeout)
 
 
 def wait_ready(base: str, timeout: int = 900) -> dict[str, Any]:
-    deadline = time.time() + timeout
-    last_error: Exception | None = None
-    while time.time() < deadline:
-        try:
-            stats = http_json(f"{base.rstrip('/')}/system_stats", timeout=20)
-            devices = stats.get("devices") or []
-            return {
-                "ready": True,
-                "devices": [device.get("name") for device in devices],
-            }
-        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            last_error = exc
-            time.sleep(2)
-    raise TimeoutError(f"ComfyUI not ready: {last_error}")
+    stats = workflow_queue.wait_ready(base, timeout=timeout)
+    devices = stats.get("devices") or []
+    return {
+        "ready": True,
+        "devices": [device.get("name") for device in devices],
+    }
 
 
 def wait_history(base: str, prompt_id: str, timeout: int = 900) -> dict[str, Any]:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        history = http_json(f"{base.rstrip('/')}/history/{prompt_id}", timeout=30)
-        if prompt_id in history:
-            return history[prompt_id]
-        time.sleep(2)
-    raise TimeoutError(f"prompt {prompt_id} did not finish within {timeout}s")
+    return workflow_queue.wait_history(base, prompt_id, timeout=timeout)
+
+
+def queue_prompt(base: str, graph: dict[str, Any], client_id: str) -> str:
+    return workflow_queue.queue_prompt(base, graph, client_id)
 
 
 def _safe_dest(dest: Path, filename: str) -> Path:
@@ -83,17 +63,3 @@ def download_images(base: str, history: dict[str, Any], dest: Path) -> list[Path
                 path.write_bytes(response.read())
             saved.append(path)
     return saved
-
-
-def queue_prompt(base: str, graph: dict[str, Any], client_id: str) -> str:
-    queued = http_json(
-        f"{base.rstrip('/')}/prompt",
-        {"prompt": graph, "client_id": client_id},
-        timeout=120,
-    )
-    if queued.get("error") or queued.get("node_errors"):
-        raise RuntimeError(json.dumps(queued, ensure_ascii=False)[:4000])
-    prompt_id = queued.get("prompt_id")
-    if not prompt_id:
-        raise RuntimeError("ComfyUI /prompt returned no prompt_id")
-    return str(prompt_id)
