@@ -18,7 +18,7 @@ GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hyd
 
 ## modal run hydrate 在构建巨大 GPU Image
 
-用错了入口。请使用 `hydrate_modal.py`（App 名带 `-hydrate` 后缀），不要 `modal run comfyui_modal.py --action hydrate`。
+用错了入口。请使用 `hydrate_modal.py`，不要 `modal run comfyui_modal.py` 做下载。
 
 ## 冷启动仍然很慢
 
@@ -37,7 +37,7 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## GitHub clone 失败 / 限额
 
-在 Secret 里提供 `GITHUB_TOKEN`，或使用 `COMFY_BASE_NODES=0` 跳过完整插件克隆。
+在 Secret 里提供 `GITHUB_TOKEN`。默认不克隆插件；只有 `COMFY_BASE_NODES=1` 或 `COMFY_INSTALL_NODES=1` 才会去 GitHub / CNR。
 
 ## 工作流仍有 unresolved
 

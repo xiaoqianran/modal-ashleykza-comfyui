@@ -4,11 +4,11 @@
 
 ```bash
 modal run hydrate_modal.py --action profiles
-modal run hydrate_modal.py --action hydrate --profile qwen-image
-COMFY_PROFILE=qwen-image COMFY_BASE_NODES=0 MODAL_GPU=L4 modal deploy comfyui_modal.py
+modal run hydrate_modal.py --profile qwen-image
+COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 ```
 
-未指定时默认 `COMFY_PROFILE=base`（只有运行时 + 基础节点，不含模型包）。
+未指定时默认 `COMFY_PROFILE=base`。配方里的 **node packs 默认不安装**。
 
 ## 当前配方
 
@@ -28,7 +28,7 @@ COMFY_PROFILE=qwen-image COMFY_BASE_NODES=0 MODAL_GPU=L4 modal deploy comfyui_mo
 Z-Image 示例不走 profile，直接：
 
 ```bash
-modal run hydrate_modal.py --action hydrate --workflow examples/z-image-base.json
+modal run hydrate_modal.py --workflow examples/z-image-base.json
 ```
 
 名称、模型 URL 与节点仓库以仓库当前 `recipes.py` 为准。

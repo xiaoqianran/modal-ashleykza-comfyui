@@ -11,7 +11,11 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.ui_scaledown_window_seconds, 5)
         self.assertEqual(settings.gpu, ("T4", "L4", "L40S", "RTX-PRO-6000"))
         self.assertEqual(settings.secret_name, "comfyui-creds")
-        self.assertTrue(settings.base_nodes_enabled)
+        self.assertFalse(settings.base_nodes_enabled)
+        self.assertFalse(settings.install_nodes)
+        self.assertEqual(settings.launch_mode, "profile")
+        self.assertEqual(settings.profile_name, "base")
+        self.assertEqual(settings.workflow_source, "")
         self.assertFalse(settings.latest_dependencies)
 
     def test_parses_gpu_fallback_and_proxy_auth(self):
@@ -82,6 +86,39 @@ class ModalSettingsTests(unittest.TestCase):
             }
         )
         self.assertFalse(forced_off.gpu_snapshot)
+
+    def test_workflow_mode_from_env_and_argv(self):
+        from_env = ModalSettings.from_env(
+            {
+                "COMFY_WORKFLOW": "examples/z-image-base.json",
+                "COMFY_PROFILE": "qwen-image",
+            }
+        )
+        self.assertEqual(from_env.launch_mode, "workflow")
+        self.assertEqual(from_env.workflow_source, "examples/z-image-base.json")
+        self.assertEqual(
+            from_env.workflow_lock_source,
+            "examples/z-image-base.lock.json",
+        )
+        self.assertEqual(from_env.profile_name, "qwen-image")
+
+        from_argv = ModalSettings.from_env(
+            {},
+            argv=["modal", "serve", "comfyui_modal.py", "--workflow", "wf.json"],
+        )
+        self.assertEqual(from_argv.launch_mode, "workflow")
+        self.assertEqual(from_argv.workflow_source, "wf.json")
+        self.assertEqual(from_argv.workflow_lock_source, "wf.lock.json")
+
+    def test_install_nodes_is_opt_in(self):
+        self.assertFalse(ModalSettings.from_env({}).install_nodes)
+        enabled = ModalSettings.from_env({"COMFY_INSTALL_NODES": "1"})
+        self.assertTrue(enabled.install_nodes)
+        flagged = ModalSettings.from_env(
+            {},
+            argv=["modal", "serve", "comfyui_modal.py", "--install-nodes"],
+        )
+        self.assertTrue(flagged.install_nodes)
 
 
 if __name__ == "__main__":

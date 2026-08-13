@@ -27,14 +27,16 @@
 | `COMFY_MEMORY_SNAPSHOT` | `true` | `modal deploy` 后保存 CPU 快照 |
 | `COMFY_GPU_SNAPSHOT` | `true` | GPU 快照；依赖 memory snapshot |
 
-## Image / 节点
+## 启动方式
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `COMFY_BASE_NODES` | `true` | `0` / `false` / `no` 时跳过约 130 个 GitHub 节点 |
+| `COMFY_WORKFLOW` | 空 | 工作流 JSON/PNG 路径；设置后为 workflow 模式 |
+| `COMFY_PROFILE` | `base` | 配方名；无 `COMFY_WORKFLOW` 时为 profile 模式 |
+| `COMFY_WORKFLOW_LOCK` | 空 | 已有锁文件；workflow 模式默认写成同名 `.lock.json` |
+| `COMFY_INSTALL_NODES` | `false` | `1` 时才安装配方 / 锁文件里的自定义节点 |
+| `COMFY_BASE_NODES` | `false` | `1` 时才克隆约 130 个上游 GitHub 节点 |
 | `COMFY_LATEST` | `false` | `1` 时强制重建节点 Image 层 |
-| `COMFY_PROFILE` | `base` | `recipes.py` 配方名 |
-| `COMFY_WORKFLOW_LOCK` | 空 | 构建时嵌入 Image 的锁文件路径 |
 | `EXTRA_ARGS` | 空 | 追加到 ComfyUI 进程的参数 |
 
 ## Hydrate
