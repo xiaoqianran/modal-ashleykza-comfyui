@@ -80,6 +80,20 @@ COMFY_BASE_NODES=0 MODAL_GPU=L4 modal serve comfyui_modal.py
 
 `COMFY_BASE_NODES=0` 跳过 130 个 GitHub 节点克隆，适合只跑 comfy-core 工作流。需要刷新节点 Image 时再设 `COMFY_LATEST=1`。
 
+## Memory Snapshot
+
+`modal deploy` 后，GPU UI 会给容器做 CPU + GPU memory snapshot。`modal serve` 不会保存快照。
+
+- 前 2–3 次冷启动会稍慢（给每种 GPU worker 建快照），按 L4 大约每次多几十秒，合计大约 **$0.05–$0.15 一次性**。
+- 之后从快照恢复，ComfyUI 进程启动那 ~90s 可以砍掉一大截。首张把 safetensors 装进显存（~50s）官方说不一定更快。
+- 快照没有单独加价；只付实际 GPU 秒数。恢复更快时，每次冷启动通常更省。
+- 关掉：`COMFY_MEMORY_SNAPSHOT=0`。只关 GPU 快照：`COMFY_GPU_SNAPSHOT=0`。
+- 空闲 **5 秒** 后缩掉 GPU（`COMFY_SCALEDOWN_SECONDS`，Modal 下限 2 秒）。
+
+```bash
+COMFY_BASE_NODES=0 MODAL_GPU=L4 modal deploy comfyui_modal.py
+```
+
 ## 幂等
 
 - 目标文件已存在且 URL/大小（或 SHA256）匹配则 `[SKIP]`；

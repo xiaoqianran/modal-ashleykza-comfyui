@@ -15,7 +15,7 @@
 | 资源声明 | hydrate 使用 8 CPU / 16 GiB、默认 4 路并行；UI 显式 GPU fallback | 容量和成本可预期 |
 | 超时 | UI 最大 24 小时；独立 `startup_timeout` | 遵守 Function 超时上限并给大 Image 冷启动留时间 |
 | 并发 | `max_inputs` 与 `target_inputs` 可配置 | WebSocket / HTTP 并发有上限，扩容阈值明确 |
-| 缩容 | `scaledown_window` 可配置 | 在冷启动成本和空闲 GPU 成本之间取舍 |
+| 缩容 | UI 默认空闲 5 秒后缩掉（Modal 允许 2–1200 秒） | 配合 snapshot，少付 GPU 空转 |
 | Web 认证 | 可选 `requires_proxy_auth` | 保留浏览器兼容，同时提供 Modal 代理认证开关 |
 
 官方参考：
@@ -29,6 +29,10 @@
 - [Web endpoint proxy authentication](https://modal.com/docs/guide/webhook-proxy-auth)
 
 ## 关键取舍
+
+### GPU UI 使用 Cls + memory snapshot
+
+`modal deploy` 后对 ComfyUI 进程做 CPU/GPU memory snapshot，缩到零后的下一次冷启动可以跳过大部分进程初始化。快照没有单独计费，只付实际 GPU 秒数；每种 GPU worker 前 2–3 次冷启动会多付一次捕获时间。`modal serve` 不持久化快照。权重从 Volume 装进显存仍可能是首张的主要耗时。
 
 ### 保留 `web_server`，不改为 Server primitive
 

@@ -8,7 +8,7 @@ class ModalSettingsTests(unittest.TestCase):
         settings = ModalSettings.from_env({})
         self.assertEqual(settings.ui_timeout_seconds, 24 * 60 * 60)
         self.assertEqual(settings.ui_startup_timeout_seconds, 15 * 60)
-        self.assertEqual(settings.ui_scaledown_window_seconds, 5 * 60)
+        self.assertEqual(settings.ui_scaledown_window_seconds, 5)
         self.assertEqual(settings.gpu, ("T4", "L4", "L40S", "RTX-PRO-6000"))
         self.assertEqual(settings.secret_name, "comfyui-creds")
         self.assertTrue(settings.base_nodes_enabled)
@@ -48,6 +48,8 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertFalse(wants_latest_dependencies({"COMFY_LATEST": "0"}, ["modal", "serve"]))
         settings = ModalSettings.from_env({}, argv=["/usr/bin/modal", "serve", "comfyui_modal.py"])
         self.assertFalse(settings.latest_dependencies)
+        self.assertTrue(settings.memory_snapshot)
+        self.assertTrue(settings.gpu_snapshot)
         self.assertEqual(settings.models_volume_name, "comfyui-ashleykza-models")
         self.assertEqual(settings.storage_root, "/mnt/comfy-storage")
         self.assertEqual(settings.hydrate_workers, 4)
@@ -63,6 +65,23 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.models_volume_name, "my-models")
         self.assertEqual(settings.storage_root, "/models")
         self.assertEqual(settings.hydrate_workers, 8)
+
+    def test_parses_snapshot_flags(self):
+        settings = ModalSettings.from_env(
+            {
+                "COMFY_MEMORY_SNAPSHOT": "0",
+                "COMFY_GPU_SNAPSHOT": "0",
+            }
+        )
+        self.assertFalse(settings.memory_snapshot)
+        self.assertFalse(settings.gpu_snapshot)
+        forced_off = ModalSettings.from_env(
+            {
+                "COMFY_MEMORY_SNAPSHOT": "0",
+                "COMFY_GPU_SNAPSHOT": "1",
+            }
+        )
+        self.assertFalse(forced_off.gpu_snapshot)
 
 
 if __name__ == "__main__":

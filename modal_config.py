@@ -68,6 +68,8 @@ class ModalSettings:
     ui_max_inputs: int
     ui_target_inputs: int
     ui_requires_proxy_auth: bool
+    memory_snapshot: bool
+    gpu_snapshot: bool
 
     @classmethod
     def from_env(
@@ -94,6 +96,9 @@ class ModalSettings:
             minimum=1,
             maximum=max_inputs,
         )
+
+        memory_snapshot = _boolean(environ, "COMFY_MEMORY_SNAPSHOT", True)
+        gpu_snapshot = _boolean(environ, "COMFY_GPU_SNAPSHOT", True) and memory_snapshot
 
         return cls(
             app_name=environ.get("MODAL_APP_NAME", "comfyui-ashleykza-cu128").strip()
@@ -145,9 +150,9 @@ class ModalSettings:
             ui_scaledown_window_seconds=_integer(
                 environ,
                 "COMFY_SCALEDOWN_SECONDS",
-                5 * 60,
-                minimum=60,
-                maximum=60 * 60,
+                5,
+                minimum=2,
+                maximum=20 * 60,
             ),
             ui_max_inputs=max_inputs,
             ui_target_inputs=target_inputs,
@@ -156,4 +161,6 @@ class ModalSettings:
                 "COMFY_REQUIRE_PROXY_AUTH",
                 False,
             ),
+            memory_snapshot=memory_snapshot,
+            gpu_snapshot=gpu_snapshot,
         )

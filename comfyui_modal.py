@@ -8,6 +8,7 @@ Architecture:
 - GPU web server: mounts Storage, verifies files, never downloads.
 
 ``modal serve`` / ``modal deploy`` reuse the Image cache unless ``COMFY_LATEST=1``.
+Deployed GPU UI uses memory snapshots so later cold starts skip most ComfyUI process init.
 
 Examples:
     modal run comfyui_modal.py --action profiles
@@ -36,6 +37,7 @@ from comfy_engine import (
     sync_profile_models,
     sync_workflow_models,
     verify_workflow_models,
+    wait_comfyui_ready,
 )
 from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
@@ -165,6 +167,7 @@ runtime_image = (
             "DISABLE_SYNC": "1",
             "PYTHONUNBUFFERED": "1",
             "COMFY_NO_TELEMETRY": "1",
+            "TORCHINDUCTOR_COMPILE_THREADS": "1",
         }
     )
     # Modal 1.x no longer automounts arbitrary imported local modules.
@@ -250,44 +253,71 @@ def sync_workflow(workflow_lock: dict) -> dict:
     return result
 
 
-@app.function(
-    image=runtime_image,
-    gpu=GPU,
-    timeout=SETTINGS.ui_timeout_seconds,
-    startup_timeout=SETTINGS.ui_startup_timeout_seconds,
-    scaledown_window=SETTINGS.ui_scaledown_window_seconds,
-    volumes=APP_VOLUMES,
-    secrets=APP_SECRETS,
-    max_containers=1,
-)
+UI_CLS_KWARGS: dict = {
+    "image": runtime_image,
+    "gpu": GPU,
+    "timeout": SETTINGS.ui_timeout_seconds,
+    "startup_timeout": SETTINGS.ui_startup_timeout_seconds,
+    "scaledown_window": SETTINGS.ui_scaledown_window_seconds,
+    "volumes": APP_VOLUMES,
+    "secrets": APP_SECRETS,
+    "max_containers": 1,
+    "enable_memory_snapshot": SETTINGS.memory_snapshot,
+}
+if SETTINGS.gpu_snapshot:
+    UI_CLS_KWARGS["experimental_options"] = {"enable_gpu_snapshot": True}
+
+
+@app.cls(**UI_CLS_KWARGS)
 @modal.concurrent(
     max_inputs=SETTINGS.ui_max_inputs,
     target_inputs=SETTINGS.ui_target_inputs,
 )
-@modal.web_server(
-    port=COMFY_PORT,
-    startup_timeout=SETTINGS.ui_startup_timeout_seconds,
-    requires_proxy_auth=SETTINGS.ui_requires_proxy_auth,
-)
-def ui():
-    if IMAGE_WORKFLOW_LOCK.is_file():
-        workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
-        verify_workflow_models(
-            workflow_lock,
-            WORKSPACE,
-            storage_root=STORAGE_ROOT,
-        )
-    prepare_runtime(COMFY_ROOT, WORKSPACE, STORAGE_ROOT)
+class UI:
+    """ComfyUI web server. Memory snapshots are created after ``modal deploy``.
 
-    extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
-    start_comfyui(
-        profile_name=PROFILE_NAME,
-        comfy_root=COMFY_ROOT,
-        workspace=WORKSPACE,
+    ``modal serve`` still starts the same Cls but does not persist snapshots.
+    """
+
+    @modal.enter(snap=True)
+    def start(self):
+        if IMAGE_WORKFLOW_LOCK.is_file():
+            workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
+            verify_workflow_models(
+                workflow_lock,
+                WORKSPACE,
+                storage_root=STORAGE_ROOT,
+            )
+        prepare_runtime(COMFY_ROOT, WORKSPACE, STORAGE_ROOT)
+        extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
+        self.process = start_comfyui(
+            profile_name=PROFILE_NAME,
+            comfy_root=COMFY_ROOT,
+            workspace=WORKSPACE,
+            port=COMFY_PORT,
+            extra_args=extra,
+        )
+        wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
+        print(f"ComfyUI profile={PROFILE_NAME!r} ready on :{COMFY_PORT}")
+
+    @modal.web_server(
         port=COMFY_PORT,
-        extra_args=extra,
+        startup_timeout=SETTINGS.ui_startup_timeout_seconds,
+        requires_proxy_auth=SETTINGS.ui_requires_proxy_auth,
     )
-    print(f"ComfyUI profile={PROFILE_NAME!r} starting on :{COMFY_PORT}")
+    def ui(self):
+        pass
+
+    @modal.exit()
+    def stop(self):
+        process = getattr(self, "process", None)
+        if process is None:
+            return
+        try:
+            if process.poll() is None:
+                process.terminate()
+        except OSError:
+            return
 
 
 @app.local_entrypoint()
@@ -360,6 +390,7 @@ Secret:    {SECRET_NAME}
 Workflow:  {WORKFLOW_LOCK_SOURCE or '(none)'}
 BaseNodes: {BASE_NODES_ENABLED}
 Latest:    {FORCE_LATEST}
+Snapshot:  memory={SETTINGS.memory_snapshot} gpu={SETTINGS.gpu_snapshot}
 ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
 
 1. List profiles:
@@ -376,11 +407,12 @@ ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
    python -m pip install -U modal
    COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
-5. Persistent endpoint:
+5. Persistent endpoint (creates memory snapshots after the first few cold starts):
    COMFY_PROFILE=qwen-image COMFY_WORKFLOW_LOCK=workflow.lock.json modal deploy comfyui_modal.py
 
 Optional:
-   MODAL_GPU=L4 COMFY_BASE_NODES=0 modal serve comfyui_modal.py
+   MODAL_GPU=L4 COMFY_BASE_NODES=0 modal deploy comfyui_modal.py
+   COMFY_MEMORY_SNAPSHOT=0 modal deploy comfyui_modal.py
    COMFY_LATEST=1 modal serve comfyui_modal.py
    EXTRA_ARGS='--lowvram' COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
    COMFY_HYDRATE_WORKERS=8 modal run hydrate_modal.py --action hydrate --workflow workflow.json
