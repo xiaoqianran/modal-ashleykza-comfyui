@@ -33,6 +33,7 @@ from comfy_engine import (
     sync_workflow_models,
     verify_workflow_models,
 )
+from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
 from workflow_resolver import (
     load_workflow_lock,
@@ -41,31 +42,27 @@ from workflow_resolver import (
 )
 
 
-APP_NAME = "comfyui-ashleykza-cu128"
-IMAGE_TAG = os.getenv(
-    "COMFY_IMAGE",
-    "ghcr.io/ashleykleynhans/comfyui:cu128-py312-v0.32.0",
-)
+SETTINGS = ModalSettings.from_env(os.environ)
+APP_NAME = SETTINGS.app_name
+IMAGE_TAG = SETTINGS.image_tag
 COMFY_ROOT = Path("/ComfyUI")
 WORKSPACE = Path("/workspace")
 COMFY_PORT = 3001
 MINUTES = 60
 IMAGE_WORKFLOW_LOCK = Path("/opt/comfy/workflow.lock.json")
 
-PROFILE_NAME = os.getenv("COMFY_PROFILE", "base").strip() or "base"
+PROFILE_NAME = SETTINGS.profile_name
 PROFILE = get_profile(PROFILE_NAME)
-WORKFLOW_LOCK_SOURCE = os.getenv("COMFY_WORKFLOW_LOCK", "").strip()
+WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
 BUILD_WORKFLOW_LOCK = (
     load_workflow_lock(WORKFLOW_LOCK_SOURCE, require_resolved=True)
     if WORKFLOW_LOCK_SOURCE and modal.is_local()
     else None
 )
 
-GPU_DEFAULT = ["L4", "L40S", "RTX-PRO-6000"]
-gpu_env = os.getenv("MODAL_GPU", "").strip()
-GPU = [item.strip() for item in gpu_env.split(",") if item.strip()] if gpu_env else GPU_DEFAULT
+GPU = list(SETTINGS.gpu)
 
-SECRET_NAME = os.getenv("MODAL_SECRET_NAME", "").strip()
+SECRET_NAME = SETTINGS.secret_name
 DOTENV_PATH = Path(".env")
 
 # Secret priority:
@@ -80,7 +77,7 @@ else:
 
 app = modal.App(APP_NAME)
 workspace_vol = modal.Volume.from_name(
-    "comfyui-ashleykza-workspace",
+    SETTINGS.volume_name,
     create_if_missing=True,
 )
 
@@ -122,7 +119,12 @@ runtime_image = (
         }
     )
     # Modal 1.x no longer automounts arbitrary imported local modules.
-    .add_local_python_source("recipes", "workflow_resolver", "comfy_engine")
+    .add_local_python_source(
+        "recipes",
+        "workflow_resolver",
+        "comfy_engine",
+        "modal_config",
+    )
 )
 
 
@@ -178,14 +180,22 @@ def sync_workflow(workflow_lock: dict) -> dict:
 @app.function(
     image=runtime_image,
     gpu=GPU,
-    timeout=60 * MINUTES,
-    scaledown_window=5 * MINUTES,
+    timeout=SETTINGS.ui_timeout_seconds,
+    startup_timeout=SETTINGS.ui_startup_timeout_seconds,
+    scaledown_window=SETTINGS.ui_scaledown_window_seconds,
     volumes={str(WORKSPACE): workspace_vol},
     secrets=APP_SECRETS,
     max_containers=1,
 )
-@modal.concurrent(max_inputs=20)
-@modal.web_server(port=COMFY_PORT, startup_timeout=15 * MINUTES)
+@modal.concurrent(
+    max_inputs=SETTINGS.ui_max_inputs,
+    target_inputs=SETTINGS.ui_target_inputs,
+)
+@modal.web_server(
+    port=COMFY_PORT,
+    startup_timeout=SETTINGS.ui_startup_timeout_seconds,
+    requires_proxy_auth=SETTINGS.ui_requires_proxy_auth,
+)
 def ui():
     if IMAGE_WORKFLOW_LOCK.is_file():
         workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
@@ -264,9 +274,10 @@ Image:     {IMAGE_TAG}
 Profile:   {PROFILE_NAME}
 GPU:       {GPU}
 Port:      {COMFY_PORT}
-Volume:    comfyui-ashleykza-workspace
+Volume:    {SETTINGS.volume_name}
 Secret:    {SECRET_NAME or ('.env' if DOTENV_PATH.is_file() else '(none)')}
 Workflow:  {WORKFLOW_LOCK_SOURCE or '(none)'}
+ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
 
 1. List profiles:
    modal run comfyui_modal.py --action profiles
