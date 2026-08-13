@@ -33,7 +33,7 @@ modal serve comfyui_modal.py
 
 ## 3. 验证
 
-打开 `modal serve` 打印的 `*.modal.run`，加载同一份工作流，Queue Prompt。也可以 `python -m studio`：打开后默认 Z-Image 表单，图生配方可上传图片（见 [Studio](guide/studio.md)）。
+打开 `modal serve` 打印的 `*.modal.run`，加载同一份工作流，Queue Prompt。也可以 `python -m studio` 或双击 `open-studio.bat`：打开后默认 Z-Image 表单，顶栏可换配方（见 [Studio](guide/studio.md)）。
 
 生产用 `modal deploy`（才会保存 memory snapshot）。`modal serve` 不保存快照。
 

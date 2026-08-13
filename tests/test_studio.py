@@ -38,6 +38,24 @@ class SaveKeysTests(unittest.TestCase):
             self.assertNotIn("MODAL_TOKEN_SECRET=", dumped)
 
 
+class StudioLaunchTests(unittest.TestCase):
+    def test_parse_args_defaults_open_browser(self):
+        from studio.server import parse_args, studio_url
+
+        args = parse_args([])
+        self.assertEqual(args.host, "127.0.0.1")
+        self.assertEqual(args.port, 8787)
+        self.assertFalse(args.no_browser)
+        self.assertEqual(studio_url(args.host, args.port), "http://127.0.0.1:8787")
+
+    def test_parse_args_no_browser(self):
+        from studio.server import parse_args
+
+        args = parse_args(["--no-browser", "--port", "8790"])
+        self.assertTrue(args.no_browser)
+        self.assertEqual(args.port, 8790)
+
+
 class GpuReleaseTests(unittest.TestCase):
     def test_keep_gpu_is_opt_in(self):
         self.assertFalse(wants_keep_gpu({}))
