@@ -135,6 +135,17 @@ class WorkflowBindTests(unittest.TestCase):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}
         self.assertEqual(workflow_queue.to_api_prompt(None, payload), payload)
 
+    def test_queue_prompt_ids_reads_running_and_pending(self):
+        ids = workflow_queue.queue_prompt_ids(
+            {
+                "queue_running": [[0, "abc", {}]],
+                "queue_pending": [(1, "def")],
+            }
+        )
+        self.assertEqual(ids, {"abc", "def"})
+        self.assertEqual(workflow_queue.queue_prompt_ids("nope"), set())
+        self.assertEqual(workflow_queue.queue_prompt_ids({"queue_running": ["x"]}), set())
+
     def test_wait_history_fails_fast_when_prompt_never_enters_queue(self):
         clock = {"t": 0.0}
 
@@ -146,13 +157,47 @@ class WorkflowBindTests(unittest.TestCase):
 
         with (
             patch.object(workflow_queue, "http_json", fake_http),
-            patch.object(workflow_queue.time, "sleep", lambda seconds: clock.__setitem__("t", clock["t"] + seconds)),
+            patch.object(
+                workflow_queue.time,
+                "sleep",
+                lambda seconds: clock.__setitem__("t", clock["t"] + seconds),
+            ),
             patch.object(workflow_queue.time, "time", lambda: clock["t"]),
         ):
             with self.assertRaisesRegex(RuntimeError, "never appeared"):
                 workflow_queue.wait_history(
                     "http://comfy",
                     "missing-id",
+                    timeout=120,
+                    lost_after=4,
+                )
+
+    def test_wait_history_fails_fast_when_queued_prompt_vanishes(self):
+        clock = {"t": 0.0}
+        queue_calls = {"n": 0}
+
+        def fake_http(url: str, payload=None, timeout: int = 120):
+            del payload, timeout
+            if url.endswith("/queue"):
+                queue_calls["n"] += 1
+                if queue_calls["n"] == 1:
+                    return {"queue_running": [[0, "pid-1", {}]], "queue_pending": []}
+                return {"queue_running": [], "queue_pending": []}
+            return {}
+
+        with (
+            patch.object(workflow_queue, "http_json", fake_http),
+            patch.object(
+                workflow_queue.time,
+                "sleep",
+                lambda seconds: clock.__setitem__("t", clock["t"] + seconds),
+            ),
+            patch.object(workflow_queue.time, "time", lambda: clock["t"]),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "left /queue"):
+                workflow_queue.wait_history(
+                    "http://comfy",
+                    "pid-1",
                     timeout=120,
                     lost_after=4,
                 )

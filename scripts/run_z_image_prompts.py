@@ -10,6 +10,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from workflow_queue import wait_history
+
 PROMPTS = [
     {
         "id": "01-blue-forest-fashion",
@@ -92,16 +94,6 @@ def wait_ready(base: str, timeout: int = 900) -> None:
         except (urllib.error.URLError, TimeoutError, OSError):
             time.sleep(5)
     raise TimeoutError(f"ComfyUI at {base} did not become ready within {timeout}s")
-
-
-def wait_history(base: str, prompt_id: str, timeout: int = 900) -> dict:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        history = _http_json(f"{base}/history/{prompt_id}")
-        if prompt_id in history:
-            return history[prompt_id]
-        time.sleep(2)
-    raise TimeoutError(f"prompt {prompt_id} did not finish within {timeout}s")
 
 
 def _safe_dest(dest: Path, filename: str) -> Path:

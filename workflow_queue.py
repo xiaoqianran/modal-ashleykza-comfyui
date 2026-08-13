@@ -98,12 +98,14 @@ def wait_ready(base: str, timeout: int = 900) -> dict[str, Any]:
     raise TimeoutError(f"ComfyUI not ready: {last_error}")
 
 
-def queue_prompt_ids(queue: Mapping[str, Any]) -> set[str]:
+def queue_prompt_ids(queue: Any) -> set[str]:
     """ComfyUI ``/queue`` items are ``[number, prompt_id, prompt, extra]``."""
     ids: set[str] = set()
+    if not isinstance(queue, Mapping):
+        return ids
     for key in ("queue_running", "queue_pending"):
         for item in queue.get(key) or ():
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
+            if isinstance(item, list | tuple) and len(item) >= 2:
                 ids.add(str(item[1]))
     return ids
 
@@ -128,7 +130,11 @@ def wait_history(
             print(json.dumps({"poll_error": str(exc)}), flush=True)
             time.sleep(2)
             continue
-        item = history.get(prompt_id) if isinstance(history, dict) else None
+        if not isinstance(queue, Mapping):
+            queue = {}
+        if not isinstance(history, Mapping):
+            history = {}
+        item = history.get(prompt_id)
         in_queue = prompt_id in queue_prompt_ids(queue)
         status = {
             "running": len(queue.get("queue_running") or []),
@@ -146,7 +152,13 @@ def wait_history(
         else:
             if missing_since is None:
                 missing_since = time.time()
-            elif not seen_in_queue and time.time() - missing_since >= lost_after:
+            elif time.time() - missing_since >= lost_after:
+                if seen_in_queue:
+                    raise RuntimeError(
+                        f"prompt {prompt_id} left /queue without /history "
+                        f"after {lost_after}s. GPU container likely recycled "
+                        "(scaledown_window=5s). Re-queue and keep polling."
+                    )
                 raise RuntimeError(
                     f"prompt {prompt_id} never appeared in /queue or /history "
                     f"after {lost_after}s. GPU container likely recycled "
