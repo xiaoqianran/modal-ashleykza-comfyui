@@ -41,6 +41,8 @@ open-studio.bat
 python -m studio --no-browser
 ```
 
+Windows 便携版：Releases 里的 `Studio-windows.zip`，解压后双击 `Studio.exe`。见 [Studio](../guide/studio.md#windows)。
+
 本机 `127.0.0.1:8787`，启动后默认打开浏览器。顶栏选 Z-Image / FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo / Pixal3D / TripoSplat。见 [Studio](../guide/studio.md)。
 
 ## 通用排队

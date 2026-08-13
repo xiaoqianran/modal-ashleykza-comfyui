@@ -1,0 +1,66 @@
+name: Studio Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Create a GitHub Release with Studio-windows.zip"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "studio-v*"
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "studio/**"
+      - "catalog/**"
+      - "examples/**"
+      - "hydrate_modal.py"
+      - "comfyui_modal.py"
+      - "recipes.py"
+      - "workflow_queue.py"
+      - "modal_ops.py"
+      - ".github/workflows/studio-windows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+      - name: Build portable zip
+        run: python packaging/build_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Studio-windows
+          path: dist/Studio-windows.zip
+          if-no-files-found: error
+      - name: Publish draft from workflow_dispatch
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: studio-windows-${{ github.run_number }}
+          name: Studio Windows ${{ github.run_number }}
+          draft: true
+          files: dist/Studio-windows.zip
+          body: |
+            解压后双击 `Studio.exe`。需要本机联网、Modal 账号，以及 Hugging Face token。
+            工作流配方（FLUX / Qwen / Krea / Pixal3D / TripoSplat）还需要本机 Chrome 或 Edge。
+            GPU 仍在 Modal 上，本机 exe 只是控制台。
+      - name: Publish tagged release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/studio-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Studio-windows.zip
+          body: |
+            解压后双击 `Studio.exe`。需要本机联网、Modal 账号，以及 Hugging Face token。
+            工作流配方（FLUX / Qwen / Krea / Pixal3D / TripoSplat）还需要本机 Chrome 或 Edge。
+            GPU 仍在 Modal 上，本机 exe 只是控制台。

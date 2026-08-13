@@ -6,13 +6,31 @@
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
+## Windows 便携版
+
+不装 Python 也可以。到 [Releases](https://github.com/xiaoqianran/modal-ashleykza-comfyui/releases) 下载 `Studio-windows.zip`，解压后双击 `Studio.exe`。会打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。
+
+这不是把 GPU / ComfyUI 打进一个文件。`Studio.exe` 只负责启动旁边的内置 CPython；`app/` 里仍是 `hydrate_modal.py` / `comfyui_modal.py`（Modal CLI 必须能在磁盘上找到这些文件）。图画在 Modal 云上。
+
+还需要：
+
+- 本机联网、Modal 账号、Hugging Face token
+- FLUX.2 / Qwen / Krea-2 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image 不需要）
+- 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
+
+密钥写在解压目录的 `app/.studio.env`，不会上传 Git。生成结束后默认停 GPU。
+
+发版：打 `studio-v*` 标签，或在 Actions 里手动跑 **Studio Windows** 并勾选 publish。
+
+已经有 Python 的机器仍可用下面的命令或 `open-studio.bat`。
+
 ## 启动
 
 ```bash
 python -m studio
 ```
 
-Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-studio.sh`。启动后会打开浏览器 [http://127.0.0.1:8787](http://127.0.0.1:8787)。不要浏览器：`python -m studio --no-browser`。
+Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-studio.sh`。启动后会打开浏览器 [http://127.0.0.1:8787](http://127.0.0.1:8787)。不要浏览器：`python -m studio --no-browser`。没有 Python 时用 [Windows 便携版](#windows)。
 
 打开后**默认选中 Z-Image**。顶栏「配方」下拉可换成：
 
