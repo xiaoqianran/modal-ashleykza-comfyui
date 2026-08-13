@@ -84,6 +84,30 @@ class RecipeTests(unittest.TestCase):
                 comfy_engine.download_asset(asset, Path(directory))
         self.assertEqual(calls, ["aria"])
 
+    def test_nested_filename_downloads_to_its_parent_directory(self):
+        asset = recipes.M(
+            "https://example.com/model.safetensors",
+            filename="vendor/model.safetensors",
+        )
+        commands = []
+
+        def fake_run(cmd, **_kwargs):
+            commands.append(cmd)
+            output_dir = Path(cmd[cmd.index("-d") + 1])
+            output_path = output_dir / cmd[cmd.index("-o") + 1]
+            output_path.write_bytes(b"model")
+
+        with tempfile.TemporaryDirectory() as directory:
+            target_dir = Path(directory)
+            with (
+                patch.object(comfy_engine.shutil, "which", return_value="/usr/bin/aria2c"),
+                patch.object(comfy_engine, "_run", fake_run),
+            ):
+                comfy_engine.download_asset(asset, target_dir)
+
+            self.assertTrue((target_dir / "vendor/model.safetensors").is_file())
+            self.assertEqual(commands[0][commands[0].index("-d") + 1], str(target_dir / "vendor"))
+
     def test_node_build_supports_github_token_without_embedding_value(self):
         commands = comfy_engine.build_node_commands(["qwen-image"])
         joined = "\n".join(commands)

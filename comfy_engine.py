@@ -260,7 +260,7 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
         "--file-allocation=none",
         "--summary-interval=1",
         "--console-log-level=notice",
-        "-d", str(target_dir),
+        "-d", str(target.parent),
         "-o", target.name,
         url,
     ]
@@ -271,6 +271,7 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
 def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / asset_filename(asset)
+    target.parent.mkdir(parents=True, exist_ok=True)
 
     if _is_asset_current(target, asset, lock_entry):
         print(f"[SKIP] {target}")
