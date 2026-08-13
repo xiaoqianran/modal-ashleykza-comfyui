@@ -36,4 +36,6 @@ modal serve comfyui_modal.py
 2. [Hydrate Storage](guide/hydrate.md)
 3. [工作流与锁文件](guide/workflows.md)
 4. [GPU 部署](guide/deploy.md)
-5. [环境变量](reference/configuration.md)
+5. [Studio（Z-Image）](guide/studio.md)
+6. [环境变量](reference/configuration.md)
+7. [配方](guide/recipes.md)

@@ -33,6 +33,14 @@ modal serve comfyui_modal.py
 
 示例工作流在 `examples/`。LTX-2.5 官方 JSON 不能直接 `POST /prompt`，见文档「工作流与锁文件」。
 
+本机控制面（先做 Z-Image）：
+
+```bash
+python -m studio
+```
+
+打开 `http://127.0.0.1:8787`。密钥写在 `.studio.env`，不会进 Git。见文档「Studio」。
+
 ## 开发
 
 ```bash
