@@ -58,69 +58,17 @@ PROMPTS = [
 
 
 def _prompt_graph(positive: str, seed: int) -> dict:
-    return {
-        "62": {
-            "class_type": "CLIPLoader",
-            "inputs": {
-                "clip_name": "qwen_3_4b.safetensors",
-                "type": "lumina2",
-                "device": "default",
-            },
+    from catalog import bind_graph, load_catalog
+
+    graph, _values = bind_graph(
+        load_catalog("z-image"),
+        {
+            "prompt": positive,
+            "seed": seed,
+            "filename_prefix": "Z_image_base",
         },
-        "63": {
-            "class_type": "VAELoader",
-            "inputs": {"vae_name": "ae.safetensors"},
-        },
-        "66": {
-            "class_type": "UNETLoader",
-            "inputs": {
-                "unet_name": "z_image_bf16.safetensors",
-                "weight_dtype": "default",
-            },
-        },
-        "70": {
-            "class_type": "ModelSamplingAuraFlow",
-            "inputs": {"model": ["66", 0], "shift": 3.0},
-        },
-        "67": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"clip": ["62", 0], "text": positive},
-        },
-        "71": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"clip": ["62", 0], "text": ""},
-        },
-        "68": {
-            "class_type": "EmptySD3LatentImage",
-            "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
-        },
-        "69": {
-            "class_type": "KSampler",
-            "inputs": {
-                "model": ["70", 0],
-                "positive": ["67", 0],
-                "negative": ["71", 0],
-                "latent_image": ["68", 0],
-                "seed": seed,
-                "steps": 25,
-                "cfg": 4.0,
-                "sampler_name": "res_multistep",
-                "scheduler": "simple",
-                "denoise": 1.0,
-            },
-        },
-        "65": {
-            "class_type": "VAEDecode",
-            "inputs": {"samples": ["69", 0], "vae": ["63", 0]},
-        },
-        "9": {
-            "class_type": "SaveImage",
-            "inputs": {
-                "images": ["65", 0],
-                "filename_prefix": "Z_image_base",
-            },
-        },
-    }
+    )
+    return graph
 
 
 def _http_json(url: str, payload: dict | None = None, timeout: int = 60) -> dict | list:

@@ -1,0 +1,149 @@
+{
+  "id": "z-image",
+  "title": "Z-Image",
+  "summary": "文生图。权重来自 Comfy-Org，锁内无自定义节点。",
+  "workflow": "examples/z-image-base.json",
+  "lock": "examples/z-image-base.lock.json",
+  "gpu": "L40S",
+  "gpu_choices": ["T4", "L4", "L40S"],
+  "client_id": "studio-z-image",
+  "filename_prefix": "Z_image_studio",
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "negative",
+      "type": "text",
+      "title": "负向提示词",
+      "default": ""
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "title": "宽",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 64
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "title": "高",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 64
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "title": "步数",
+      "default": 25,
+      "minimum": 1,
+      "maximum": 60
+    },
+    {
+      "id": "cfg",
+      "type": "float",
+      "title": "CFG",
+      "default": 4.0,
+      "minimum": 1.0,
+      "maximum": 12.0,
+      "step": 0.5
+    }
+  ],
+  "graph": {
+    "62": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen_3_4b.safetensors",
+        "type": "lumina2",
+        "device": "default"
+      }
+    },
+    "63": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "ae.safetensors"
+      }
+    },
+    "66": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "z_image_bf16.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "70": {
+      "class_type": "ModelSamplingAuraFlow",
+      "inputs": {
+        "model": ["66", 0],
+        "shift": 3.0
+      }
+    },
+    "67": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["62", 0],
+        "text": "$prompt"
+      }
+    },
+    "71": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["62", 0],
+        "text": "$negative"
+      }
+    },
+    "68": {
+      "class_type": "EmptySD3LatentImage",
+      "inputs": {
+        "width": "$width",
+        "height": "$height",
+        "batch_size": 1
+      }
+    },
+    "69": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": ["70", 0],
+        "positive": ["67", 0],
+        "negative": ["71", 0],
+        "latent_image": ["68", 0],
+        "seed": "$seed",
+        "steps": "$steps",
+        "cfg": "$cfg",
+        "sampler_name": "res_multistep",
+        "scheduler": "simple",
+        "denoise": 1.0
+      }
+    },
+    "65": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["69", 0],
+        "vae": ["63", 0]
+      }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": ["65", 0],
+        "filename_prefix": "$filename_prefix"
+      }
+    }
+  }
+}

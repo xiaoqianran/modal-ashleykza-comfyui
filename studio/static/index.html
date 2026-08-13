@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Studio · Z-Image</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,620&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="top">
+    <div class="brand">
+      <span class="mark">暗房</span>
+      <div>
+        <p class="eyebrow">Catalog control plane</p>
+        <h1>Studio</h1>
+      </div>
+    </div>
+    <div class="top-meta">
+      <span id="recipe-chip" class="chip">Z-Image</span>
+      <span id="status-pill" class="pill">未连接</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="rail">
+      <section class="panel">
+        <h2>密钥</h2>
+        <p class="hint">只写在本机 <code>.studio.env</code>。空着的栏表示沿用已保存或 CLI 登录。</p>
+        <label>Modal Token ID
+          <input id="MODAL_TOKEN_ID" type="text" autocomplete="off" spellcheck="false" placeholder="ak-…" />
+        </label>
+        <label>Modal Token Secret
+          <input id="MODAL_TOKEN_SECRET" type="password" autocomplete="off" placeholder="as-…" />
+        </label>
+        <label>Hugging Face
+          <input id="HF_TOKEN" type="password" autocomplete="off" placeholder="hf_…" />
+        </label>
+        <label>GitHub（可选）
+          <input id="GITHUB_TOKEN" type="password" autocomplete="off" />
+        </label>
+        <label>Civitai（可选）
+          <input id="CIVITAI_TOKEN" type="password" autocomplete="off" />
+        </label>
+        <button type="button" id="save-keys" class="btn">保存密钥</button>
+        <p id="key-state" class="foot"></p>
+      </section>
+
+      <section class="panel">
+        <h2>运行时</h2>
+        <label>GPU
+          <select id="gpu"></select>
+        </label>
+        <label>Comfy 地址
+          <input id="base-url" type="url" placeholder="https://…modal.run" />
+        </label>
+        <div class="row">
+          <button type="button" id="hydrate" class="btn">准备权重</button>
+          <button type="button" id="serve" class="btn primary">启动 GPU</button>
+        </div>
+        <div class="row">
+          <button type="button" id="save-url" class="btn ghost">记下地址</button>
+          <button type="button" id="stop" class="btn ghost">停止</button>
+        </div>
+        <pre id="runtime-log" class="log"></pre>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="panel prompt-panel">
+        <div class="stage-head">
+          <h2>批量提示词</h2>
+          <p class="hint">一行一条。需要多行同一条时，用单独一行 <code>---</code> 分隔。</p>
+        </div>
+        <textarea id="prompts" rows="12" placeholder="雨后的上海侧街，霓虹倒影，35mm 纪实&#10;青瓷茶器静物，窗光，博物馆图录构图"></textarea>
+        <div class="params" id="params"></div>
+        <div class="row">
+          <button type="button" id="generate" class="btn primary grow">生成</button>
+          <span id="gen-count" class="foot"></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>进度</h2>
+        <pre id="job-log" class="log"></pre>
+      </div>
+    </section>
+  </main>
+
+  <section class="gallery-wrap">
+    <h2>成片</h2>
+    <div id="gallery" class="gallery"></div>
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

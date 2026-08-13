@@ -32,6 +32,14 @@ modal run comfyui_modal.py
 
 不要用 GPU App 做 hydrate。
 
+## studio
+
+```bash
+python -m studio
+```
+
+本机 `127.0.0.1:8787`。见 [Studio](../guide/studio.md)。
+
 ## Volume
 
 ```bash
