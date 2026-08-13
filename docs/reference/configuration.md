@@ -17,7 +17,7 @@
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `MODAL_GPU` | `T4,L4,L40S,RTX-PRO-6000` | 逗号分隔的 GPU fallback |
+| `MODAL_GPU` | `T4` | 只接受你写明的 GPU。**没有** `T4,L4,L40S,RTX-PRO-6000` 这种静默升级。T4 没货时任务会失败，而不是改去开 L40S。贵卡必须显式：`MODAL_GPU=L40S` |
 | `COMFY_SCALEDOWN_SECONDS` | `5` | 空闲后缩容秒数，范围 2–1200 |
 | `COMFY_TIMEOUT_SECONDS` | `86400` | 单次输入最长秒数（最长 24h） |
 | `COMFY_STARTUP_TIMEOUT_SECONDS` | `900` | 启动探测超时 |

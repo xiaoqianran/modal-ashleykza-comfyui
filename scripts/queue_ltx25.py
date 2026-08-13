@@ -411,6 +411,11 @@ def main() -> None:
         encoding="utf-8",
     )
     print(json.dumps(record, ensure_ascii=False), flush=True)
+    print(
+        "任务已结束。scaledown 5s 挡不住 leftover modal serve / 开着的 ComfyUI。"
+        "请立刻停掉 serve，不要把贵卡挂着。",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

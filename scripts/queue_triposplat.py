@@ -298,6 +298,11 @@ def main() -> None:
         json.dumps(records, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    print(
+        "任务已结束。scaledown 5s 挡不住 leftover modal serve / 开着的 ComfyUI。"
+        "请立刻停掉 serve，不要把贵卡挂着。",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
   "summary": "文生图。权重来自 Comfy-Org，锁内无自定义节点。",
   "workflow": "examples/z-image-base.json",
   "lock": "examples/z-image-base.lock.json",
-  "gpu": "L40S",
+  "gpu": "T4",
   "gpu_choices": ["T4", "L4", "L40S"],
   "client_id": "studio-z-image",
   "filename_prefix": "Z_image_studio",

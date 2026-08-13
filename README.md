@@ -29,7 +29,7 @@ modal serve comfyui_modal.py
 
 130 个上游 GitHub 节点默认不开。需要时：`COMFY_BASE_NODES=1`。配方额外包：`COMFY_INSTALL_NODES=1`（会改 Image）。关掉锁内节点：hydrate 时 `--skip-lock-nodes`。
 
-空闲 **5 秒** 缩掉 GPU。`modal deploy` 才保存 snapshot。列表：`modal run hydrate_modal.py --action profiles`
+空闲 **5 秒** 缩掉 GPU（还要求没有 `modal serve` / 浏览器 WebSocket 保活）。默认 GPU 是 **T4**，贵卡必须显式 `MODAL_GPU=…`。`modal deploy` 才保存 snapshot。列表：`modal run hydrate_modal.py --action profiles`
 
 示例工作流在 `examples/`。LTX-2.5 官方 JSON 不能直接 `POST /prompt`，见文档「工作流与锁文件」。
 

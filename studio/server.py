@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import mimetypes
 import random
@@ -24,6 +25,17 @@ from studio.modal_ops import (
     start_serve,
     stop_serve,
 )
+
+
+def wants_keep_gpu(payload: dict[str, Any]) -> bool:
+    """Leave the GPU up only when the user explicitly opts in."""
+    raw = payload.get("keep_gpu")
+    if isinstance(raw, bool):
+        return raw
+    if raw is None or raw == "":
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 OUTPUT_DIR = ROOT / "artifacts" / "studio"
@@ -71,7 +83,7 @@ def _split_prompts(text: str) -> list[str]:
     return chunks
 
 
-def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     recipe_id = str(payload.get("catalog") or "z-image")
     catalog = load_catalog(recipe_id)
     base = str(payload.get("base_url") or load_state().get("base_url") or "").rstrip("/")
@@ -117,6 +129,26 @@ def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         jobs.append_log(job_id, json.dumps(item, ensure_ascii=False))
     save_state({"base_url": base, "catalog": recipe_id})
     return {"ok": True, "count": len(results), "results": results, "devices": ready.get("devices")}
+
+
+def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    keep = wants_keep_gpu(payload)
+    try:
+        result = _run_generate_batch(job_id, payload)
+        if keep:
+            jobs.append_log(job_id, "keep_gpu=true，GPU 继续挂着")
+        return result
+    finally:
+        if not keep:
+            jobs.append_log(
+                job_id,
+                "任务结束，停止 GPU。scaledown 5s 挡不住 leftover modal serve。",
+            )
+            stopped = stop_serve(log=lambda line: jobs.append_log(job_id, line))
+            jobs.append_log(
+                job_id,
+                json.dumps({"released": True, **stopped}, ensure_ascii=False),
+            )
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -254,10 +286,14 @@ def main() -> None:
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Studio  http://{args.host}:{args.port}", flush=True)
     print("密钥只存在本机 .studio.env，不会进 Git。", flush=True)
+    print("默认 GPU 是 T4；生成结束后会停掉 serve，避免空闲还计费。", flush=True)
+    atexit.register(stop_serve)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nstopped", flush=True)
+        print("\nstopping GPU…", flush=True)
+        stop_serve()
+        print("stopped", flush=True)
 
 
 if __name__ == "__main__":

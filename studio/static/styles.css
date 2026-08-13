@@ -94,6 +94,20 @@ label {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+label.keep-gpu {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mute);
+}
+label.keep-gpu input {
+  width: auto;
+  margin-top: 2px;
+}
 input, select, textarea {
   width: 100%;
   background: #120f0c;

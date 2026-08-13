@@ -20,6 +20,8 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(graph["69"]["inputs"]["seed"], 42)
         self.assertEqual(graph["69"]["inputs"]["steps"], 20)
         self.assertEqual(values["width"], 1024)
+        self.assertEqual(catalog["gpu"], "T4")
+        self.assertEqual(catalog["gpu_choices"][0], "T4")
         self.assertIsInstance(graph["68"]["inputs"]["width"], int)
 
     def test_filenames_match_lock(self):
