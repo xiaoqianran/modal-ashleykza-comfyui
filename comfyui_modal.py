@@ -1,29 +1,19 @@
-"""Deploy ashleykleynhans/comfyui on Modal with declarative recipes.
+"""Deploy ashleykleynhans/comfyui on Modal.
 
-Architecture:
-- Image: Ashley runtime + optional GitHub base nodes + profile extras + CNR nodes.
-- Models Volume: ComfyUI-shaped ``vae/``, ``text_encoders/``, ``diffusion_models/``, ...
-- Workspace Volume: input / output / user / logs / optional user nodes.
-- CPU hydrate: parallel downloads into Modal Storage, no GPU.
-- GPU web server: mounts Storage, verifies files, never downloads.
+Launch modes (set env or pass the same flags used by hydrate):
 
-``modal serve`` / ``modal deploy`` reuse the Image cache unless ``COMFY_LATEST=1``.
-Deployed GPU UI uses memory snapshots so later cold starts skip most ComfyUI process init.
-
-Examples:
-    modal run comfyui_modal.py --action profiles
-    modal run hydrate_modal.py --action hydrate --profile qwen-image
-    modal run hydrate_modal.py --action hydrate --workflow workflow.json
-    modal run hydrate_modal.py --action resolve --workflow workflow.json
-
+    COMFY_WORKFLOW=examples/z-image-base.json modal serve comfyui_modal.py
     COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
-    COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+
+Custom nodes are off by default (``COMFY_INSTALL_NODES=0``,
+``COMFY_BASE_NODES=0``). Hydrate models with ``hydrate_modal.py``.
 """
 
 from __future__ import annotations
 
 import os
 import shlex
+import sys
 from pathlib import Path
 
 import modal
@@ -34,40 +24,43 @@ from comfy_engine import (
     build_registry_node_commands,
     prepare_runtime,
     start_comfyui,
-    sync_profile_models,
-    sync_workflow_models,
     verify_workflow_models,
     wait_comfyui_ready,
 )
 from modal_config import ModalSettings
-from recipes import PROFILES, get_profile
-from workflow_resolver import (
-    load_workflow_lock,
-    validate_workflow_lock,
-    write_workflow_lock,
-)
+from recipes import get_profile
+from workflow_resolver import load_workflow_lock, write_workflow_lock
 
-SETTINGS = ModalSettings.from_env(os.environ)
+SETTINGS = ModalSettings.from_env(os.environ, sys.argv)
 APP_NAME = SETTINGS.app_name
 IMAGE_TAG = SETTINGS.image_tag
 COMFY_ROOT = Path("/ComfyUI")
 WORKSPACE = Path("/workspace")
 STORAGE_ROOT = Path(SETTINGS.storage_root)
-HYDRATE_WORKERS = SETTINGS.hydrate_workers
 COMFY_PORT = 3001
-MINUTES = 60
 IMAGE_WORKFLOW_LOCK = Path("/opt/comfy/workflow.lock.json")
 
 PROFILE_NAME = SETTINGS.profile_name
 PROFILE = get_profile(PROFILE_NAME)
-WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
-BUILD_WORKFLOW_LOCK = (
-    load_workflow_lock(WORKFLOW_LOCK_SOURCE, require_resolved=True)
-    if WORKFLOW_LOCK_SOURCE and modal.is_local()
-    else None
-)
 FORCE_LATEST = SETTINGS.latest_dependencies
 BASE_NODES_ENABLED = SETTINGS.base_nodes_enabled
+INSTALL_NODES = SETTINGS.install_nodes
+
+if SETTINGS.workflow_source and modal.is_local():
+    BUILD_WORKFLOW_LOCK = write_workflow_lock(
+        SETTINGS.workflow_source,
+        SETTINGS.workflow_lock_source,
+    )
+    WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
+elif SETTINGS.workflow_lock_source and modal.is_local():
+    WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
+    BUILD_WORKFLOW_LOCK = load_workflow_lock(
+        WORKFLOW_LOCK_SOURCE,
+        require_resolved=True,
+    )
+else:
+    WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
+    BUILD_WORKFLOW_LOCK = None
 
 GPU = list(SETTINGS.gpu)
 
@@ -92,12 +85,17 @@ APP_VOLUMES = {
 }
 
 
-# Stable profile nodes and workflow-declared CNR nodes are installed in CPU Image builds.
-# Local and remote must both register ``ui``; do not gate it on sys.argv.
-node_commands = build_node_commands(PROFILE.node_packs)
-registry_node_commands = build_registry_node_commands(
-    BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
-    comfy_cli_version=None if FORCE_LATEST else "1.16.0",
+# Custom nodes stay off unless COMFY_INSTALL_NODES=1 (compat is handled later).
+node_commands = (
+    build_node_commands(PROFILE.node_packs) if INSTALL_NODES else ()
+)
+registry_node_commands = (
+    build_registry_node_commands(
+        BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
+        comfy_cli_version=None if FORCE_LATEST else "1.16.0",
+    )
+    if INSTALL_NODES
+    else ()
 )
 
 runtime_image = (
@@ -182,77 +180,6 @@ runtime_image = (
 )
 
 
-# Model downloads run on CPU and write directly into the persistent Volume.
-sync_image = (
-    modal.Image.debian_slim(python_version="3.12")
-    .apt_install("aria2", "ca-certificates")
-    .uv_pip_install("huggingface_hub[hf_xet]==1.27.0")
-    .env({"HF_XET_HIGH_PERFORMANCE": "1"})
-    .add_local_python_source(
-        "base_nodes",
-        "recipes",
-        "workflow_resolver",
-        "comfy_engine",
-        "modal_config",
-        "storage",
-    )
-)
-
-SYNC_RETRIES = modal.Retries(
-    max_retries=3,
-    backoff_coefficient=2.0,
-    initial_delay=2.0,
-    max_delay=30.0,
-)
-
-
-def _commit_storage() -> None:
-    models_vol.commit()
-    workspace_vol.commit()
-
-
-@app.function(
-    image=sync_image,
-    volumes=APP_VOLUMES,
-    secrets=APP_SECRETS,
-    timeout=6 * 60 * MINUTES,
-    retries=SYNC_RETRIES,
-    cpu=8.0,
-    memory=16384,
-    max_containers=1,
-)
-def sync_models(profile: str) -> dict:
-    result = sync_profile_models(
-        profile,
-        WORKSPACE,
-        storage_root=STORAGE_ROOT,
-        workers=HYDRATE_WORKERS,
-    )
-    _commit_storage()
-    return result
-
-
-@app.function(
-    image=sync_image,
-    volumes=APP_VOLUMES,
-    secrets=APP_SECRETS,
-    timeout=6 * 60 * MINUTES,
-    retries=SYNC_RETRIES,
-    cpu=8.0,
-    memory=16384,
-    max_containers=1,
-)
-def sync_workflow(workflow_lock: dict) -> dict:
-    result = sync_workflow_models(
-        workflow_lock,
-        WORKSPACE,
-        storage_root=STORAGE_ROOT,
-        workers=HYDRATE_WORKERS,
-    )
-    _commit_storage()
-    return result
-
-
 UI_CLS_KWARGS: dict = {
     "image": runtime_image,
     "gpu": GPU,
@@ -298,7 +225,10 @@ class UI:
             extra_args=extra,
         )
         wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
-        print(f"ComfyUI profile={PROFILE_NAME!r} ready on :{COMFY_PORT}")
+        print(
+            f"ComfyUI mode={SETTINGS.launch_mode!r} profile={PROFILE_NAME!r} "
+            f"nodes={INSTALL_NODES} ready on :{COMFY_PORT}"
+        )
 
     @modal.web_server(
         port=COMFY_PORT,
@@ -321,100 +251,31 @@ class UI:
 
 
 @app.local_entrypoint()
-def main(
-    action: str = "info",
-    profile: str = PROFILE_NAME,
-    workflow: str = "",
-    lock_out: str = "",
-):
-    """Local control entrypoint for profiles and CPU hydrate into Modal Storage."""
-    action = action.strip().lower()
-
-    if action == "profiles":
-        for name, recipe in PROFILES.items():
-            print(
-                f"{name:22} "
-                f"models={','.join(recipe.model_packs) or '-':24} "
-                f"nodes={','.join(recipe.node_packs) or '-':24} "
-                f"{recipe.description}"
-            )
-        return
-
-    if action in {"sync", "hydrate"} and not workflow:
-        get_profile(profile)  # validate before remote call
-        result = sync_models.remote(profile)
-        print(result)
-        return
-
-    if action == "resolve":
-        if not workflow:
-            raise ValueError("--workflow is required for action=resolve")
-        output = lock_out or str(Path(workflow).with_suffix(".lock.json"))
-        lock = write_workflow_lock(workflow, output)
-        print(
-            {
-                "lock": output,
-                "models": len(lock["models"]),
-                "custom_nodes": len(lock["custom_nodes"]),
-                "unresolved": lock["unresolved"],
-            }
-        )
-        return
-
-    if action in {"workflow-sync", "hydrate"}:
-        if not workflow:
-            raise ValueError("--workflow is required for action=workflow-sync / hydrate")
-        output = lock_out or str(Path(workflow).with_suffix(".lock.json"))
-        lock = write_workflow_lock(workflow, output)
-        validate_workflow_lock(lock, require_resolved=True)
-        result = sync_workflow.remote(lock)
-        print({**result, "lock": output})
-        return
-
-    if action != "info":
-        raise ValueError(
-            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync"
-        )
-
+def main():
+    """Print launch configuration. Hydrate with hydrate_modal.py."""
     print(
         f"""
 App:       {APP_NAME}
+Mode:      {SETTINGS.launch_mode}
 Image:     {IMAGE_TAG}
 Profile:   {PROFILE_NAME}
+Workflow:  {SETTINGS.workflow_source or WORKFLOW_LOCK_SOURCE or '(none)'}
 GPU:       {GPU}
 Port:      {COMFY_PORT}
 Workspace: {SETTINGS.volume_name} -> {WORKSPACE}
 Storage:   {SETTINGS.models_volume_name} -> {STORAGE_ROOT}
-Workers:   {HYDRATE_WORKERS}
 Secret:    {SECRET_NAME}
-Workflow:  {WORKFLOW_LOCK_SOURCE or '(none)'}
+InstallNodes: {INSTALL_NODES}
 BaseNodes: {BASE_NODES_ENABLED}
 Latest:    {FORCE_LATEST}
 Snapshot:  memory={SETTINGS.memory_snapshot} gpu={SETTINGS.gpu_snapshot}
-ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
 
-1. List profiles:
-   modal run comfyui_modal.py --action profiles
+# 1. Hydrate models (CPU, no plugins)
+modal run hydrate_modal.py --workflow examples/z-image-base.json
+modal run hydrate_modal.py --profile qwen-image
 
-2. Hydrate models into Modal Storage (CPU App, no GPU Image):
-   modal run hydrate_modal.py --action hydrate --profile qwen-image
-   modal run hydrate_modal.py --action hydrate --workflow examples/z-image-base.json
-
-3. Resolve a workflow without downloading:
-   modal run comfyui_modal.py --action resolve --workflow workflow.json
-
-4. Interactive UI (cached Image unless COMFY_LATEST=1):
-   python -m pip install -U modal
-   COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
-
-5. Persistent endpoint (creates memory snapshots after the first few cold starts):
-   COMFY_PROFILE=qwen-image COMFY_WORKFLOW_LOCK=workflow.lock.json modal deploy comfyui_modal.py
-
-Optional:
-   MODAL_GPU=L4 COMFY_BASE_NODES=0 modal deploy comfyui_modal.py
-   COMFY_MEMORY_SNAPSHOT=0 modal deploy comfyui_modal.py
-   COMFY_LATEST=1 modal serve comfyui_modal.py
-   EXTRA_ARGS='--lowvram' COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
-   COMFY_HYDRATE_WORKERS=8 modal run hydrate_modal.py --action hydrate --workflow workflow.json
+# 2. GPU UI (plugins off unless COMFY_INSTALL_NODES=1)
+COMFY_WORKFLOW=examples/z-image-base.json MODAL_GPU=T4 modal serve comfyui_modal.py
+COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal deploy comfyui_modal.py
 """.strip()
     )

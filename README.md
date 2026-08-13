@@ -1,41 +1,38 @@
 # modal-ashleykza-comfyui
 
-在 Modal 上跑 ComfyUI。模型先用 CPU 写入 Storage，GPU 只推理，不下载。
+在 Modal 上跑 ComfyUI。两种启动方式；**默认不装插件**。
 
 **文档：** [https://xiaoqianran.github.io/modal-ashleykza-comfyui/](https://xiaoqianran.github.io/modal-ashleykza-comfyui/)
 
 ```bash
 python -m pip install -U modal
 modal setup
-cp .env.example .env   # 填 HF_TOKEN / CIVITAI_TOKEN / GITHUB_TOKEN
+cp .env.example .env
 modal secret create comfyui-creds --from-dotenv .env --force
 ```
 
-## 用法
+## 两种启动方式
+
+**1. 工作流 JSON** — 解析里面的 model 和插件，只下载模型：
 
 ```bash
-# 1. CPU 把模型拉进 Modal Storage（无 GPU）
-modal run hydrate_modal.py --action hydrate --workflow examples/z-image-base.json
-# 或按 Profile：
-modal run hydrate_modal.py --action hydrate --profile qwen-image
-
-# 2. 部署 GPU UI（deploy 才会保存 memory snapshot）
-COMFY_BASE_NODES=0 MODAL_GPU=L4 modal deploy comfyui_modal.py
+modal run hydrate_modal.py --workflow examples/z-image-base.json
+COMFY_WORKFLOW=examples/z-image-base.json modal serve comfyui_modal.py
 ```
 
-空闲 **5 秒** 缩掉 GPU。`modal serve` 方便调试，但不保存快照。
-
-只解析、不下载：
+**2. Profile** — 按 `recipes.py` 里的配方拉模型包：
 
 ```bash
-modal run hydrate_modal.py --action resolve --workflow workflow.json
+modal run hydrate_modal.py --profile qwen-image
+COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
-列表：`modal run hydrate_modal.py --action profiles`
+插件会写进 `.lock.json`，但 **不会安装**。以后需要时再开 `COMFY_INSTALL_NODES=1`（以及可选的 `COMFY_BASE_NODES=1`）。
+
+空闲 **5 秒** 缩掉 GPU。`modal deploy` 才保存 snapshot。列表：`modal run hydrate_modal.py --action profiles`
 
 ## 开发
 
 ```bash
 python -m unittest discover -s tests -v
-python -m pip install -r docs/requirements.txt && mkdocs serve
 ```

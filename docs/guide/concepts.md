@@ -21,7 +21,7 @@ flowchart LR
 
 默认 `MODAL_APP_NAME=comfyui-ashleykza-cu128`。
 
-必须拆开：GPU Image 会按需 `git clone` 大量自定义节点。若在 GPU App 上执行 hydrate，`modal run` 也会解析并构建那份 Image。
+必须拆开：hydrate 只跑 debian-slim。GPU App 即使默认不装插件，也会加载 Runtime Image。
 
 ## 两个 Volume
 

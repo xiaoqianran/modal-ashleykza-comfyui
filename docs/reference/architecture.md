@@ -29,16 +29,14 @@ mkdocs.yml            MkDocs Material 配置
 
 ## Image 分层
 
-稳定层在前、变化层在后，以便复用构建缓存：
+默认只有 Ashley 基础镜像。节点层全部 opt-in：
 
 1. 固定 Ashley 基础镜像
-2. 可选的基础 GitHub 节点（`COMFY_BASE_NODES`）
-3. profile 额外节点
-4. 锁文件里的 CNR 节点（`add_local_file(..., copy=True)` 打进 Image）
+2. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点
+3. `COMFY_INSTALL_NODES=1`：profile node packs + 锁文件 CNR 节点
+4. 工作流锁文件可 `add_local_file` 打进 Image，供 GPU 启动前校验模型
 
-本地 Python 模块通过 `add_local_python_source(...)` 注入（Modal 1.x 不再隐式挂载任意本地模块）。
-
-`COMFY_LATEST=1` 才会强制重克隆节点层；默认 serve / deploy 复用缓存。
+`COMFY_LATEST=1` 才会强制重建节点层。
 
 ## Volume 提交
 

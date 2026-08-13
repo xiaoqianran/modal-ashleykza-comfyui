@@ -1,18 +1,12 @@
 """CPU-only hydrate into Modal Storage.
 
-This App does not register the GPU ComfyUI Image, so ``modal run`` will not
-clone GitHub node packs. GPU serve/deploy stays in ``comfyui_modal.py``.
+Two launch modes (plugins are parsed, never installed here):
 
-The models Volume layout matches ComfyUI ``models/<category>/``:
+    modal run hydrate_modal.py --workflow examples/z-image-base.json
+    modal run hydrate_modal.py --profile qwen-image
 
-    /mnt/comfy-storage/vae/ae.safetensors
-    /mnt/comfy-storage/text_encoders/qwen_3_4b.safetensors
-    /mnt/comfy-storage/diffusion_models/z_image_bf16.safetensors
-
-Examples:
-    modal run hydrate_modal.py --action hydrate --profile qwen-image
-    modal run hydrate_modal.py --action hydrate --workflow examples/z-image-base.json
-    modal run hydrate_modal.py --action resolve --workflow workflow.json
+GPU serve/deploy stays in ``comfyui_modal.py``. This App does not build the
+GPU Image or clone custom nodes.
 """
 
 from __future__ import annotations
@@ -71,6 +65,27 @@ def _commit_storage() -> None:
     workspace_vol.commit()
 
 
+def _launch(
+    *,
+    profile: str,
+    workflow: str,
+    lock_out: str,
+    install_nodes: bool,
+) -> ModalSettings:
+    env = dict(os.environ)
+    if workflow.strip():
+        env["COMFY_WORKFLOW"] = workflow.strip()
+    elif profile.strip():
+        env.pop("COMFY_WORKFLOW", None)
+    if profile.strip():
+        env["COMFY_PROFILE"] = profile.strip()
+    if lock_out.strip():
+        env["COMFY_WORKFLOW_LOCK"] = lock_out.strip()
+    if install_nodes:
+        env["COMFY_INSTALL_NODES"] = "1"
+    return ModalSettings.from_env(env)
+
+
 @app.function(
     image=sync_image,
     volumes=APP_VOLUMES,
@@ -113,15 +128,57 @@ def sync_workflow(workflow_lock: dict) -> dict:
     return result
 
 
+def _hydrate_workflow(settings: ModalSettings) -> dict:
+    lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
+    validate_workflow_lock(lock, require_resolved=True)
+    plugins = lock["custom_nodes"]
+    result = {
+        **sync_workflow.remote(lock),
+        "mode": "workflow",
+        "workflow": settings.workflow_source,
+        "lock": settings.workflow_lock_source,
+        "plugins_parsed": [
+            {"id": node.get("id"), "version": node.get("version")} for node in plugins
+        ],
+        "plugins_installed": 0,
+        "plugins_note": (
+            "custom nodes parsed and recorded in the lock; install is skipped "
+            "(plugin compatibility). Later: COMFY_INSTALL_NODES=1"
+        ),
+    }
+    return result
+
+
+def _hydrate_profile(settings: ModalSettings) -> dict:
+    get_profile(settings.profile_name)
+    return {
+        **sync_models.remote(settings.profile_name),
+        "mode": "profile",
+        "profile": settings.profile_name,
+        "plugins_installed": 0,
+        "plugins_note": (
+            "profile node packs are not cloned by default. "
+            "Later: COMFY_INSTALL_NODES=1"
+        ),
+    }
+
+
 @app.local_entrypoint()
 def main(
     action: str = "hydrate",
-    profile: str = SETTINGS.profile_name,
+    profile: str = "",
     workflow: str = "",
     lock_out: str = "",
+    install_nodes: bool = False,
 ):
-    """Download models into Modal Storage without building the GPU Image."""
+    """Hydrate models. ``--workflow`` or ``--profile``; plugins are not installed."""
     action = action.strip().lower()
+    settings = _launch(
+        profile=profile,
+        workflow=workflow,
+        lock_out=lock_out,
+        install_nodes=install_nodes,
+    )
 
     if action == "profiles":
         for name, recipe in PROFILES.items():
@@ -134,32 +191,26 @@ def main(
         return
 
     if action == "resolve":
-        if not workflow:
+        if settings.launch_mode != "workflow":
             raise ValueError("--workflow is required for action=resolve")
-        output = lock_out or str(Path(workflow).with_suffix(".lock.json"))
-        lock = write_workflow_lock(workflow, output)
+        lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
         print(
             {
-                "lock": output,
+                "mode": "workflow",
+                "lock": settings.workflow_lock_source,
                 "models": len(lock["models"]),
-                "custom_nodes": len(lock["custom_nodes"]),
+                "custom_nodes": lock["custom_nodes"],
                 "unresolved": lock["unresolved"],
+                "plugins_installed": False,
             }
         )
         return
 
-    if action in {"sync", "hydrate"} and not workflow:
-        get_profile(profile)
-        print(sync_models.remote(profile))
-        return
-
-    if action in {"hydrate", "workflow-sync", "sync"}:
-        if not workflow:
-            raise ValueError("--workflow is required to hydrate a workflow")
-        output = lock_out or str(Path(workflow).with_suffix(".lock.json"))
-        lock = write_workflow_lock(workflow, output)
-        validate_workflow_lock(lock, require_resolved=True)
-        print({**sync_workflow.remote(lock), "lock": output})
+    if action in {"hydrate", "sync", "workflow-sync"}:
+        if settings.launch_mode == "workflow":
+            print(_hydrate_workflow(settings))
+            return
+        print(_hydrate_profile(settings))
         return
 
     if action != "info":
@@ -168,11 +219,18 @@ def main(
     print(
         f"""
 App:     {APP_NAME}
+Mode:    {settings.launch_mode}
 Storage: {SETTINGS.models_volume_name} -> {STORAGE_ROOT}
 Workers: {HYDRATE_WORKERS}
 
-modal run hydrate_modal.py --action hydrate --workflow examples/z-image-base.json
-modal run hydrate_modal.py --action hydrate --profile qwen-image
-COMFY_BASE_NODES=0 MODAL_GPU=L4 modal serve comfyui_modal.py
+# workflow JSON: parse models + plugins, download models only
+modal run hydrate_modal.py --workflow examples/z-image-base.json
+
+# named profile: download that profile's model packs
+modal run hydrate_modal.py --profile qwen-image
+
+# GPU UI (no plugin clones unless COMFY_INSTALL_NODES=1)
+COMFY_WORKFLOW=examples/z-image-base.json MODAL_GPU=T4 modal serve comfyui_modal.py
+COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal serve comfyui_modal.py
 """.strip()
     )
