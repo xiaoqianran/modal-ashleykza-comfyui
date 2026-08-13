@@ -25,8 +25,14 @@ def _quote(value: str | Path) -> str:
     return shlex.quote(str(value))
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
-    printable = " ".join(_quote(part) for part in cmd)
+def _run(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    display_cmd: list[str] | None = None,
+) -> None:
+    printable = " ".join(_quote(part) for part in (display_cmd or cmd))
     print(f"$ {printable}", flush=True)
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
 
@@ -42,7 +48,15 @@ def redact_url(url: str) -> str:
     parsed = urlparse(url)
     query = parse_qs(parsed.query, keep_blank_values=True)
     for key in tuple(query):
-        if key.lower() in {"token", "auth", "authorization"}:
+        if key.lower() in {
+            "access_token",
+            "api_key",
+            "apikey",
+            "auth",
+            "authorization",
+            "key",
+            "token",
+        }:
             query[key] = ["***"]
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
@@ -89,6 +103,9 @@ def _extract_archive(path: Path) -> None:
         with zipfile.ZipFile(path) as archive:
             for item in archive.infolist():
                 _safe_member_path(target_dir, item.filename)
+                unix_mode = item.external_attr >> 16
+                if unix_mode and (unix_mode & 0o170000) == 0o120000:
+                    raise RuntimeError(f"Archive symlinks are not allowed: {item.filename}")
             archive.extractall(target_dir)
         path.unlink()
         return
@@ -98,7 +115,7 @@ def _extract_archive(path: Path) -> None:
         with tarfile.open(path, "r:*") as archive:
             for item in archive.getmembers():
                 _safe_member_path(target_dir, item.name)
-            archive.extractall(target_dir)
+            archive.extractall(target_dir, filter="data")
         path.unlink()
 
 
@@ -247,7 +264,8 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
         "-o", target.name,
         url,
     ]
-    _run(cmd)
+    display_cmd = [*cmd[:-1], redact_url(url)]
+    _run(cmd, display_cmd=display_cmd)
 
 
 def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
@@ -595,10 +613,12 @@ def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
     if not any(values[key] for key in ("GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "QWEN_API_KEY")):
         return
 
-    (node / "config.json").write_text(
+    config_path = node / "config.json"
+    config_path.write_text(
         json.dumps(values, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    config_path.chmod(0o600)
     print("Wrote secret-backed ComfyUI-OllamaGemini/config.json")
 
 

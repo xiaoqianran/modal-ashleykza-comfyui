@@ -1,5 +1,8 @@
+import io
+import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -92,6 +95,26 @@ class RecipeTests(unittest.TestCase):
         command = comfy_engine.build_node_commands(["qwen-image"])[0]
         self.assertLess(command.index("set -eu"), command.index("GITHUB_TOKEN"))
         self.assertLess(command.index("GITHUB_TOKEN"), command.index("set -x"))
+
+    def test_civitai_token_is_redacted_from_command_logs(self):
+        asset = recipes.M("https://civitai.com/api/download/models/123")
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            target_dir = Path(directory)
+            with (
+                patch.dict(os.environ, {"CIVITAI_TOKEN": "top-secret-token"}),
+                patch.object(comfy_engine.shutil, "which", return_value="/usr/bin/aria2c"),
+                patch.object(comfy_engine.subprocess, "run"),
+                redirect_stdout(output),
+            ):
+                comfy_engine._download_with_aria2(
+                    asset,
+                    target_dir,
+                    target_dir / "model.safetensors",
+                )
+
+        self.assertNotIn("top-secret-token", output.getvalue())
+        self.assertIn("token=%2A%2A%2A", output.getvalue())
 
 
 if __name__ == "__main__":
