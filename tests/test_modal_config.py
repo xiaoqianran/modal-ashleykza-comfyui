@@ -1,6 +1,6 @@
 import unittest
 
-from modal_config import ModalSettings, wants_gpu_runtime, wants_latest_dependencies
+from modal_config import ModalSettings, wants_latest_dependencies
 
 
 class ModalSettingsTests(unittest.TestCase):
@@ -51,14 +51,6 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.models_volume_name, "comfyui-ashleykza-models")
         self.assertEqual(settings.storage_root, "/mnt/comfy-storage")
         self.assertEqual(settings.hydrate_workers, 4)
-
-    def test_gpu_runtime_image_only_for_serve_or_deploy(self):
-        self.assertFalse(
-            wants_gpu_runtime(["modal", "run", "comfyui_modal.py", "--action", "hydrate"])
-        )
-        self.assertFalse(wants_gpu_runtime(["modal", "run", "comfyui_modal.py"]))
-        self.assertTrue(wants_gpu_runtime(["modal", "serve", "comfyui_modal.py"]))
-        self.assertTrue(wants_gpu_runtime(["/usr/bin/modal", "deploy", "comfyui_modal.py"]))
 
     def test_parses_storage_and_hydrate_settings(self):
         settings = ModalSettings.from_env(

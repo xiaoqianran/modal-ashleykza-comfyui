@@ -11,9 +11,9 @@ Architecture:
 
 Examples:
     modal run comfyui_modal.py --action profiles
-    modal run comfyui_modal.py --action hydrate --profile qwen-image
-    modal run comfyui_modal.py --action hydrate --workflow workflow.json
-    modal run comfyui_modal.py --action resolve --workflow workflow.json
+    modal run hydrate_modal.py --action hydrate --profile qwen-image
+    modal run hydrate_modal.py --action hydrate --workflow workflow.json
+    modal run hydrate_modal.py --action resolve --workflow workflow.json
 
     COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
     COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
@@ -37,7 +37,7 @@ from comfy_engine import (
     sync_workflow_models,
     verify_workflow_models,
 )
-from modal_config import ModalSettings, wants_gpu_runtime
+from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
 from workflow_resolver import (
     load_workflow_lock,
@@ -90,101 +90,93 @@ APP_VOLUMES = {
 }
 
 
-BUILD_GPU_RUNTIME = wants_gpu_runtime()
-
 # Stable profile nodes and workflow-declared CNR nodes are installed in CPU Image builds.
-# Skip this entire Image when running CPU hydrate so we do not clone 130 GitHub repos.
-node_commands = build_node_commands(PROFILE.node_packs) if BUILD_GPU_RUNTIME else []
-registry_node_commands = (
-    build_registry_node_commands(
-        BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
-        comfy_cli_version=None if FORCE_LATEST else "1.16.0",
-    )
-    if BUILD_GPU_RUNTIME
-    else []
+# Local and remote must both register ``ui``; do not gate it on sys.argv.
+node_commands = build_node_commands(PROFILE.node_packs)
+registry_node_commands = build_registry_node_commands(
+    BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
+    comfy_cli_version=None if FORCE_LATEST else "1.16.0",
 )
 
-runtime_image = None
-if BUILD_GPU_RUNTIME:
-    runtime_image = (
-        modal.Image.from_registry(IMAGE_TAG)
-        .entrypoint([])
-        .apt_install("git", "ca-certificates")
-        # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
-        .run_commands(
-            "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"
-        )
+runtime_image = (
+    modal.Image.from_registry(IMAGE_TAG)
+    .entrypoint([])
+    .apt_install("git", "ca-certificates")
+    # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
+    .run_commands(
+        "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"
     )
+)
 
-    if BASE_NODES_ENABLED:
-        # Copy the installer into the image before RUN steps that invoke it.
-        # Modal does not support shell heredocs inside run_commands (Dockerfile parser).
-        # force_build only when COMFY_LATEST=1; models are not part of this Image.
-        runtime_image = (
-            runtime_image
-            .add_local_file(
-                local_path=str(Path(__file__).resolve().parent / "base_nodes.py"),
-                remote_path=INSTALLER_REMOTE_PATH,
-                copy=True,
-            )
-            .run_commands(
-                *build_base_nodes_commands(),
-                secrets=APP_SECRETS,
-                force_build=FORCE_LATEST,
-            )
-            # Some node requirements pull the PyPI `pathlib` backport, which shadows
-            # stdlib pathlib and crashes Python 3.12 (`from collections import Sequence`).
-            .run_commands(
-                "set -eu; "
-                "/ComfyUI/venv/bin/python3 -m pip uninstall -y pathlib pathlib2 enum34 typing || true; "
-                "rm -f /ComfyUI/venv/lib/python3.*/site-packages/pathlib.py "
-                "/ComfyUI/venv/lib/python3.*/site-packages/pathlib.pyc "
-                "/ComfyUI/venv/lib/python3.*/site-packages/__pycache__/pathlib*.pyc"
-            )
+if BASE_NODES_ENABLED:
+    # Copy the installer into the image before RUN steps that invoke it.
+    # Modal does not support shell heredocs inside run_commands (Dockerfile parser).
+    # force_build only when COMFY_LATEST=1; models are not part of this Image.
+    runtime_image = (
+        runtime_image
+        .add_local_file(
+            local_path=str(Path(__file__).resolve().parent / "base_nodes.py"),
+            remote_path=INSTALLER_REMOTE_PATH,
+            copy=True,
         )
-
-    for node_command in node_commands:
-        # GITHUB_TOKEN from APP_SECRETS is available only during the build and is
-        # not baked into the resulting Image. Public repos work without it.
-        runtime_image = runtime_image.run_commands(
-            node_command,
+        .run_commands(
+            *build_base_nodes_commands(),
             secrets=APP_SECRETS,
             force_build=FORCE_LATEST,
         )
-
-    for registry_command in registry_node_commands:
-        runtime_image = runtime_image.run_commands(
-            registry_command,
-            force_build=FORCE_LATEST,
-        )
-
-    if BUILD_WORKFLOW_LOCK:
-        runtime_image = runtime_image.add_local_file(
-            WORKFLOW_LOCK_SOURCE,
-            remote_path=str(IMAGE_WORKFLOW_LOCK),
-            copy=True,
-        )
-
-    runtime_image = (
-        runtime_image
-        .env(
-            {
-                "DISABLE_AUTOLAUNCH": "1",
-                "DISABLE_SYNC": "1",
-                "PYTHONUNBUFFERED": "1",
-                "COMFY_NO_TELEMETRY": "1",
-            }
-        )
-        # Modal 1.x no longer automounts arbitrary imported local modules.
-        .add_local_python_source(
-            "base_nodes",
-            "recipes",
-            "workflow_resolver",
-            "comfy_engine",
-            "modal_config",
-            "storage",
+        # Some node requirements pull the PyPI `pathlib` backport, which shadows
+        # stdlib pathlib and crashes Python 3.12 (`from collections import Sequence`).
+        .run_commands(
+            "set -eu; "
+            "/ComfyUI/venv/bin/python3 -m pip uninstall -y pathlib pathlib2 enum34 typing || true; "
+            "rm -f /ComfyUI/venv/lib/python3.*/site-packages/pathlib.py "
+            "/ComfyUI/venv/lib/python3.*/site-packages/pathlib.pyc "
+            "/ComfyUI/venv/lib/python3.*/site-packages/__pycache__/pathlib*.pyc"
         )
     )
+
+for node_command in node_commands:
+    # GITHUB_TOKEN from APP_SECRETS is available only during the build and is
+    # not baked into the resulting Image. Public repos work without it.
+    runtime_image = runtime_image.run_commands(
+        node_command,
+        secrets=APP_SECRETS,
+        force_build=FORCE_LATEST,
+    )
+
+for registry_command in registry_node_commands:
+    runtime_image = runtime_image.run_commands(
+        registry_command,
+        force_build=FORCE_LATEST,
+    )
+
+if BUILD_WORKFLOW_LOCK:
+    runtime_image = runtime_image.add_local_file(
+        WORKFLOW_LOCK_SOURCE,
+        remote_path=str(IMAGE_WORKFLOW_LOCK),
+        copy=True,
+    )
+
+runtime_image = (
+    runtime_image
+    .env(
+        {
+            "DISABLE_AUTOLAUNCH": "1",
+            "DISABLE_SYNC": "1",
+            "PYTHONUNBUFFERED": "1",
+            "COMFY_NO_TELEMETRY": "1",
+        }
+    )
+    # Modal 1.x no longer automounts arbitrary imported local modules.
+    .add_local_python_source(
+        "base_nodes",
+        "recipes",
+        "workflow_resolver",
+        "comfy_engine",
+        "modal_config",
+        "storage",
+    )
+)
 
 
 # Model downloads run on CPU and write directly into the persistent Volume.
@@ -258,45 +250,44 @@ def sync_workflow(workflow_lock: dict) -> dict:
     return result
 
 
-if BUILD_GPU_RUNTIME:
-    @app.function(
-        image=runtime_image,
-        gpu=GPU,
-        timeout=SETTINGS.ui_timeout_seconds,
-        startup_timeout=SETTINGS.ui_startup_timeout_seconds,
-        scaledown_window=SETTINGS.ui_scaledown_window_seconds,
-        volumes=APP_VOLUMES,
-        secrets=APP_SECRETS,
-        max_containers=1,
-    )
-    @modal.concurrent(
-        max_inputs=SETTINGS.ui_max_inputs,
-        target_inputs=SETTINGS.ui_target_inputs,
-    )
-    @modal.web_server(
-        port=COMFY_PORT,
-        startup_timeout=SETTINGS.ui_startup_timeout_seconds,
-        requires_proxy_auth=SETTINGS.ui_requires_proxy_auth,
-    )
-    def ui():
-        if IMAGE_WORKFLOW_LOCK.is_file():
-            workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
-            verify_workflow_models(
-                workflow_lock,
-                WORKSPACE,
-                storage_root=STORAGE_ROOT,
-            )
-        prepare_runtime(COMFY_ROOT, WORKSPACE, STORAGE_ROOT)
-
-        extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
-        start_comfyui(
-            profile_name=PROFILE_NAME,
-            comfy_root=COMFY_ROOT,
-            workspace=WORKSPACE,
-            port=COMFY_PORT,
-            extra_args=extra,
+@app.function(
+    image=runtime_image,
+    gpu=GPU,
+    timeout=SETTINGS.ui_timeout_seconds,
+    startup_timeout=SETTINGS.ui_startup_timeout_seconds,
+    scaledown_window=SETTINGS.ui_scaledown_window_seconds,
+    volumes=APP_VOLUMES,
+    secrets=APP_SECRETS,
+    max_containers=1,
+)
+@modal.concurrent(
+    max_inputs=SETTINGS.ui_max_inputs,
+    target_inputs=SETTINGS.ui_target_inputs,
+)
+@modal.web_server(
+    port=COMFY_PORT,
+    startup_timeout=SETTINGS.ui_startup_timeout_seconds,
+    requires_proxy_auth=SETTINGS.ui_requires_proxy_auth,
+)
+def ui():
+    if IMAGE_WORKFLOW_LOCK.is_file():
+        workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
+        verify_workflow_models(
+            workflow_lock,
+            WORKSPACE,
+            storage_root=STORAGE_ROOT,
         )
-        print(f"ComfyUI profile={PROFILE_NAME!r} starting on :{COMFY_PORT}")
+    prepare_runtime(COMFY_ROOT, WORKSPACE, STORAGE_ROOT)
+
+    extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
+    start_comfyui(
+        profile_name=PROFILE_NAME,
+        comfy_root=COMFY_ROOT,
+        workspace=WORKSPACE,
+        port=COMFY_PORT,
+        extra_args=extra,
+    )
+    print(f"ComfyUI profile={PROFILE_NAME!r} starting on :{COMFY_PORT}")
 
 
 @app.local_entrypoint()
@@ -374,9 +365,9 @@ ProxyAuth: {SETTINGS.ui_requires_proxy_auth}
 1. List profiles:
    modal run comfyui_modal.py --action profiles
 
-2. Hydrate models into Modal Storage (CPU, no GPU):
-   modal run comfyui_modal.py --action hydrate --profile qwen-image
-   modal run comfyui_modal.py --action hydrate --workflow examples/z-image-base.json
+2. Hydrate models into Modal Storage (CPU App, no GPU Image):
+   modal run hydrate_modal.py --action hydrate --profile qwen-image
+   modal run hydrate_modal.py --action hydrate --workflow examples/z-image-base.json
 
 3. Resolve a workflow without downloading:
    modal run comfyui_modal.py --action resolve --workflow workflow.json
@@ -392,6 +383,6 @@ Optional:
    MODAL_GPU=L4 COMFY_BASE_NODES=0 modal serve comfyui_modal.py
    COMFY_LATEST=1 modal serve comfyui_modal.py
    EXTRA_ARGS='--lowvram' COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
-   COMFY_HYDRATE_WORKERS=8 modal run comfyui_modal.py --action hydrate --workflow workflow.json
+   COMFY_HYDRATE_WORKERS=8 modal run hydrate_modal.py --action hydrate --workflow workflow.json
 """.strip()
     )

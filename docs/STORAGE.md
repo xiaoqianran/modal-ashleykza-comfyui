@@ -51,7 +51,7 @@ ComfyUI 因此用和本地一样的文件名（`ae.safetensors`、`qwen_3_4b.saf
 把工作流依赖拉进 Modal Storage（CPU，无 GPU）：
 
 ```bash
-modal run comfyui_modal.py \
+modal run hydrate_modal.py \
   --action hydrate \
   --workflow examples/z-image-base.json
 ```
@@ -59,7 +59,7 @@ modal run comfyui_modal.py \
 按 Profile hydrate：
 
 ```bash
-modal run comfyui_modal.py --action hydrate --profile qwen-image
+modal run hydrate_modal.py --action hydrate --profile qwen-image
 ```
 
 `sync` / `workflow-sync` 仍可用，写入的是同一 Storage Volume。
@@ -67,12 +67,12 @@ modal run comfyui_modal.py --action hydrate --profile qwen-image
 加速并行（默认 4，最大 16）：
 
 ```bash
-COMFY_HYDRATE_WORKERS=8 modal run comfyui_modal.py \
+COMFY_HYDRATE_WORKERS=8 modal run hydrate_modal.py \
   --action hydrate \
   --workflow examples/z-image-base.json
 ```
 
-CPU hydrate (`modal run --action hydrate`) only builds the debian-slim download Image. The GPU ComfyUI Image, including optional GitHub node clones, is built only for `modal serve` / `modal deploy`. GPU 启动前请先 hydrate，不要在 GPU 容器里等下载。Z-Image bf16 建议：
+CPU hydrate 使用独立 App `hydrate_modal.py`，只构建 debian-slim 下载镜像。GPU ComfyUI Image 只在 `modal serve` / `modal deploy comfyui_modal.py` 时构建。GPU 启动前请先 hydrate，不要在 GPU 容器里等下载。Z-Image bf16 建议：
 
 ```bash
 COMFY_BASE_NODES=0 MODAL_GPU=L4 modal serve comfyui_modal.py

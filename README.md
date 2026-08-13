@@ -39,13 +39,13 @@ modal setup
 查看已有 Profile：
 
 ```bash
-modal run comfyui_modal.py --action profiles
+modal run hydrate_modal.py --action profiles
 ```
 
 先用 CPU 把模型 hydrate 进 Modal Storage，再启动 GPU UI。默认复用 Image 缓存；只有 `COMFY_LATEST=1` 才会重建节点 clone 层：
 
 ```bash
-modal run comfyui_modal.py --action hydrate --profile qwen-image
+modal run hydrate_modal.py --action hydrate --profile qwen-image
 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
@@ -58,7 +58,7 @@ COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 Windows PowerShell：
 
 ```powershell
-modal run comfyui_modal.py --action hydrate --profile qwen-image
+modal run hydrate_modal.py --action hydrate --profile qwen-image
 $env:COMFY_PROFILE="qwen-image"
 modal serve comfyui_modal.py
 ```
@@ -70,7 +70,7 @@ modal serve comfyui_modal.py
 ### 1. 解析并在 CPU 同步模型
 
 ```bash
-modal run comfyui_modal.py \
+modal run hydrate_modal.py \
   --action hydrate \
   --workflow examples/z-image-base.json
 ```
@@ -85,7 +85,7 @@ modal run comfyui_modal.py \
 只想检查依赖、不下载：
 
 ```bash
-modal run comfyui_modal.py \
+modal run hydrate_modal.py \
   --action resolve \
   --workflow examples/other-workflow.png
 ```

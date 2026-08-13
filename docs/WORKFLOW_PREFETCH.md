@@ -9,7 +9,7 @@
 ## 两阶段命令
 
 ```bash
-modal run comfyui_modal.py \
+modal run hydrate_modal.py \
   --action hydrate \
   --workflow path/to/workflow.json
 

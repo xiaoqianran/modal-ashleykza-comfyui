@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
 
 def _integer(
@@ -48,16 +46,6 @@ def wants_latest_dependencies(
     """
     del argv  # kept for call-site compatibility
     return _boolean(environ, "COMFY_LATEST", False)
-
-
-def wants_gpu_runtime(argv: Sequence[str] | None = None) -> bool:
-    """Build the ComfyUI GPU Image only for ``modal serve`` / ``modal deploy``.
-
-    CPU hydrate must not clone 130 GitHub node packs. Those layers belong on
-    the GPU runtime Image, not on the debian-slim download Image.
-    """
-    tokens = [Path(part).name for part in (argv if argv is not None else sys.argv)]
-    return "serve" in tokens or "deploy" in tokens
 
 
 @dataclass(frozen=True)
