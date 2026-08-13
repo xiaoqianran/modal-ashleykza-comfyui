@@ -1,0 +1,32 @@
+{
+  "custom_nodes": [],
+  "models": [
+    {
+      "category": "diffusion_models",
+      "filename": "z_image_bf16.safetensors",
+      "sha256": null,
+      "source": "node:UNETLoader",
+      "url": "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/diffusion_models/z_image_bf16.safetensors"
+    },
+    {
+      "category": "text_encoders",
+      "filename": "qwen_3_4b.safetensors",
+      "sha256": null,
+      "source": "node:CLIPLoader",
+      "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "ae.safetensors",
+      "sha256": null,
+      "source": "node:VAELoader",
+      "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"
+    }
+  ],
+  "schema": 1,
+  "unresolved": [],
+  "workflow": {
+    "name": "z-image-base.json",
+    "sha256": "f7b3ceb43a3688e17cc5bce67d1beafe833a674b4e4a257c626a6243b3ebedc2"
+  }
+}

@@ -41,13 +41,28 @@ class ModalSettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "COMFY_TIMEOUT_SECONDS"):
             ModalSettings.from_env({"COMFY_TIMEOUT_SECONDS": "86401"})
 
-    def test_modal_serve_defaults_to_latest_github_head(self):
-        self.assertTrue(wants_latest_dependencies({}, ["modal", "serve", "comfyui_modal.py"]))
+    def test_latest_only_when_explicitly_requested(self):
+        self.assertFalse(wants_latest_dependencies({}, ["modal", "serve", "comfyui_modal.py"]))
         self.assertFalse(wants_latest_dependencies({}, ["modal", "deploy", "comfyui_modal.py"]))
         self.assertTrue(wants_latest_dependencies({"COMFY_LATEST": "1"}, ["modal", "deploy"]))
         self.assertFalse(wants_latest_dependencies({"COMFY_LATEST": "0"}, ["modal", "serve"]))
         settings = ModalSettings.from_env({}, argv=["/usr/bin/modal", "serve", "comfyui_modal.py"])
-        self.assertTrue(settings.latest_dependencies)
+        self.assertFalse(settings.latest_dependencies)
+        self.assertEqual(settings.models_volume_name, "comfyui-ashleykza-models")
+        self.assertEqual(settings.storage_root, "/mnt/comfy-storage")
+        self.assertEqual(settings.hydrate_workers, 4)
+
+    def test_parses_storage_and_hydrate_settings(self):
+        settings = ModalSettings.from_env(
+            {
+                "MODAL_MODELS_VOLUME": "my-models",
+                "COMFY_STORAGE_ROOT": "/models",
+                "COMFY_HYDRATE_WORKERS": "8",
+            }
+        )
+        self.assertEqual(settings.models_volume_name, "my-models")
+        self.assertEqual(settings.storage_root, "/models")
+        self.assertEqual(settings.hydrate_workers, 8)
 
 
 if __name__ == "__main__":

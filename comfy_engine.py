@@ -7,14 +7,24 @@ import shlex
 import shutil
 import subprocess
 import tarfile
+import threading
 import time
 import zipfile
 from collections.abc import Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from storage import (
+    DEFAULT_STORAGE_ROOT,
+    ensure_storage_layout,
+    extra_model_paths_yaml,
+    legacy_model_path,
+    resolve_model_file,
+    storage_model_path,
+)
 from workflow_resolver import validate_workflow_lock
 
 LOCK_SCHEMA = 1
@@ -118,8 +128,12 @@ def _extract_archive(path: Path) -> None:
         path.unlink()
 
 
-def _load_lock(workspace: Path) -> dict:
-    lock_path = workspace / "state" / "comfy.lock.json"
+def _lock_path(state_dir: Path) -> Path:
+    return state_dir / "comfy.lock.json"
+
+
+def _load_lock(state_dir: Path) -> dict:
+    lock_path = _lock_path(state_dir)
     if not lock_path.exists():
         return {"schema": LOCK_SCHEMA, "assets": {}}
     try:
@@ -132,13 +146,29 @@ def _load_lock(workspace: Path) -> dict:
     return data
 
 
-def _save_lock(workspace: Path, lock: dict) -> None:
-    state = workspace / "state"
-    state.mkdir(parents=True, exist_ok=True)
-    path = state / "comfy.lock.json"
+def _save_lock(state_dir: Path, lock: dict) -> None:
+    state_dir.mkdir(parents=True, exist_ok=True)
+    path = _lock_path(state_dir)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(path)
+
+
+def _asset_lock_entry(lock: Mapping[str, Any], category: str, filename: str) -> dict | None:
+    assets = lock.get("assets", {})
+    return assets.get(f"{category}/{filename}") or assets.get(f"models/{category}/{filename}")
+
+
+def _promote_legacy_if_needed(legacy: Path, primary: Path) -> bool:
+    """Copy a previously downloaded workspace model into Modal Storage."""
+    if primary.is_file() and primary.stat().st_size > 0:
+        return False
+    if not (legacy.is_file() and legacy.stat().st_size > 0):
+        return False
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(legacy, primary)
+    print(f"[PROMOTE] {legacy} -> {primary}", flush=True)
+    return True
 
 
 def ensure_workspace_layout(workspace: Path) -> None:
@@ -311,113 +341,241 @@ def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | No
     }
 
 
-def sync_profile_models(profile_name: str, workspace: str | Path = "/workspace") -> dict:
-    workspace = Path(workspace)
-    ensure_workspace_layout(workspace)
-    profile = get_profile(profile_name)
-    lock = _load_lock(workspace)
+def _hydrate_one_asset(
+    asset: ModelAsset,
+    category: str,
+    *,
+    workspace: Path,
+    storage_root: Path,
+    lock_entry: dict | None,
+) -> tuple[dict, str]:
+    filename = asset_filename(asset)
+    primary = storage_model_path(storage_root, category, filename)
+    legacy = legacy_model_path(workspace, category, filename)
+    promoted = _promote_legacy_if_needed(legacy, primary)
+    if promoted and not lock_entry:
+        lock_entry = {
+            "url": normalize_huggingface_url(asset.url),
+            "size": primary.stat().st_size,
+        }
+    existed = _is_asset_current(primary, asset, lock_entry)
+    new_entry = dict(
+        download_asset(
+            asset,
+            storage_root / category,
+            lock_entry=lock_entry,
+        )
+    )
+    new_entry["path"] = str(primary)
+    if existed and promoted:
+        status = "promote"
+    elif existed:
+        status = "skip"
+    else:
+        status = "download"
+    return new_entry, status
 
-    wanted: list[tuple[str, str, ModelAsset]] = []
+
+def _hydrate_assets_parallel(
+    jobs: list[tuple[str, str, ModelAsset, dict]],
+    *,
+    workspace: Path,
+    storage_root: Path,
+    state_dir: Path,
+    lock: dict,
+    workers: int,
+) -> dict[str, int]:
+    """Download independent model files concurrently into Modal Storage.
+
+    ``jobs`` items are ``(rel_key, category, asset, extra_metadata)``.
+    Extra metadata is merged into the persisted lock entry after download.
+    """
+    counts = {"download": 0, "skip": 0, "promote": 0}
+    guard = threading.Lock()
+
+    def run_job(rel_key: str, category: str, asset: ModelAsset, extra: dict) -> None:
+        entry = _asset_lock_entry(lock, category, asset_filename(asset))
+        new_entry, status = _hydrate_one_asset(
+            asset,
+            category,
+            workspace=workspace,
+            storage_root=storage_root,
+            lock_entry=entry,
+        )
+        with guard:
+            previous = lock["assets"].get(rel_key, {})
+            packs = set(previous.get("packs", [])) | set(extra.get("packs", []))
+            workflows = set(previous.get("workflows", [])) | set(extra.get("workflows", []))
+            if packs:
+                new_entry["packs"] = sorted(packs)
+            if workflows:
+                new_entry["workflows"] = sorted(workflows)
+            lock["assets"][rel_key] = new_entry
+            _save_lock(state_dir, lock)
+            counts[status] += 1
+
+    worker_count = max(1, min(workers, len(jobs)))
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        futures = [
+            pool.submit(run_job, rel_key, category, asset, extra)
+            for rel_key, category, asset, extra in jobs
+        ]
+        for future in as_completed(futures):
+            future.result()
+    return counts
+
+
+def sync_profile_models(
+    profile_name: str,
+    workspace: str | Path = "/workspace",
+    *,
+    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
+    workers: int = 4,
+) -> dict:
+    workspace = Path(workspace)
+    storage_root = ensure_storage_layout(storage_root)
+    ensure_workspace_layout(workspace)
+    state_dir = storage_root / ".state"
+    profile = get_profile(profile_name)
+    lock = _load_lock(state_dir)
+
+    wanted: list[tuple[str, str, ModelAsset, dict]] = []
     seen: set[tuple[str, str]] = set()
     for pack_name in profile.model_packs:
         pack = MODEL_PACKS[pack_name]
         for category, assets in pack.items():
             for asset in assets:
-                key = (category, asset_filename(asset))
+                filename = asset_filename(asset)
+                key = (category, filename)
                 if key in seen:
                     continue
                 seen.add(key)
-                wanted.append((pack_name, category, asset))
+                wanted.append(
+                    (
+                        f"{category}/{filename}",
+                        category,
+                        asset,
+                        {"packs": [pack_name]},
+                    )
+                )
 
     if not wanted:
         print(f"Profile {profile_name!r} has no model assets.")
-        return {"profile": profile_name, "downloaded": 0, "total": 0}
+        return {
+            "profile": profile_name,
+            "downloaded": 0,
+            "skipped": 0,
+            "promoted": 0,
+            "total": 0,
+            "storage_root": str(storage_root),
+        }
 
-    completed = 0
-    for pack_name, category, asset in wanted:
-        rel_key = f"models/{category}/{asset_filename(asset)}"
-        entry = lock["assets"].get(rel_key)
-        new_entry = download_asset(
-            asset,
-            workspace / "models" / category,
-            lock_entry=entry,
-        )
-        new_entry = dict(new_entry)
-        new_entry["packs"] = sorted(set(new_entry.get("packs", [])) | {pack_name})
-        lock["assets"][rel_key] = new_entry
-        _save_lock(workspace, lock)
-        completed += 1
-
-    return {"profile": profile_name, "downloaded": completed, "total": len(wanted)}
+    counts = _hydrate_assets_parallel(
+        wanted,
+        workspace=workspace,
+        storage_root=storage_root,
+        state_dir=state_dir,
+        lock=lock,
+        workers=workers,
+    )
+    return {
+        "profile": profile_name,
+        "downloaded": counts["download"],
+        "skipped": counts["skip"],
+        "promoted": counts["promote"],
+        "total": len(wanted),
+        "storage_root": str(storage_root),
+    }
 
 
 def sync_workflow_models(
     workflow_lock: Mapping[str, Any],
     workspace: str | Path = "/workspace",
+    *,
+    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
+    workers: int = 4,
 ) -> dict:
-    """Download every resolved workflow model into the persistent workspace.
+    """Download every resolved workflow model into the Modal models Volume.
 
     The lock is produced locally and serialized into the CPU-only Modal Function,
     so arbitrary local workflow files never need to be mounted in a GPU container.
     """
     validate_workflow_lock(workflow_lock, require_resolved=True)
     workspace = Path(workspace)
+    storage_root = ensure_storage_layout(storage_root)
     ensure_workspace_layout(workspace)
-    state_lock = _load_lock(workspace)
+    state_dir = storage_root / ".state"
+    state_lock = _load_lock(state_dir)
     workflow = workflow_lock.get("workflow", {})
     workflow_name = str(workflow.get("name", "workflow"))
     workflow_sha256 = str(workflow.get("sha256", ""))
 
-    completed = 0
+    jobs: list[tuple[str, str, ModelAsset, dict]] = []
     for model in workflow_lock["models"]:
         category = model["category"]
         filename = model["filename"]
-        asset = ModelAsset(
-            url=model["url"],
-            filename=filename,
-            sha256=model.get("sha256"),
+        jobs.append(
+            (
+                f"{category}/{filename}",
+                category,
+                ModelAsset(
+                    url=model["url"],
+                    filename=filename,
+                    sha256=model.get("sha256"),
+                ),
+                {"workflows": [workflow_sha256 or workflow_name]},
+            )
         )
-        rel_key = f"models/{category}/{filename}"
-        entry = state_lock["assets"].get(rel_key)
-        new_entry = download_asset(
-            asset,
-            workspace / "models" / category,
-            lock_entry=entry,
+
+    counts = {"download": 0, "skip": 0, "promote": 0}
+    if jobs:
+        counts = _hydrate_assets_parallel(
+            jobs,
+            workspace=workspace,
+            storage_root=storage_root,
+            state_dir=state_dir,
+            lock=state_lock,
+            workers=workers,
         )
-        new_entry = dict(new_entry)
-        workflows = set(new_entry.get("workflows", []))
-        workflows.add(workflow_sha256 or workflow_name)
-        new_entry["workflows"] = sorted(workflows)
-        state_lock["assets"][rel_key] = new_entry
-        _save_lock(workspace, state_lock)
-        completed += 1
 
     return {
         "workflow": workflow_name,
         "workflow_sha256": workflow_sha256,
-        "synced": completed,
+        "synced": len(jobs),
+        "downloaded": counts["download"],
+        "skipped": counts["skip"],
+        "promoted": counts["promote"],
         "total": len(workflow_lock["models"]),
+        "storage_root": str(storage_root),
     }
 
 
 def verify_workflow_models(
     workflow_lock: Mapping[str, Any],
     workspace: str | Path = "/workspace",
+    *,
+    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
 ) -> dict:
     """Fail fast when a GPU runtime is missing CPU-prefetched workflow models."""
     validate_workflow_lock(workflow_lock, require_resolved=True)
     workspace = Path(workspace)
+    storage_root = Path(storage_root)
     missing = []
     for model in workflow_lock["models"]:
-        relative = Path("models") / model["category"] / model["filename"]
-        target = workspace / relative
+        target = resolve_model_file(
+            storage_root=storage_root,
+            workspace=workspace,
+            category=model["category"],
+            filename=model["filename"],
+        )
         if not target.is_file() or target.stat().st_size <= 0:
-            missing.append(relative.as_posix())
+            missing.append(f"{model['category']}/{model['filename']}")
     if missing:
         joined = ", ".join(missing)
         raise RuntimeError(
-            "Workflow models were not prefetched into the Modal Volume: "
-            f"{joined}. Run action=workflow-sync before starting the GPU endpoint."
+            "Workflow models were not prefetched into Modal Storage "
+            f"({storage_root}): {joined}. Run action=hydrate or "
+            "action=workflow-sync before starting the GPU endpoint."
         )
     return {"verified": len(workflow_lock["models"]), "missing": []}
 
@@ -537,23 +695,17 @@ def build_registry_node_commands(
     return commands
 
 
-def write_extra_model_paths(comfy_root: str | Path, workspace: str | Path) -> Path:
-    comfy_root = Path(comfy_root)
-    workspace = Path(workspace)
-
-    lines = [
-        "# Generated by comfy_engine.py. Edit recipes.py, not this file.",
-        "modal_workspace:",
-        f"    base_path: {workspace}",
-        "    is_default: true",
-    ]
-    for name in MODEL_DIRS:
-        lines.append(f"    {name}: models/{name}/")
-    lines.append("    custom_nodes: custom_nodes/")
-    lines.append("")
-
-    path = comfy_root / "extra_model_paths.yaml"
-    path.write_text("\n".join(lines), encoding="utf-8")
+def write_extra_model_paths(
+    comfy_root: str | Path,
+    workspace: str | Path,
+    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
+) -> Path:
+    """Write ComfyUI extra_model_paths.yaml with Volume dirs mapped 1:1."""
+    path = Path(comfy_root) / "extra_model_paths.yaml"
+    path.write_text(
+        extra_model_paths_yaml(storage_root=storage_root, workspace=workspace),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -578,15 +730,18 @@ def _replace_with_symlink(link_path: Path, target: Path) -> None:
 def prepare_runtime(
     comfy_root: str | Path = "/ComfyUI",
     workspace: str | Path = "/workspace",
+    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
 ) -> None:
     comfy_root = Path(comfy_root)
     workspace = Path(workspace)
+    storage_root = Path(storage_root)
 
     if not (comfy_root / "main.py").exists():
         raise RuntimeError(f"ComfyUI main.py not found under {comfy_root}")
 
     ensure_workspace_layout(workspace)
-    write_extra_model_paths(comfy_root, workspace)
+    ensure_storage_layout(storage_root)
+    write_extra_model_paths(comfy_root, workspace, storage_root)
 
     for name in ("input", "output", "user"):
         _replace_with_symlink(comfy_root / name, workspace / name)

@@ -9,9 +9,9 @@
 ```mermaid
 flowchart TD
     A["ComfyUI JSON / PNG"] --> B["本地解析 workflow.lock.json"]
-    B --> C["CPU Function 下载模型"]
+    B --> C["CPU hydrate 并行写入 Models Volume"]
     B --> D["CPU Image build 安装 CNR 节点"]
-    C --> E["Modal Volume"]
+    C --> E["Modal Storage /mnt/comfy-storage"]
     D --> F["不可变 Runtime Image"]
     E --> G["GPU 启动前校验"]
     F --> G
@@ -21,11 +21,11 @@ flowchart TD
 | 阶段 | 运行位置 | 产物 | 是否使用 GPU |
 |---|---|---|---|
 | 解析工作流 | 本机 | `*.lock.json` | 否 |
-| 下载模型 | Modal CPU Function | `/workspace/models/...` Volume | 否 |
+| 下载模型 | Modal CPU Function | `/mnt/comfy-storage/<category>/...` | 否 |
 | 安装工作流节点 | Modal Image build | Runtime Image | 否 |
 | 启动与推理 | Modal GPU Function | Web endpoint | 是 |
 
-模型放在持久 Volume；稳定 custom nodes 放在不可变 Image。这样既避免每次 GPU 冷启动重新下载，也让节点依赖跟随部署版本。
+模型放在独立的 Modal Storage Volume（目录名与 ComfyUI `models/<category>/` 一致）；稳定 custom nodes 放在不可变 Image。CPU hydrate 一次写入后，GPU 只挂载读取，冷启动不再联网下载。详见 [`docs/STORAGE.md`](docs/STORAGE.md)。
 
 ## 快速开始
 
@@ -42,10 +42,10 @@ modal setup
 modal run comfyui_modal.py --action profiles
 ```
 
-先用 CPU 同步 Profile 模型，再启动 GPU UI。`modal serve` 会忽略节点 clone / CNR 安装层的 Image 缓存，每次都拉 GitHub 默认分支 HEAD：
+先用 CPU 把模型 hydrate 进 Modal Storage，再启动 GPU UI。默认复用 Image 缓存；只有 `COMFY_LATEST=1` 才会重建节点 clone 层：
 
 ```bash
-modal run comfyui_modal.py --action sync --profile qwen-image
+modal run comfyui_modal.py --action hydrate --profile qwen-image
 COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 ```
 
@@ -58,7 +58,7 @@ COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
 Windows PowerShell：
 
 ```powershell
-modal run comfyui_modal.py --action sync --profile qwen-image
+modal run comfyui_modal.py --action hydrate --profile qwen-image
 $env:COMFY_PROFILE="qwen-image"
 modal serve comfyui_modal.py
 ```
@@ -71,16 +71,16 @@ modal serve comfyui_modal.py
 
 ```bash
 modal run comfyui_modal.py \
-  --action workflow-sync \
-  --workflow examples/other-workflow.json
+  --action hydrate \
+  --workflow examples/z-image-base.json
 ```
 
 这个命令会：
 
-1. 在本地生成 `examples/other-workflow.lock.json`；
+1. 在本地生成 `examples/z-image-base.lock.json`；
 2. 拒绝路径穿越、非 HTTP(S) URL、冲突目标和非法哈希；
 3. 把锁文件序列化给 CPU Function；
-4. 用 HF Xet 或 aria2 下载到 Modal Volume 并显式 `commit()`。
+4. 用 4 个 worker 并行走 HF Xet / aria2，写入 `comfyui-ashleykza-models` Volume 并 `commit()`。
 
 只想检查依赖、不下载：
 
@@ -100,7 +100,7 @@ COMFY_PROFILE=base \
 modal deploy comfyui_modal.py
 ```
 
-Modal 会在 CPU Image build 中按锁文件里的 Comfy Registry `cnr_id` / `ver` 安装节点，并把锁文件嵌入 Image。GPU 容器启动时只检查模型是否存在且非空；缺失时立即失败并提示先运行 `workflow-sync`，不会偷偷下载。
+Modal 会在 CPU Image build 中按锁文件里的 Comfy Registry `cnr_id` / `ver` 安装节点，并把锁文件嵌入 Image。GPU 容器启动时只检查模型是否存在且非空；缺失时立即失败并提示先运行 `hydrate`，不会偷偷下载。
 
 PowerShell：
 
@@ -129,22 +129,26 @@ Civitai       -> aria2c -x16 -s16
 普通 HTTP(S)  -> aria2c -x16 -s16
                          |
                          v
-                  Modal Volume
+        Modal Volume comfyui-ashleykza-models
+        /mnt/comfy-storage/{vae,text_encoders,diffusion_models,...}/
+                         |
+                         v
+              extra_model_paths.yaml 1:1 映射
                          |
                          v
                     GPU 只读取
 ```
 
 - `/ComfyUI`：基础镜像、venv、CUDA / torch、稳定 custom nodes；
-- `/workspace/models`：模型；
+- `/mnt/comfy-storage/<category>/`：模型（与 ComfyUI 目录同名）；
 - `/workspace/input|output|user`：可变用户数据；
 - `/workspace/custom_nodes`：实验节点；
-- `/workspace/state/comfy.lock.json`：幂等同步状态；
+- `/mnt/comfy-storage/.state/comfy.lock.json`：幂等 hydrate 状态；
 - `/workspace/logs/comfyui.log`：ComfyUI 日志。
 
-`extra_model_paths.yaml` 让 ComfyUI 读取 Volume 模型，不覆盖 Image 自带模型。HF 下载开启 `HF_XET_HIGH_PERFORMANCE=1`；失败时回退 aria2。同步 Function 使用 2 CPU / 2 GiB、最长 6 小时、指数退避重试，并限制为一个容器写同一 Volume。
+`extra_model_paths.yaml` 把 Storage Volume 标成 `is_default`，workspace `models/` 仅作旧数据回退。HF 下载开启 `HF_XET_HIGH_PERFORMANCE=1`；失败时回退 aria2。hydrate Function 使用 8 CPU / 16 GiB、默认 4 路并行、最长 6 小时、指数退避重试，并限制为一个容器写同一 Volume。旧 Volume 里已有的 `/workspace/models/...` 会在 hydrate 时复制进 Storage，不再重新下载。
 
-已运行的容器不会自动看到其他容器刚提交的 Volume 变更。工作流同步完成后再 deploy；如果 UI 已在运行，请让它启动新容器后再用新模型。
+已运行的容器不会自动看到其他容器刚提交的 Volume 变更。hydrate 完成后再 serve / deploy；如果 UI 已在运行，请让它启动新容器后再用新模型。
 
 ## Profile 与 Recipe
 
@@ -213,7 +217,10 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 | 环境变量 | 默认值 | 作用 |
 |---|---:|---|
 | `MODAL_APP_NAME` | `comfyui-ashleykza-cu128` | Modal App 名称 |
-| `MODAL_VOLUME_NAME` | `comfyui-ashleykza-workspace` | 持久 Volume 名称 |
+| `MODAL_VOLUME_NAME` | `comfyui-ashleykza-workspace` | 用户数据 Volume |
+| `MODAL_MODELS_VOLUME` | `comfyui-ashleykza-models` | 模型 Storage Volume |
+| `COMFY_STORAGE_ROOT` | `/mnt/comfy-storage` | Storage 在容器内的挂载点 |
+| `COMFY_HYDRATE_WORKERS` | `4` | CPU 并行下载路数 |
 | `COMFY_IMAGE` | `ghcr.io/...:cu128-py312-v0.32.0` | ComfyUI 基础镜像 |
 | `COMFY_PROFILE` | `base` | Recipe Profile |
 | `COMFY_WORKFLOW_LOCK` | 空 | 构建时工作流锁文件 |
@@ -226,7 +233,7 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 | `COMFY_REQUIRE_PROXY_AUTH` | `false` | 要求 Modal 代理认证头 |
 | `MODAL_SECRET_NAME` | `comfyui-creds` | named Modal Secret |
 | `COMFY_BASE_NODES` | `true` | Image build 时克隆 130 个 GitHub 基础节点 |
-| `COMFY_LATEST` | `modal serve` 为 true | 忽略节点 clone / CNR 层缓存，始终拉最新 Git HEAD |
+| `COMFY_LATEST` | `false` | 忽略节点 clone / CNR 层缓存，始终拉最新 Git HEAD |
 | `EXTRA_ARGS` | 空 | 追加 ComfyUI CLI 参数 |
 
 `COMFY_REQUIRE_PROXY_AUTH=true` 会要求请求携带 `Modal-Key` / `Modal-Secret` 头，普通浏览器直接打开会不方便，因此保留公开 endpoint 作为兼容默认。面向公网部署时，应明确选择认证策略且不要在 ComfyUI 中暴露敏感文件。
@@ -238,6 +245,6 @@ python -m compileall -q .
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions 安装当前最新 Modal SDK，并用 Ruff 检查。`modal serve` 会强制重建节点 clone / CNR 层以拿到 GitHub HEAD；`modal deploy` 默认保留 Image 缓存。用 `COMFY_LATEST=0` 可以让本地 serve 也走缓存。
+GitHub Actions 安装当前最新 Modal SDK，并用 Ruff 检查。默认复用 Image 缓存；用 `COMFY_LATEST=1` 强制重建节点 clone / CNR 层。模型不进 Image，只通过 `hydrate` 写入 Modal Storage。
 
 Modal API 采用依据和保留的架构取舍见 [`docs/MODAL_AUDIT.md`](docs/MODAL_AUDIT.md)。

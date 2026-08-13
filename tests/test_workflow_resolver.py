@@ -126,7 +126,7 @@ class WorkflowResolverTests(unittest.TestCase):
         with self.assertRaises(workflow_resolver.WorkflowResolutionError):
             workflow_resolver.validate_workflow_lock(lock)
 
-    def test_syncs_locked_models_into_workspace(self):
+    def test_syncs_locked_models_into_storage(self):
         workflow = _sample_workflow()
         workflow["nodes"][2]["widgets_values"] = []
         with tempfile.TemporaryDirectory() as directory:
@@ -142,15 +142,19 @@ class WorkflowResolverTests(unittest.TestCase):
                 return {"url": asset.url, "path": str(target), "size": 5}
 
             with patch.object(comfy_engine, "download_asset", fake_download):
-                result = comfy_engine.sync_workflow_models(lock, root / "workspace")
+                result = comfy_engine.sync_workflow_models(
+                    lock,
+                    root / "workspace",
+                    storage_root=root / "storage",
+                )
 
-            target = root / "workspace/models/checkpoints/qwen/model.safetensors"
-            state = json.loads((root / "workspace/state/comfy.lock.json").read_text())
+            target = root / "storage/checkpoints/qwen/model.safetensors"
+            state = json.loads((root / "storage/.state/comfy.lock.json").read_text())
             target_exists = target.is_file()
 
         self.assertTrue(target_exists)
         self.assertEqual(result["synced"], 1)
-        self.assertIn("models/checkpoints/qwen/model.safetensors", state["assets"])
+        self.assertIn("checkpoints/qwen/model.safetensors", state["assets"])
 
     def test_gpu_preflight_rejects_missing_models(self):
         workflow = _sample_workflow()
@@ -160,8 +164,12 @@ class WorkflowResolverTests(unittest.TestCase):
             source = root / "workflow.json"
             source.write_text(json.dumps(workflow), encoding="utf-8")
             lock = workflow_resolver.resolve_workflow(source)
-            with self.assertRaisesRegex(RuntimeError, "action=workflow-sync"):
-                comfy_engine.verify_workflow_models(lock, root / "workspace")
+            with self.assertRaisesRegex(RuntimeError, "hydrate"):
+                comfy_engine.verify_workflow_models(
+                    lock,
+                    root / "workspace",
+                    storage_root=root / "storage",
+                )
 
     def test_registry_node_build_is_pinned_and_cpu_safe(self):
         commands = comfy_engine.build_registry_node_commands(

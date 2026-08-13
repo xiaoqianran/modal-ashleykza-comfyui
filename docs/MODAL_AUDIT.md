@@ -10,9 +10,9 @@
 | 本地模块 | `add_local_python_source(...)` | Modal 1.x 不再隐式挂载任意本地模块 |
 | 构建期文件 | 锁文件 `add_local_file(..., copy=True)` | 后续构建与运行均可读取固定副本 |
 | 大模型权重 | CPU Function 下载到 Volume | 避免把大权重烘焙进 Image，也不占 GPU 下载时间 |
-| Volume 持久化 | 同步完成后显式 `workspace_vol.commit()` | 明确发布 CPU Function 的写入 |
+| Volume 持久化 | hydrate 完成后对 models + workspace Volume 显式 `commit()` | 明确发布 CPU Function 的写入 |
 | 下载重试 | `modal.Retries` 指数退避 | 处理临时网络 / 上游错误，避免紧密重试 |
-| 资源声明 | 同步使用 2 CPU / 2048 MiB；UI 显式 GPU fallback | 容量和成本可预期 |
+| 资源声明 | hydrate 使用 8 CPU / 16 GiB、默认 4 路并行；UI 显式 GPU fallback | 容量和成本可预期 |
 | 超时 | UI 最大 24 小时；独立 `startup_timeout` | 遵守 Function 超时上限并给大 Image 冷启动留时间 |
 | 并发 | `max_inputs` 与 `target_inputs` 可配置 | WebSocket / HTTP 并发有上限，扩容阈值明确 |
 | 缩容 | `scaledown_window` 可配置 | 在冷启动成本和空闲 GPU 成本之间取舍 |
@@ -34,9 +34,9 @@
 
 ComfyUI 已经是完整的长驻 HTTP / WebSocket 服务。`@modal.web_server` 直接表达该运行模型，并提供启动探测、代理 URL 与认证选项。Server primitive 更适合需要端口级客户端、TLS 隧道或非 HTTP 协议的服务；当前迁移没有足够收益。
 
-### 单一 workspace Volume
+### 拆分 models Volume 与 workspace Volume
 
-模型、输入、输出和用户状态继续使用同一已有 Volume，避免迁移时丢失用户数据。代价是不能把模型挂载单独设为只读。通过单容器限制、同步前置和显式 commit 降低冲突风险；未来若做破坏性存储迁移，再拆分只读 model Volume 与可写 user Volume。
+模型写入独立 Volume `comfyui-ashleykza-models`，挂载为 `/mnt/comfy-storage`，目录名与 ComfyUI `models/<category>/` 1:1。用户输入输出仍在 `comfyui-ashleykza-workspace`。hydrate 会把旧的 `/workspace/models/...` 复制进 Storage。GPU 通过 `extra_model_paths.yaml` 读取，不再在启动时下载。
 
 ### 一个 GPU 容器
 
@@ -49,8 +49,8 @@ ComfyUI 的队列和可变用户目录不是无状态服务。即使 `@modal.con
 ## 版本与升级策略
 
 - 本地和 CI 始终安装当前最新 Modal SDK（`python -m pip install -U modal`）；
-- `modal serve` 对节点 clone / CNR 安装层使用 `force_build=True`，每次拿到 GitHub 默认分支 HEAD；
-- `modal deploy` 默认保留 Image 缓存；需要刷新时设 `COMFY_LATEST=1`；
+- 默认保留 Image 缓存；需要刷新节点层时设 `COMFY_LATEST=1`；
+- 模型只通过 CPU `hydrate` 写入 Modal Storage，不进 Image、不在 GPU 上下载；
 - huggingface-hub 与 CI 中的 Ruff 仍精确固定，避免下载器与 lint 漂移；
 - 升级基础 ComfyUI Image 应独立 commit，不与 Recipe 变更混合；
 - 升级后至少运行 compileall、全部 unittest 和 Ruff；
