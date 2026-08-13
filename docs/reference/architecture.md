@@ -22,7 +22,7 @@ mkdocs.yml            MkDocs Material 配置
 - `experimental_options={"enable_gpu_snapshot": True}`（可用 `COMFY_GPU_SNAPSHOT=0` 关闭）
 - `@modal.enter(snap=True) start()`：读 Volume launch.json、校验模型、`prepare_runtime`、按需把 CNR 装到 workspace、启动 ComfyUI、等待就绪
 - `@modal.web_server ui()`：空方法，端口已在 listen
-- `@modal.exit() stop()`：终止进程
+- `@modal.exit() stop()`：`commit()` workspace Volume，再终止 ComfyUI
 - `@modal.concurrent` + `max_containers=1`
 
 不要根据 `sys.argv` 决定是否注册 `ui`。远程容器里的 argv **不是** `modal serve`，否则会得到 `App has no function 'ui'`。
@@ -43,4 +43,4 @@ mkdocs.yml            MkDocs Material 配置
 
 ## Volume 提交
 
-CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。
+CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。

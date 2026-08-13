@@ -251,6 +251,21 @@ def ensure_workspace_layout(workspace: Path) -> None:
         (workspace / directory).mkdir(parents=True, exist_ok=True)
 
 
+def output_manifest(output_dir: str | Path) -> tuple[tuple[str, int, int], ...]:
+    """Filename, mtime_ns, size for every file under ComfyUI ``output/``."""
+    root = Path(output_dir)
+    if not root.is_dir():
+        return ()
+    entries = []
+    for path in root.rglob("*"):
+        if path.is_file():
+            stat = path.stat()
+            entries.append(
+                (str(path.relative_to(root)), int(stat.st_mtime_ns), int(stat.st_size))
+            )
+    return tuple(sorted(entries))
+
+
 def _is_asset_current(path: Path, asset: ModelAsset, lock_entry: dict | None) -> bool:
     if not path.is_file() or path.stat().st_size <= 0:
         return False

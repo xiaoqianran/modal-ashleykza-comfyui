@@ -142,6 +142,34 @@ def sync_workflow(
     return result
 
 
+@app.function(
+    image=sync_image,
+    volumes=APP_VOLUMES,
+    timeout=5 * MINUTES,
+    cpu=1.0,
+    memory=2048,
+)
+def list_outputs() -> dict:
+    """Read ``/workspace/output`` on CPU after the GPU has scaled to zero."""
+    workspace_vol.reload()
+    output = WORKSPACE / "output"
+    files = []
+    if output.is_dir():
+        for path in sorted(output.rglob("*")):
+            if path.is_file():
+                files.append(
+                    {
+                        "path": str(path.relative_to(WORKSPACE)),
+                        "bytes": path.stat().st_size,
+                    }
+                )
+    return {
+        "volume": SETTINGS.volume_name,
+        "root": str(output),
+        "files": files,
+    }
+
+
 def _hydrate_workflow(settings: ModalSettings) -> dict:
     lock_path = Path(settings.workflow_lock_source)
     lock = None
@@ -241,6 +269,10 @@ def main(
         )
         return
 
+    if action == "outputs":
+        print(list_outputs.remote())
+        return
+
     if action in {"hydrate", "sync", "workflow-sync"}:
         if settings.launch_mode == "workflow":
             print(_hydrate_workflow(settings))
@@ -249,7 +281,9 @@ def main(
         return
 
     if action != "info":
-        raise ValueError("action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync")
+        raise ValueError(
+            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync, outputs"
+        )
 
     print(
         f"""
@@ -266,6 +300,9 @@ modal run hydrate_modal.py --profile qwen-image
 
 # GPU UI (same cached Image; lock CNR on workspace Volume)
 MODAL_GPU=T4 modal serve comfyui_modal.py
-COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal serve comfyui_modal.py
+
+# 成片在 workspace Volume；GPU 空闲 5s 后应缩到 0。用 CPU 列目录：
+modal run hydrate_modal.py --action outputs
+modal volume get comfyui-ashleykza-workspace /output ./output
 """.strip()
     )

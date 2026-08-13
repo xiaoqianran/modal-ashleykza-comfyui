@@ -74,5 +74,13 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
 ## 缩容与并发
 
 - 默认 `scaledown_window=5s`（Modal 允许 2s–20min）。空闲 GPU 很快回到 0，按秒计费。
+- 成片写在 Volume `comfyui-ashleykza-workspace` 的 `/output`。GPU 在 `output/` 变化时和容器退出时 `commit()`，所以 5s 缩容后文件还在。
+- 取成片用 CPU，不要为了下视频把 PRO 6000 留着：
+
+  ```bash
+  modal run hydrate_modal.py --action outputs
+  modal volume get comfyui-ashleykza-workspace /output ./output
+  ```
+
 - `max_containers=1`：ComfyUI 的队列和用户目录不是无状态服务，避免多容器同时写同一 workspace。
 - `@modal.concurrent` 控制单容器可同时处理的输入数（`COMFY_MAX_INPUTS` / `COMFY_TARGET_INPUTS`）。

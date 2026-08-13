@@ -309,5 +309,20 @@ class WaitReadyTests(unittest.TestCase):
             server.server_close()
 
 
+class OutputManifestTests(unittest.TestCase):
+    def test_output_manifest_tracks_files_under_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "output"
+            nested = root / "sub"
+            nested.mkdir(parents=True)
+            (root / "clip.mp4").write_bytes(b"abcd")
+            (nested / "note.txt").write_text("ok", encoding="utf-8")
+            manifest = comfy_engine.output_manifest(root)
+            names = [name for name, _mtime, _size in manifest]
+            self.assertEqual(names, ["clip.mp4", "sub/note.txt"])
+            sizes = {name: size for name, _mtime, size in manifest}
+            self.assertEqual(sizes["clip.mp4"], 4)
+
+
 if __name__ == "__main__":
     unittest.main()

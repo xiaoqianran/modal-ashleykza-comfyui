@@ -32,7 +32,7 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 | `--profile` | 配方名 → profile 模式（默认 `base`） |
 | `--lock-out` | 锁文件路径；默认把工作流后缀改成 `.lock.json` |
 | `--skip-lock-nodes` | 写入 launch.json，让 GPU 启动时跳过 CNR |
-| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info` |
+| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info`、`outputs` |
 
 给了 `--workflow` 就是 workflow 模式，不再用 profile 拉模型包。
 
@@ -41,3 +41,10 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 默认 4 路（`COMFY_HYDRATE_WORKERS`，1–16）。8 CPU / 16 GiB，超时 6 小时。
 
 已存在且匹配则 `[SKIP]`；旧 workspace 布局会 `[PROMOTE]`。成功后 `commit()` 两个 Volume。
+
+GPU 空闲 5s 后应缩到 0。成片在 workspace Volume 的 `/output`，用 CPU 读取：
+
+```bash
+modal run hydrate_modal.py --action outputs
+modal volume get comfyui-ashleykza-workspace /output ./output
+```

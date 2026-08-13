@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import shlex
 import sys
+import threading
 from pathlib import Path
 
 import modal
@@ -25,6 +26,7 @@ from comfy_engine import (
     build_node_commands,
     install_registry_nodes,
     load_launch_state,
+    output_manifest,
     prepare_runtime,
     start_comfyui,
     verify_workflow_models,
@@ -164,6 +166,36 @@ if SETTINGS.gpu_snapshot:
     UI_CLS_KWARGS["experimental_options"] = {"enable_gpu_snapshot": True}
 
 
+def _commit_workspace_output(reason: str) -> None:
+    workspace_vol.commit()
+    print(f"Committed workspace Volume ({reason})", flush=True)
+
+
+def start_output_commit_watch(
+    output_dir: Path,
+    *,
+    interval: float = 2.0,
+) -> tuple[threading.Event, threading.Thread]:
+    """Commit ``/workspace/output`` when SaveVideo writes, so 5s GPU scaledown keeps files."""
+    stop = threading.Event()
+    last = output_manifest(output_dir)
+
+    def loop() -> None:
+        nonlocal last
+        while not stop.wait(interval):
+            try:
+                current = output_manifest(output_dir)
+                if current != last:
+                    _commit_workspace_output("output changed")
+                    last = current
+            except Exception as exc:  # noqa: BLE001
+                print(f"workspace output commit skipped: {exc}", flush=True)
+
+    thread = threading.Thread(target=loop, name="workspace-output-commit", daemon=True)
+    thread.start()
+    return stop, thread
+
+
 @app.cls(**UI_CLS_KWARGS)
 @modal.concurrent(
     max_inputs=SETTINGS.ui_max_inputs,
@@ -206,6 +238,9 @@ class UI:
             extra_args=extra,
         )
         wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
+        self._output_commit_stop, self._output_commit_thread = start_output_commit_watch(
+            WORKSPACE / "output"
+        )
         print(
             f"ComfyUI mode={launch.get('mode') or SETTINGS.launch_mode!r} "
             f"profile={profile_name!r} "
@@ -223,6 +258,13 @@ class UI:
 
     @modal.exit()
     def stop(self):
+        stop_event = getattr(self, "_output_commit_stop", None)
+        if stop_event is not None:
+            stop_event.set()
+        try:
+            _commit_workspace_output("gpu exit")
+        except Exception as exc:  # noqa: BLE001
+            print(f"workspace commit on exit skipped: {exc}", flush=True)
         process = getattr(self, "process", None)
         if process is None:
             return
