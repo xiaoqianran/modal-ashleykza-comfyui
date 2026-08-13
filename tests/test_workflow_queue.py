@@ -56,6 +56,7 @@ class WorkflowInspectTests(unittest.TestCase):
             "pixal3d-image-to-3d.json",
             "flux2-dev-t2i.json",
             "qwen-image-2512.json",
+            "krea2-turbo-t2i.json",
         ):
             payload = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
             inspect = workflow_queue.inspect_workflow(payload)

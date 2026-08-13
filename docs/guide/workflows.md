@@ -203,6 +203,25 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
   --out artifacts/qwen-image-2512
 ```
 
+## 仓库示例：Krea-2 Turbo 文生图
+
+| 文件 | 作用 |
+|---|---|
+| `examples/krea2-turbo-t2i.json` | 官方 UI 工作流 `image_krea2_turbo_t2i`（subgraph） |
+| `examples/krea2-turbo-t2i.lock.json` | 解析锁：fp8 Turbo DiT + Qwen3VL-4B TE + Qwen Image VAE |
+| `catalog/krea2-turbo.json` | Studio 契约，默认 **RTX-PRO-6000**（L40S 也可） |
+
+官方 Turbo **8 步**，prompt enhancement 默认开。锁内 `custom_nodes` 为空。同样走 `python3 -m workflow_queue`，不要再写 `queue_krea.py`。风格 LoRA 在模板里默认关，锁里仍有 `krea2_darkbrush` 一份。跑完立刻停掉 `modal serve`。
+
+```bash
+modal run hydrate_modal.py --workflow examples/krea2-turbo-t2i.json
+MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/krea2-turbo-t2i.json \
+  --prompt "a celadon teapot on wet slate" \
+  --out artifacts/krea2-turbo
+```
+
 ## 自定义工作流
 
 1. 在本地 ComfyUI 导出 API / workflow JSON（或带嵌入工作流的 PNG）。
