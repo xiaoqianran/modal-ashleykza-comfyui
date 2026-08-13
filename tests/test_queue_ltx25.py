@@ -113,6 +113,23 @@ class Ltx25WorkflowPatchTests(unittest.TestCase):
         int_link = next(link for link in subgraph["links"] if link["id"] == 13424)
         self.assertEqual(int_link["origin_slot"], 1)
 
+    def test_fix_converted_prompt_restores_preprocess_widgets(self):
+        prompt = {
+            "2004": {"class_type": "LoadImage", "inputs": {"image": ""}},
+            "5514:3336": {"class_type": "LTXVPreprocess", "inputs": {"img_compression": 544}},
+            "5514:3059": {
+                "class_type": "EmptyLTXVLatentVideo",
+                "inputs": {"width": False, "height": 960, "batch_size": 1},
+            },
+            "5514:3159": {"class_type": "LTXVImgToVideoInplace", "inputs": {"strength": 18}},
+        }
+        fixed = self.mod.fix_converted_prompt(prompt, "ltx_dummy.png")
+        self.assertEqual(fixed["2004"]["inputs"]["image"], "ltx_dummy.png")
+        self.assertEqual(fixed["5514:3336"]["inputs"]["img_compression"], 18)
+        self.assertEqual(fixed["5514:3059"]["inputs"]["width"], 960)
+        self.assertEqual(fixed["5514:3059"]["inputs"]["height"], 544)
+        self.assertEqual(fixed["5514:3159"]["inputs"]["strength"], 0.7)
+
 
 if __name__ == "__main__":
     unittest.main()

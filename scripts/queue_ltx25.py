@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import time
 import urllib.request
+import uuid
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -229,6 +232,63 @@ def convert_with_browser(base: str, workflow: dict) -> dict:
     return result["prompt"]
 
 
+def upload_dummy_image(base: str) -> str:
+    """T2V still instantiates LoadImage; an empty filename fails validation."""
+    width, height = 64, 64
+    raw = b"".join(b"\x00" + bytes((32, 32, 40)) * width for _ in range(height))
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        checksum = zlib.crc32(kind + payload) & 0xFFFFFFFF
+        return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", checksum)
+
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+    filename = "ltx_dummy.png"
+    boundary = f"----ltx{uuid.uuid4().hex}"
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+        "Content-Type: image/png\r\n\r\n"
+    ).encode() + png + f"\r\n--{boundary}--\r\n".encode()
+    request = urllib.request.Request(
+        f"{base}/upload/image",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        uploaded = json.loads(response.read().decode("utf-8"))
+    print(json.dumps({"uploaded": uploaded}), flush=True)
+    return str(uploaded.get("name") or filename)
+
+
+def fix_converted_prompt(prompt: dict, dummy_image: str) -> dict:
+    """Correct subgraph widget slots that 0.32.0's graphToPrompt misassigns.
+
+    Preprocess subgraph 5514 promotes width/height/compression/strength, but the
+    flattened API graph swapped them onto the wrong inner nodes.
+    """
+    load = prompt.get("2004")
+    if isinstance(load, dict) and load.get("class_type") == "LoadImage":
+        load.setdefault("inputs", {})["image"] = dummy_image
+    preprocess = prompt.get("5514:3336")
+    if isinstance(preprocess, dict) and preprocess.get("class_type") == "LTXVPreprocess":
+        preprocess.setdefault("inputs", {})["img_compression"] = 18
+    empty = prompt.get("5514:3059")
+    if isinstance(empty, dict) and empty.get("class_type") == "EmptyLTXVLatentVideo":
+        empty.setdefault("inputs", {})["width"] = 960
+        empty["inputs"]["height"] = 544
+        empty["inputs"]["batch_size"] = 1
+    i2v = prompt.get("5514:3159")
+    if isinstance(i2v, dict) and i2v.get("class_type") == "LTXVImgToVideoInplace":
+        i2v.setdefault("inputs", {})["strength"] = 0.7
+    return prompt
+
+
 def wait_history(base: str, prompt_id: str, timeout: int = 45 * 60) -> dict:
     deadline = time.time() + timeout
     last_status = None
@@ -305,6 +365,8 @@ def main() -> None:
     print(json.dumps({"patched": str(patched_path)}), flush=True)
     wait_ready(base)
     prompt = convert_with_browser(base, patched)
+    dummy = upload_dummy_image(base)
+    prompt = fix_converted_prompt(prompt, dummy)
     api_path = out / "ltx25.api.json"
     api_path.write_text(json.dumps(prompt, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
