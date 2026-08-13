@@ -8,7 +8,7 @@ GPU 启动前，工作流引用的权重必须已经在 Storage 里。锁文件�
 modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.json
 ```
 
-默认写出 `examples/z-image-base.lock.json`。`--workflow` 不带 `--action resolve` 时会再下载模型。插件写入 `custom_nodes`，默认不安装。
+默认写出 `examples/z-image-base.lock.json`。`--workflow` 不带 `--action resolve` 时会再下载模型。`custom_nodes` 会在 GPU Image 里按 CNR id/version 安装。
 
 解析器遍历：
 

@@ -140,10 +140,10 @@ def _hydrate_workflow(settings: ModalSettings) -> dict:
         "plugins_parsed": [
             {"id": node.get("id"), "version": node.get("version")} for node in plugins
         ],
-        "plugins_installed": 0,
+        "plugins_downloaded": 0,
         "plugins_note": (
-            "custom nodes parsed and recorded in the lock; install is skipped "
-            "(plugin compatibility). Later: COMFY_INSTALL_NODES=1"
+            "custom nodes recorded in the lock; GPU serve/deploy installs them "
+            "unless COMFY_INSTALL_LOCK_NODES=0"
         ),
     }
     return result
@@ -157,8 +157,8 @@ def _hydrate_profile(settings: ModalSettings) -> dict:
         "profile": settings.profile_name,
         "plugins_installed": 0,
         "plugins_note": (
-            "profile node packs are not cloned by default. "
-            "Later: COMFY_INSTALL_NODES=1"
+            "profile node packs stay off. Opt in with COMFY_INSTALL_NODES=1 "
+            "on serve/deploy."
         ),
     }
 
@@ -202,6 +202,7 @@ def main(
                 "custom_nodes": lock["custom_nodes"],
                 "unresolved": lock["unresolved"],
                 "plugins_installed": False,
+                "plugins_note": "lock custom_nodes are installed on GPU Image by default",
             }
         )
         return
@@ -229,7 +230,7 @@ modal run hydrate_modal.py --workflow examples/z-image-base.json
 # named profile: download that profile's model packs
 modal run hydrate_modal.py --profile qwen-image
 
-# GPU UI (no plugin clones unless COMFY_INSTALL_NODES=1)
+# GPU UI (lock CNR nodes install by default)
 COMFY_WORKFLOW=examples/z-image-base.json MODAL_GPU=T4 modal serve comfyui_modal.py
 COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal serve comfyui_modal.py
 """.strip()

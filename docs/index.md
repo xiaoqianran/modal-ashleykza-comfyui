@@ -1,6 +1,6 @@
 # ComfyUI on Modal
 
-把 [ashleykleynhans/comfyui](https://github.com/ashleykleynhans/comfyui) 部署到 [Modal](https://modal.com)。两种启动方式；默认不装插件。
+把 [ashleykleynhans/comfyui](https://github.com/ashleykleynhans/comfyui) 部署到 [Modal](https://modal.com)。两种启动方式。工作流锁里的 CNR 节点会装进 GPU Image；130 个上游插件默认不开。
 
 ## 最短路径
 
@@ -23,7 +23,7 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 | 项 | 默认值 |
 |---|---|
 | 启动方式 | `--workflow` JSON，或 `--profile` 配方 |
-| 插件 | **不安装**（只写入 lock） |
+| 插件 | 锁内 CNR 默认安装；130 个上游 / 配方额外包默认关 |
 | GPU App | `comfyui-ashleykza-cu128` |
 | Hydrate App | `comfyui-ashleykza-cu128-hydrate` |
 | 模型 Volume | `comfyui-ashleykza-models` → `/mnt/comfy-storage` |

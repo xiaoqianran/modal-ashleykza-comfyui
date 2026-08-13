@@ -32,9 +32,9 @@ mkdocs.yml            MkDocs Material 配置
 默认只有 Ashley 基础镜像。节点层全部 opt-in：
 
 1. 固定 Ashley 基础镜像
-2. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点
-3. `COMFY_INSTALL_NODES=1`：profile node packs + 锁文件 CNR 节点
-4. 工作流锁文件可 `add_local_file` 打进 Image，供 GPU 启动前校验模型
+2. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点（默认关）
+3. 工作流锁里的 CNR 节点（默认开，`COMFY_INSTALL_LOCK_NODES=0` 可关）
+4. `COMFY_INSTALL_NODES=1`：profile 额外 node packs
 
 `COMFY_LATEST=1` 才会强制重建节点层。
 

@@ -1,6 +1,6 @@
 # 快速开始
 
-两种启动方式二选一。本机需要 Python 3.10+。**默认不克隆、不安装自定义节点。**
+两种启动方式二选一。本机需要 Python 3.10+。工作流 JSON 锁里的 CNR 节点会在 GPU Image 安装；**不会**默认去克隆 130 个上游仓库。
 
 ## 1. 安装并写入凭证
 
@@ -35,4 +35,4 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
 生产用 `modal deploy`（才会保存 memory snapshot）。`modal serve` 不保存快照。
 
-插件以后再装：`COMFY_INSTALL_NODES=1`。130 个基础 GitHub 节点：`COMFY_BASE_NODES=1`。
+插件：锁文件 `custom_nodes` 会在 `modal serve` / `deploy` 时装上。130 个基础 GitHub 节点仍要 `COMFY_BASE_NODES=1`。配方额外包要 `COMFY_INSTALL_NODES=1`。
