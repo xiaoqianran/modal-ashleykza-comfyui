@@ -415,6 +415,14 @@ def validate_workflow_lock(lock: Mapping[str, Any], *, require_resolved: bool = 
         if node_id in node_ids:
             raise WorkflowResolutionError(f"Duplicate custom node id: {node_id!r}")
         node_ids.add(node_id)
+        url = node.get("url")
+        if url is not None:
+            if not isinstance(url, str) or not url.startswith("https://github.com/"):
+                raise WorkflowResolutionError(
+                    f"Custom node {node_id!r} url must be an https://github.com/ repository."
+                )
+            if ".." in url or " " in url:
+                raise WorkflowResolutionError(f"Unsafe custom node url for {node_id!r}.")
 
     if require_resolved and unresolved:
         names = ", ".join(str(item.get("filename", "unknown")) for item in unresolved)

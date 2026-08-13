@@ -954,31 +954,66 @@ def install_registry_nodes(
             if stale.is_dir():
                 shutil.rmtree(stale)
 
-        before = _dir_names(image_custom)
-        run_install(node, comfy_root=comfy_root)
-        new_names = sorted(_dir_names(image_custom) - before)
-        moved: list[str] = []
-        for name in new_names:
-            src = image_custom / name
-            dest = volume_custom / name
-            if dest.exists():
-                if dest.is_dir():
-                    shutil.rmtree(dest)
-                else:
-                    dest.unlink()
-            shutil.move(str(src), str(dest))
-            moved.append(name)
+        url = str(node.get("url") or "").strip()
+        if url:
+            moved = _install_github_node(node, volume_custom)
+        else:
+            before = _dir_names(image_custom)
+            run_install(node, comfy_root=comfy_root)
+            new_names = sorted(_dir_names(image_custom) - before)
+            moved = []
+            for name in new_names:
+                src = image_custom / name
+                dest = volume_custom / name
+                if dest.exists():
+                    if dest.is_dir():
+                        shutil.rmtree(dest)
+                    else:
+                        dest.unlink()
+                shutil.move(str(src), str(dest))
+                moved.append(name)
         marker.write_text(
             json.dumps({"id": node_id, "version": version, "dirs": moved}, indent=2)
             + "\n",
             encoding="utf-8",
         )
+        kind = "git" if url else "CNR"
         print(
-            f"[INSTALL] CNR {node_id}@{version} -> {volume_custom} ({', '.join(moved) or 'no new dirs'})",
+            f"[INSTALL] {kind} {node_id}@{version} -> {volume_custom} ({', '.join(moved) or 'no new dirs'})",
             flush=True,
         )
         installed.append(node_id)
     return installed
+
+
+def _github_repo_dir_name(url: str) -> str:
+    name = url.rstrip("/").split("/")[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name
+
+
+def _install_github_node(node: Mapping[str, Any], volume_custom: Path) -> list[str]:
+    url = str(node["url"]).strip()
+    name = _github_repo_dir_name(url)
+    dest = volume_custom / name
+    if dest.exists():
+        shutil.rmtree(dest)
+    clone = ["git", "clone", "--depth=1"]
+    version = str(node.get("version") or "").strip()
+    if version:
+        clone.extend(["--branch", version])
+    clone.extend([url, str(dest)])
+    try:
+        _run(clone)
+    except subprocess.CalledProcessError:
+        if not version:
+            raise
+        print(f"[WARN] git clone --branch {version} failed; using default branch", flush=True)
+        if dest.exists():
+            shutil.rmtree(dest)
+        _run(["git", "clone", "--depth=1", url, str(dest)])
+    return [name]
 
 
 def _comfy_python(comfy_root: Path) -> str:
@@ -1015,6 +1050,29 @@ def _find_pixal3d_node_dir(custom_nodes_dir: Path) -> Path | None:
     return None
 
 
+def _ensure_cuda_build_tools() -> None:
+    cuda_bin = Path("/usr/local/cuda/bin")
+    if cuda_bin.is_dir():
+        os.environ["PATH"] = f"{cuda_bin}:{os.environ.get('PATH', '')}"
+    if shutil.which("cmake") and shutil.which("nvcc"):
+        return
+    if not shutil.which("apt-get"):
+        print("[PIXAL3D] cmake/nvcc missing and apt-get is unavailable", flush=True)
+        return
+    _run(["apt-get", "update"])
+    _run(
+        [
+            "apt-get",
+            "install",
+            "-y",
+            "cmake",
+            "ninja-build",
+            "build-essential",
+            "python3-dev",
+        ]
+    )
+
+
 def ensure_pixal3d_runtime(
     comfy_root: str | Path,
     custom_nodes_dir: str | Path,
@@ -1033,9 +1091,18 @@ def ensure_pixal3d_runtime(
     changed = False
     requirements = node_dir / "requirements.txt"
     if requirements.is_file() and not _module_available("moge", python):
-        print("[PIXAL3D] pip install -r requirements.txt", flush=True)
-        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
+        filtered = Path("/tmp/pixal3d-requirements.txt")
+        lines = [
+            line
+            for line in requirements.read_text(encoding="utf-8").splitlines()
+            if not line.strip().startswith("natten")
+        ]
+        filtered.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("[PIXAL3D] pip install requirements (skip natten; using NAF fallback)", flush=True)
+        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(filtered)])
         changed = True
+
+    _ensure_cuda_build_tools()
 
     attention_ok = _module_available("flash_attn", python) or _module_available(
         "flash_attn_interface", python

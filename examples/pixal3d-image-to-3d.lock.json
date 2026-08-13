@@ -150,6 +150,7 @@
     {
       "id": "Pixal3D-ComfyUI",
       "version": "0.2.4",
+      "url": "https://github.com/Saganaki22/Pixal3D-ComfyUI.git",
       "node_types": [
         "Pixal3DEnvironmentCheck",
         "Pixal3DExportGLB",

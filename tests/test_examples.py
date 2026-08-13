@@ -60,6 +60,8 @@ class ExampleLockTests(unittest.TestCase):
         ids = {node["id"] for node in committed["custom_nodes"]}
         self.assertIn("Pixal3D-ComfyUI", ids)
         self.assertIn("comfyui-custom-scripts", ids)
+        pixal = next(node for node in committed["custom_nodes"] if node["id"] == "Pixal3D-ComfyUI")
+        self.assertTrue(str(pixal.get("url", "")).startswith("https://github.com/Saganaki22/Pixal3D-ComfyUI"))
         names = {(m["category"], m["filename"]) for m in committed["models"]}
         self.assertIn(("Pixal3D", "TencentARC_Pixal3D/pipeline.json"), names)
         self.assertIn(("geometry_estimation", "moge_2_vitl_normal_fp16.safetensors"), names)
