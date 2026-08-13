@@ -1,6 +1,6 @@
 # Modal 1.5 架构审计
 
-审计日期：2026-08-13。本地与 CI 使用当前最新 Modal SDK（`modal>=1.5.4`），依据 Modal 官方 [`llms.txt`](https://modal.com/llms.txt) 所列当前文档。
+审计日期：2026-08-13。本地与 CI 安装未钉版本的当前最新 Modal SDK（`pip install -U modal`），依据 Modal 官方 [`llms.txt`](https://modal.com/llms.txt) 所列当前文档。
 
 ## 已采用的官方模式
 

@@ -2,7 +2,7 @@
 
 在 Modal 上运行可复现的 ComfyUI，并把“解析别人的工作流、下载模型、安装自定义节点”前移到 CPU 阶段。GPU 容器只校验依赖、加载模型和执行推理，不在启动时联网下载资产。
 
-项目按当前 Modal SDK（`modal>=1.5.4`，本地始终 `pip install -U modal`）和 2026-08-13 的官方 [`llms.txt`](https://modal.com/llms.txt) 审计。
+项目按当前最新 Modal SDK（`pip install -U modal`，不指定版本）和 2026-08-13 的官方 [`llms.txt`](https://modal.com/llms.txt) 审计。
 
 ## 工作方式
 
@@ -32,7 +32,7 @@ flowchart TD
 要求 Python 3.12。本地始终安装**当前最新** Modal SDK：
 
 ```bash
-python -m pip install -U "modal>=1.5.4"
+python -m pip install -U modal
 modal setup
 ```
 

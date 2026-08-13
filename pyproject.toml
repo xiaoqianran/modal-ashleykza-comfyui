@@ -5,7 +5,7 @@ description = "Reproducible ComfyUI recipes and workflow prefetching on Modal"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "modal>=1.5.4",
+    "modal",
 ]
 
 [tool.ruff]
