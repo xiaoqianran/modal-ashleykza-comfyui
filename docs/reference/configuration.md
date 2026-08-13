@@ -34,7 +34,8 @@
 | `COMFY_WORKFLOW` | 空 | 工作流 JSON/PNG 路径；设置后为 workflow 模式 |
 | `COMFY_PROFILE` | `base` | 配方名；无 `COMFY_WORKFLOW` 时为 profile 模式 |
 | `COMFY_WORKFLOW_LOCK` | 空 | 已有锁文件；workflow 模式默认写成同名 `.lock.json` |
-| `COMFY_INSTALL_NODES` | `false` | `1` 时才安装配方 / 锁文件里的自定义节点 |
+| `COMFY_INSTALL_LOCK_NODES` | `true` | `0` 时跳过工作流锁里的 CNR 节点 |
+| `COMFY_INSTALL_NODES` | `false` | `1` 时安装配方里的额外 node packs |
 | `COMFY_BASE_NODES` | `false` | `1` 时才克隆约 130 个上游 GitHub 节点 |
 | `COMFY_LATEST` | `false` | `1` 时强制重建节点 Image 层 |
 | `EXTRA_ARGS` | 空 | 追加到 ComfyUI 进程的参数 |

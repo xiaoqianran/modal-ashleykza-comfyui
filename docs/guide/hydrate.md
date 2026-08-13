@@ -1,6 +1,6 @@
 # Hydrate Storage
 
-CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image，**也不安装插件**。
+CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。插件写入 lock，由 GPU Image 安装 CNR。
 
 ## 两种方式
 
@@ -10,7 +10,7 @@ CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image，**
     modal run hydrate_modal.py --workflow examples/z-image-base.json
     ```
 
-    解析 JSON（或带工作流的 PNG）：模型 URL、CNR 插件 id。模型并行下载；插件只写入 `.lock.json`。
+    解析 JSON（或带工作流的 PNG）：模型 URL、CNR 插件 id。模型并行下载；插件写入 `.lock.json`，`modal serve` 时按 CNR 安装。
 
 === "Profile"
 

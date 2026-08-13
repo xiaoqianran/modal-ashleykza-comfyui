@@ -44,7 +44,7 @@ def _argv_option(argv: Sequence[str] | None, name: str) -> str:
     for index, item in enumerate(argv):
         if item == key:
             if index + 1 >= len(argv) or argv[index + 1].startswith("--"):
-                return "1" if name.startswith("install-") else ""
+                return "1" if name.startswith(("install-", "skip-")) else ""
             return argv[index + 1].strip()
         prefix = f"{key}="
         if item.startswith(prefix):
@@ -78,6 +78,7 @@ class ModalSettings:
     secret_name: str
     workflow_source: str
     workflow_lock_source: str
+    install_lock_nodes: bool
     install_nodes: bool
     base_nodes_enabled: bool
     latest_dependencies: bool
@@ -116,6 +117,9 @@ class ModalSettings:
         if workflow_source and not workflow_lock_source:
             workflow_lock_source = str(Path(workflow_source).with_suffix(".lock.json"))
 
+        install_lock_nodes = _boolean(environ, "COMFY_INSTALL_LOCK_NODES", True)
+        if _argv_option(argv, "skip-lock-nodes") in {"1", "true", "yes", "on"}:
+            install_lock_nodes = False
         install_nodes = _boolean(environ, "COMFY_INSTALL_NODES", False)
         if _argv_option(argv, "install-nodes") in {"1", "true", "yes", "on"}:
             install_nodes = True
@@ -170,6 +174,7 @@ class ModalSettings:
             or "comfyui-creds",
             workflow_source=workflow_source,
             workflow_lock_source=workflow_lock_source,
+            install_lock_nodes=install_lock_nodes,
             install_nodes=install_nodes,
             base_nodes_enabled=_boolean(environ, "COMFY_BASE_NODES", False),
             latest_dependencies=wants_latest_dependencies(environ, argv),

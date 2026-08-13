@@ -5,8 +5,10 @@ Launch modes (set env or pass the same flags used by hydrate):
     COMFY_WORKFLOW=examples/z-image-base.json modal serve comfyui_modal.py
     COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 
-Custom nodes are off by default (``COMFY_INSTALL_NODES=0``,
-``COMFY_BASE_NODES=0``). Hydrate models with ``hydrate_modal.py``.
+Custom nodes from a workflow lock are installed on the GPU Image.
+The 130 GitHub base clones and profile extra packs stay off unless
+``COMFY_BASE_NODES=1`` / ``COMFY_INSTALL_NODES=1``. Hydrate models
+with ``hydrate_modal.py``.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ PROFILE_NAME = SETTINGS.profile_name
 PROFILE = get_profile(PROFILE_NAME)
 FORCE_LATEST = SETTINGS.latest_dependencies
 BASE_NODES_ENABLED = SETTINGS.base_nodes_enabled
+INSTALL_LOCK_NODES = SETTINGS.install_lock_nodes
 INSTALL_NODES = SETTINGS.install_nodes
 
 if SETTINGS.workflow_source and modal.is_local():
@@ -85,7 +88,7 @@ APP_VOLUMES = {
 }
 
 
-# Custom nodes stay off unless COMFY_INSTALL_NODES=1 (compat is handled later).
+# Workflow-lock CNR nodes are required by the JSON. Profile extras stay opt-in.
 node_commands = (
     build_node_commands(PROFILE.node_packs) if INSTALL_NODES else ()
 )
@@ -94,7 +97,7 @@ registry_node_commands = (
         BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
         comfy_cli_version=None if FORCE_LATEST else "1.16.0",
     )
-    if INSTALL_NODES
+    if INSTALL_LOCK_NODES
     else ()
 )
 
@@ -227,7 +230,8 @@ class UI:
         wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
         print(
             f"ComfyUI mode={SETTINGS.launch_mode!r} profile={PROFILE_NAME!r} "
-            f"nodes={INSTALL_NODES} ready on :{COMFY_PORT}"
+            f"lock_nodes={INSTALL_LOCK_NODES} extra_nodes={INSTALL_NODES} "
+            f"ready on :{COMFY_PORT}"
         )
 
     @modal.web_server(
@@ -265,16 +269,17 @@ Port:      {COMFY_PORT}
 Workspace: {SETTINGS.volume_name} -> {WORKSPACE}
 Storage:   {SETTINGS.models_volume_name} -> {STORAGE_ROOT}
 Secret:    {SECRET_NAME}
-InstallNodes: {INSTALL_NODES}
+InstallLockNodes: {INSTALL_LOCK_NODES}
+InstallExtraNodes: {INSTALL_NODES}
 BaseNodes: {BASE_NODES_ENABLED}
 Latest:    {FORCE_LATEST}
 Snapshot:  memory={SETTINGS.memory_snapshot} gpu={SETTINGS.gpu_snapshot}
 
-# 1. Hydrate models (CPU, no plugins)
+# 1. Hydrate models (CPU)
 modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 
-# 2. GPU UI (plugins off unless COMFY_INSTALL_NODES=1)
+# 2. GPU UI (lock CNR nodes on; 130 clones / profile extras off)
 COMFY_WORKFLOW=examples/z-image-base.json MODAL_GPU=T4 modal serve comfyui_modal.py
 COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal deploy comfyui_modal.py
 """.strip()

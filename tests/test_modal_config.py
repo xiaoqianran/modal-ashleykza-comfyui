@@ -13,6 +13,7 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.secret_name, "comfyui-creds")
         self.assertFalse(settings.base_nodes_enabled)
         self.assertFalse(settings.install_nodes)
+        self.assertTrue(settings.install_lock_nodes)
         self.assertEqual(settings.launch_mode, "profile")
         self.assertEqual(settings.profile_name, "base")
         self.assertEqual(settings.workflow_source, "")
@@ -119,6 +120,16 @@ class ModalSettingsTests(unittest.TestCase):
             argv=["modal", "serve", "comfyui_modal.py", "--install-nodes"],
         )
         self.assertTrue(flagged.install_nodes)
+
+    def test_lock_nodes_install_by_default(self):
+        self.assertTrue(ModalSettings.from_env({}).install_lock_nodes)
+        skipped = ModalSettings.from_env({"COMFY_INSTALL_LOCK_NODES": "0"})
+        self.assertFalse(skipped.install_lock_nodes)
+        skipped_argv = ModalSettings.from_env(
+            {},
+            argv=["modal", "serve", "comfyui_modal.py", "--skip-lock-nodes"],
+        )
+        self.assertFalse(skipped_argv.install_lock_nodes)
 
 
 if __name__ == "__main__":
