@@ -15,6 +15,7 @@
 还需要：
 
 - 本机联网、Modal 账号、Hugging Face token
+- 走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 Modal 带 `api-proxy-support`）；不要代理就设 `MODAL_DISABLE_API_PROXY=1`
 - FLUX.2 / Qwen / Krea-2 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image 不需要）
 - 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
 

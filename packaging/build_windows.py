@@ -18,6 +18,7 @@ EMBED_URL = (
     f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 )
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+MODAL_PIP_SPEC = "modal[api-proxy-support]"
 PACKAGES = ("catalog", "studio")
 MODULES = (
     "base_nodes.py",
@@ -37,6 +38,9 @@ README = """Studio
 
 第一次会把运行时写到 %LOCALAPPDATA%\\ComfyStudio，下载目录里始终只有 exe。
 图跑在 Modal 云上。本机要联网、Modal 账号、Hugging Face token。
+
+走代理：在系统或用户环境变量里设 HTTPS_PROXY / ALL_PROXY（Modal CLI 已带 api-proxy-support）。
+不想走代理：设 MODAL_DISABLE_API_PROXY=1。
 
 FLUX.2 / Qwen / Krea-2 / Pixal3D / TripoSplat 需要本机 Chrome 或 Edge。
 Z-Image 不需要。生成结束默认停 GPU。
@@ -137,7 +141,7 @@ def install_deps(python_exe: Path) -> None:
             "install",
             "--no-cache-dir",
             "--no-warn-script-location",
-            "modal",
+            MODAL_PIP_SPEC,
             "playwright",
         ]
     )

@@ -70,6 +70,10 @@ class WindowsBundleTests(unittest.TestCase):
                 path = build.write_stamp(payload)
             self.assertEqual(path.read_text(encoding="utf-8").strip(), "deadbeef")
 
+    def test_modal_pip_spec_includes_api_proxy_support(self):
+        build = _load("build_windows")
+        self.assertEqual(build.MODAL_PIP_SPEC, "modal[api-proxy-support]")
+
 
 if __name__ == "__main__":
     unittest.main()
