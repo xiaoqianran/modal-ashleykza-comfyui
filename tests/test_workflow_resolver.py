@@ -80,6 +80,33 @@ class WorkflowResolverTests(unittest.TestCase):
         self.assertEqual(lock["unresolved"][0]["category"], "loras")
         self.assertEqual(lock["unresolved"][0]["filename"], "style.safetensors")
 
+    def test_strips_repeated_category_from_declared_model_name(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "VAELoader",
+                    "widgets_values": ["ltx.safetensors"],
+                    "properties": {
+                        "cnr_id": "comfy-core",
+                        "models": [
+                            {
+                                "name": "vae/ltx.safetensors",
+                                "url": "https://huggingface.co/example/repo/resolve/main/vae/ltx.safetensors",
+                                "directory": "models/vae",
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.json"
+            path.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(path)
+        self.assertEqual(lock["models"][0]["category"], "vae")
+        self.assertEqual(lock["models"][0]["filename"], "ltx.safetensors")
+
     def test_reads_workflow_from_png_text_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "workflow.png"

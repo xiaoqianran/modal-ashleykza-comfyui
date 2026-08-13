@@ -16,6 +16,23 @@
 
 GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再开新的 GPU 容器；已运行的容器看不到尚未 `commit` / 尚未重建的 Volume 快照。
 
+## 模型或成片套了两层目录
+
+例如 `vae/vae/*.safetensors` 或 `output/output/*.mp4`。这是旧下载把 category 又拼进文件名导致的。
+
+当前 `storage.py` 在 hydrate 和 GPU 启动时会摊平。也可以只跑 CPU：
+
+```bash
+modal run hydrate_modal.py --action repair
+modal run hydrate_modal.py --action outputs
+```
+
+正确位置永远是：
+
+- 模型：`/mnt/comfy-storage/<category>/<filename>`
+- 成片：`/workspace/output/<filename>`（Volume 上是 `/output/<filename>`）
+
+
 ## modal run hydrate 在构建巨大 GPU Image
 
 用错了入口。请使用 `hydrate_modal.py`，不要 `modal run comfyui_modal.py` 做下载。

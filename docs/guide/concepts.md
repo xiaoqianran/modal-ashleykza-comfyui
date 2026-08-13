@@ -46,6 +46,8 @@ flowchart LR
 
 GPU 启动时由 `storage.py` 写入 `extra_model_paths.yaml`，把这些目录指给 ComfyUI。默认**不会**再往 `/workspace/models` 下载。若 Volume 里仍有旧布局 `/workspace/models/...`，hydrate 会在写入前把它们提升到 Storage 根目录。
 
+路径只认一种形状。`storage.py` 会去掉重复的 `models/`、`vae/`、`output/` 前缀，所以 `vae/vae/x.safetensors` 和 `output/output/clip.mp4` 不会再被写进去。hydrate / GPU `start()` 还会把已经套层的目录摊平。
+
 ## Image 缓存 vs Volume 插件
 
 Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` + 固定的 `comfy-cli==1.16.0` 对所有工作流共用。

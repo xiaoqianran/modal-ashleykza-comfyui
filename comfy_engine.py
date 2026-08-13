@@ -18,12 +18,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 from storage import (
     DEFAULT_STORAGE_ROOT,
+    canonical_relpath,
+    download_target,
     ensure_storage_layout,
+    ensure_workspace_layout,
     extra_model_paths_yaml,
     legacy_model_path,
+    repair_storage_layout,
+    repair_workspace_layout,
     resolve_model_file,
     storage_model_path,
 )
@@ -238,19 +243,6 @@ def _promote_legacy_if_needed(legacy: Path, primary: Path) -> bool:
     return True
 
 
-def ensure_workspace_layout(workspace: Path) -> None:
-    for directory in (
-        "custom_nodes",
-        "input",
-        "output",
-        "user",
-        "logs",
-        "state",
-        *(f"models/{name}" for name in MODEL_DIRS),
-    ):
-        (workspace / directory).mkdir(parents=True, exist_ok=True)
-
-
 def output_manifest(output_dir: str | Path) -> tuple[tuple[str, int, int], ...]:
     """Filename, mtime_ns, size for every file under ComfyUI ``output/``."""
     root = Path(output_dir)
@@ -409,8 +401,7 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
 
 
 def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / asset_filename(asset)
+    target = download_target(target_dir, asset_filename(asset))
     target.parent.mkdir(parents=True, exist_ok=True)
 
     if _is_asset_current(target, asset, lock_entry):
@@ -460,7 +451,13 @@ def _hydrate_one_asset(
     storage_root: Path,
     lock_entry: dict | None,
 ) -> tuple[dict, str]:
-    filename = asset_filename(asset)
+    filename = canonical_relpath(asset_filename(asset), category=category)
+    asset = ModelAsset(
+        url=asset.url,
+        filename=filename,
+        sha256=asset.sha256,
+        extract=asset.extract,
+    )
     primary = storage_model_path(storage_root, category, filename)
     legacy = legacy_model_path(workspace, category, filename)
     promoted = _promote_legacy_if_needed(legacy, primary)
@@ -546,6 +543,8 @@ def sync_profile_models(
     workspace = Path(workspace)
     storage_root = ensure_storage_layout(storage_root)
     ensure_workspace_layout(workspace)
+    repair_storage_layout(storage_root)
+    repair_workspace_layout(workspace)
     state_dir = storage_root / ".state"
     profile = get_profile(profile_name)
     lock = _load_lock(state_dir)
@@ -628,6 +627,8 @@ def sync_workflow_models(
     workspace = Path(workspace)
     storage_root = ensure_storage_layout(storage_root)
     ensure_workspace_layout(workspace)
+    repair_storage_layout(storage_root)
+    repair_workspace_layout(workspace)
     state_dir = storage_root / ".state"
     state_lock = _load_lock(state_dir)
     workflow = workflow_lock.get("workflow", {})
@@ -984,6 +985,8 @@ def prepare_runtime(
 
     ensure_workspace_layout(workspace)
     ensure_storage_layout(storage_root)
+    repair_workspace_layout(workspace)
+    repair_storage_layout(storage_root)
     write_extra_model_paths(comfy_root, workspace, storage_root)
 
     for name in ("input", "output", "user"):
@@ -1044,6 +1047,9 @@ def start_comfyui(
         str(comfy_root / "main.py"),
         "--listen", "0.0.0.0",
         "--port", str(port),
+        "--input-directory", str(workspace / "input"),
+        "--output-directory", str(workspace / "output"),
+        "--user-directory", str(workspace / "user"),
         *profile.comfy_args,
         *extra_args,
     ]

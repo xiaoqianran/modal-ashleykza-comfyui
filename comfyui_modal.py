@@ -34,6 +34,7 @@ from comfy_engine import (
 )
 from modal_config import ModalSettings
 from recipes import get_profile
+from storage import workspace_dir
 
 SETTINGS = ModalSettings.from_env(os.environ, sys.argv)
 APP_NAME = SETTINGS.app_name
@@ -239,7 +240,7 @@ class UI:
         )
         wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
         self._output_commit_stop, self._output_commit_thread = start_output_commit_watch(
-            WORKSPACE / "output"
+            workspace_dir(WORKSPACE, "output")
         )
         print(
             f"ComfyUI mode={launch.get('mode') or SETTINGS.launch_mode!r} "

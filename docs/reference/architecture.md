@@ -44,3 +44,7 @@ mkdocs.yml            MkDocs Material 配置
 ## Volume 提交
 
 CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。
+
+## Volume 路径
+
+所有路径由 `storage.py` 规范化：去掉重复的 `models/`、category、`output/` 前缀；hydrate 与 GPU 启动时摊平已套层的目录。成片只在 workspace Volume 的 `/output`。

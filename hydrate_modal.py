@@ -20,6 +20,7 @@ import modal
 from comfy_engine import sync_profile_models, sync_workflow_models
 from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
+from storage import list_output_files, repair_storage_layout, repair_workspace_layout
 from workflow_resolver import load_workflow_lock, validate_workflow_lock, write_workflow_lock
 
 SETTINGS = ModalSettings.from_env(os.environ)
@@ -152,21 +153,33 @@ def sync_workflow(
 def list_outputs() -> dict:
     """Read ``/workspace/output`` on CPU after the GPU has scaled to zero."""
     workspace_vol.reload()
-    output = WORKSPACE / "output"
-    files = []
-    if output.is_dir():
-        for path in sorted(output.rglob("*")):
-            if path.is_file():
-                files.append(
-                    {
-                        "path": str(path.relative_to(WORKSPACE)),
-                        "bytes": path.stat().st_size,
-                    }
-                )
+    files = list_output_files(WORKSPACE)
     return {
         "volume": SETTINGS.volume_name,
-        "root": str(output),
+        "root": "/output",
         "files": files,
+        "get": "modal volume get comfyui-ashleykza-workspace /output ./output",
+    }
+
+
+@app.function(
+    image=sync_image,
+    volumes=APP_VOLUMES,
+    timeout=5 * MINUTES,
+    cpu=1.0,
+    memory=2048,
+)
+def repair_paths() -> dict:
+    """Flatten leftover ``vae/vae/`` and ``output/output/`` trees on both Volumes."""
+    workspace_vol.reload()
+    models_vol.reload()
+    workspace = repair_workspace_layout(WORKSPACE)
+    storage = repair_storage_layout(STORAGE_ROOT)
+    _commit_storage()
+    return {
+        "workspace": workspace,
+        "storage": storage,
+        "outputs": list_output_files(WORKSPACE),
     }
 
 
@@ -273,6 +286,10 @@ def main(
         print(list_outputs.remote())
         return
 
+    if action == "repair":
+        print(repair_paths.remote())
+        return
+
     if action in {"hydrate", "sync", "workflow-sync"}:
         if settings.launch_mode == "workflow":
             print(_hydrate_workflow(settings))
@@ -282,7 +299,7 @@ def main(
 
     if action != "info":
         raise ValueError(
-            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync, outputs"
+            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync, outputs, repair"
         )
 
     print(
@@ -301,8 +318,9 @@ modal run hydrate_modal.py --profile qwen-image
 # GPU UI (same cached Image; lock CNR on workspace Volume)
 MODAL_GPU=T4 modal serve comfyui_modal.py
 
-# 成片在 workspace Volume；GPU 空闲 5s 后应缩到 0。用 CPU 列目录：
+# 成片在 workspace Volume；GPU 空闲 5s 后应缩到 0。用 CPU 列目录 / 摊平套层：
 modal run hydrate_modal.py --action outputs
+modal run hydrate_modal.py --action repair
 modal volume get comfyui-ashleykza-workspace /output ./output
 """.strip()
     )

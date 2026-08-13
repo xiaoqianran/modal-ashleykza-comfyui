@@ -8,11 +8,19 @@ from recipes import MODEL_DIRS, ModelAsset
 from storage import (
     DEFAULT_STORAGE_ROOT,
     DEFAULT_STORAGE_VOLUME,
+    canonical_relpath,
+    download_target,
     ensure_storage_layout,
     extra_model_paths_yaml,
+    flatten_repeated_dir,
     legacy_model_path,
+    list_output_files,
+    repair_storage_layout,
+    repair_workspace_layout,
     resolve_model_file,
     storage_model_path,
+    workspace_dir,
+    workspace_file,
 )
 
 
@@ -39,6 +47,62 @@ class StorageLayoutTests(unittest.TestCase):
             storage_model_path("/mnt/comfy-storage", "vae", "../escape.safetensors")
         with self.assertRaises(ValueError):
             storage_model_path("/mnt/comfy-storage", "not-a-category", "model.safetensors")
+
+    def test_strips_repeated_category_and_models_prefix(self):
+        root = Path("/mnt/comfy-storage")
+        self.assertEqual(canonical_relpath("vae/file.safetensors", category="vae"), "file.safetensors")
+        self.assertEqual(
+            canonical_relpath("models/vae/vae/file.safetensors", category="vae"),
+            "file.safetensors",
+        )
+        self.assertEqual(
+            canonical_relpath("qwen/model.safetensors", category="checkpoints"),
+            "qwen/model.safetensors",
+        )
+        self.assertEqual(
+            storage_model_path(root, "vae", "vae/ltx-2.5-video-vae-bf16.safetensors"),
+            root / "vae" / "ltx-2.5-video-vae-bf16.safetensors",
+        )
+        self.assertEqual(
+            download_target(root / "vae", "vae/model.safetensors"),
+            root / "vae" / "model.safetensors",
+        )
+        self.assertEqual(
+            workspace_file("/workspace", "output", "output/clip.mp4"),
+            Path("/workspace/output/clip.mp4"),
+        )
+        self.assertEqual(workspace_dir("/workspace", "output"), Path("/workspace/output"))
+
+    def test_flattens_nested_category_and_output_trees(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nested = root / "storage" / "vae" / "vae"
+            nested.mkdir(parents=True)
+            (nested / "model.safetensors").write_bytes(b"ok")
+            models_layout = root / "storage" / "models" / "text_encoders"
+            models_layout.mkdir(parents=True)
+            (models_layout / "clip.safetensors").write_bytes(b"clip")
+            messages = repair_storage_layout(root / "storage")
+            self.assertTrue((root / "storage" / "vae" / "model.safetensors").is_file())
+            self.assertFalse((root / "storage" / "vae" / "vae").exists())
+            self.assertTrue((root / "storage" / "text_encoders" / "clip.safetensors").is_file())
+            self.assertTrue(any("FLATTEN" in line or "DROP-NEST" in line for line in messages))
+
+            output_nested = root / "workspace" / "output" / "output"
+            output_nested.mkdir(parents=True)
+            (output_nested / "clip.mp4").write_bytes(b"video")
+            repair_workspace_layout(root / "workspace")
+            listed = list_output_files(root / "workspace")
+            self.assertEqual(listed[0]["name"], "clip.mp4")
+            self.assertEqual(listed[0]["volume_path"], "/output/clip.mp4")
+            self.assertFalse((root / "workspace" / "output" / "output").exists())
+
+    def test_flatten_is_idempotent_when_already_canonical(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "output"
+            root.mkdir()
+            (root / "clip.mp4").write_bytes(b"video")
+            self.assertEqual(flatten_repeated_dir(Path(directory), "output"), [])
 
     def test_prefers_storage_then_legacy_workspace(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -108,6 +108,34 @@ class RecipeTests(unittest.TestCase):
             self.assertTrue((target_dir / "vendor/model.safetensors").is_file())
             self.assertEqual(commands[0][commands[0].index("-d") + 1], str(target_dir / "vendor"))
 
+    def test_repeated_category_filename_does_not_nest_under_category_dir(self):
+        asset = recipes.M(
+            "https://example.com/model.safetensors",
+            filename="vae/model.safetensors",
+        )
+        commands = []
+
+        def fake_run(cmd, **_kwargs):
+            commands.append(cmd)
+            output_dir = Path(cmd[cmd.index("-d") + 1])
+            output_path = output_dir / cmd[cmd.index("-o") + 1]
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"model")
+
+        with tempfile.TemporaryDirectory() as directory:
+            target_dir = Path(directory) / "vae"
+            target_dir.mkdir()
+            with (
+                patch.object(comfy_engine.shutil, "which", return_value="/usr/bin/aria2c"),
+                patch.object(comfy_engine, "_run", fake_run),
+            ):
+                comfy_engine.download_asset(asset, target_dir)
+
+            self.assertTrue((target_dir / "model.safetensors").is_file())
+            self.assertFalse((target_dir / "vae" / "model.safetensors").exists())
+            self.assertEqual(commands[0][commands[0].index("-d") + 1], str(target_dir))
+            self.assertEqual(commands[0][commands[0].index("-o") + 1], "model.safetensors")
+
     def test_node_build_supports_github_token_without_embedding_value(self):
         commands = comfy_engine.build_node_commands(["qwen-image-extra"])
         joined = "\n".join(commands)
