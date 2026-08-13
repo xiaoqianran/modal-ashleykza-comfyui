@@ -23,14 +23,10 @@ import modal
 
 from base_nodes import INSTALLER_REMOTE_PATH, build_base_nodes_commands
 from comfy_engine import (
+    apply_volume_launch,
     build_node_commands,
-    install_registry_nodes,
-    load_launch_state,
     output_manifest,
-    prepare_runtime,
-    start_comfyui,
-    verify_workflow_models,
-    wait_comfyui_ready,
+    stop_comfyui,
 )
 from modal_config import ModalSettings
 from recipes import get_profile
@@ -209,44 +205,55 @@ class UI:
     """
 
     @modal.enter(snap=True)
-    def start(self):
-        launch = load_launch_state(STORAGE_ROOT) or {}
-        workflow_lock = launch.get("workflow_lock")
-        profile_name = str(launch.get("profile") or PROFILE_NAME or "base")
-        install_lock_nodes = bool(launch.get("install_lock_nodes", INSTALL_LOCK_NODES))
-        if workflow_lock:
-            verify_workflow_models(
-                workflow_lock,
-                WORKSPACE,
-                storage_root=STORAGE_ROOT,
-            )
-        prepare_runtime(COMFY_ROOT, WORKSPACE, STORAGE_ROOT)
-        nodes = list((workflow_lock or {}).get("custom_nodes") or ())
-        if install_lock_nodes and nodes:
-            newly = install_registry_nodes(
-                nodes,
-                comfy_root=COMFY_ROOT,
-                custom_nodes_dir=WORKSPACE / "custom_nodes",
-            )
-            if newly:
-                workspace_vol.commit()
+    def snapshot_runtime(self):
+        """Image-local + current Volume launch, captured by memory snapshot."""
         extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
-        self.process = start_comfyui(
-            profile_name=profile_name,
-            comfy_root=COMFY_ROOT,
+        self.process, self._launch_fingerprint, newly = apply_volume_launch(
+            storage_root=STORAGE_ROOT,
             workspace=WORKSPACE,
-            port=COMFY_PORT,
+            comfy_root=COMFY_ROOT,
+            default_profile=PROFILE_NAME,
+            default_install_lock_nodes=INSTALL_LOCK_NODES,
             extra_args=extra,
+            port=COMFY_PORT,
+            startup_timeout=SETTINGS.ui_startup_timeout_seconds,
         )
-        wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
+        if newly:
+            workspace_vol.commit()
+        print(
+            f"ComfyUI snapshot fingerprint={self._launch_fingerprint} "
+            f"ready on :{COMFY_PORT}",
+            flush=True,
+        )
+
+    @modal.enter(snap=False)
+    def apply_launch(self):
+        """Re-read Volumes after restore so hydrate can change launch.json."""
+        models_vol.reload()
+        workspace_vol.reload()
+        extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
+        self.process, self._launch_fingerprint, newly = apply_volume_launch(
+            storage_root=STORAGE_ROOT,
+            workspace=WORKSPACE,
+            comfy_root=COMFY_ROOT,
+            default_profile=PROFILE_NAME,
+            default_install_lock_nodes=INSTALL_LOCK_NODES,
+            previous_fingerprint=getattr(self, "_launch_fingerprint", None),
+            process=getattr(self, "process", None),
+            extra_args=extra,
+            port=COMFY_PORT,
+            startup_timeout=SETTINGS.ui_startup_timeout_seconds,
+        )
+        if newly:
+            workspace_vol.commit()
         self._output_commit_stop, self._output_commit_thread = start_output_commit_watch(
             workspace_dir(WORKSPACE, "output")
         )
         print(
-            f"ComfyUI mode={launch.get('mode') or SETTINGS.launch_mode!r} "
-            f"profile={profile_name!r} "
-            f"lock_nodes={install_lock_nodes} extra_nodes={INSTALL_NODES} "
-            f"ready on :{COMFY_PORT}"
+            f"ComfyUI launch applied fingerprint={self._launch_fingerprint} "
+            f"lock_nodes={INSTALL_LOCK_NODES} extra_nodes={INSTALL_NODES} "
+            f"ready on :{COMFY_PORT}",
+            flush=True,
         )
 
     @modal.web_server(
@@ -266,14 +273,7 @@ class UI:
             _commit_workspace_output("gpu exit")
         except Exception as exc:  # noqa: BLE001
             print(f"workspace commit on exit skipped: {exc}", flush=True)
-        process = getattr(self, "process", None)
-        if process is None:
-            return
-        try:
-            if process.poll() is None:
-                process.terminate()
-        except OSError:
-            return
+        stop_comfyui(getattr(self, "process", None))
 
 
 @app.local_entrypoint()

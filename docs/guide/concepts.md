@@ -67,11 +67,12 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
 
 `UI` 是带 memory snapshot 的 Modal Cls：
 
-1. `@modal.enter(snap=True)`：读 Volume `.state/launch.json` → 校验模型 → `prepare_runtime()` → 按需把 CNR 装到 workspace Volume → 启动 ComfyUI → 等待 `/system_stats` 返回成功。
-2. `@modal.web_server(port=3000)`：进程已在监听，方法体为空。
-3. `@modal.exit()`：停止 ComfyUI 进程。
+1. `@modal.enter(snap=True)`：`prepare_runtime()`（先摊平套层目录）→ 读 Volume `.state/launch.json` → 校验模型 → 按需把 CNR 装到 workspace Volume → 启动 ComfyUI。这一步会打进 `modal deploy` 的快照。
+2. `@modal.enter(snap=False)`：每次冷启动（含快照恢复）先 `Volume.reload()`，再按**当前** `launch.json` 校验 / 装 CNR。指纹没变则沿用快照里的 ComfyUI；换了工作流或新装了 CNR 则重启进程。输出 watch 线程也在这里启动。
+3. `@modal.web_server(port=3001)`：进程已在监听，方法体为空。
+4. `@modal.exit()`：先 `commit()` workspace Volume，再停止 ComfyUI。
 
-`enable_memory_snapshot` 默认打开；`COMFY_GPU_SNAPSHOT` 默认同开。快照在 **`modal deploy` 之后**才会跨冷启动复用。
+`enable_memory_snapshot` 默认打开；`COMFY_GPU_SNAPSHOT` 默认同开。快照在 **`modal deploy` 之后**才会跨冷启动复用。hydrate 换工作流后不需要重建 Image；下一个 GPU 容器会在 `snap=False` 里读到新的 Volume。
 
 ## 缩容与并发
 

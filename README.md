@@ -31,6 +31,8 @@ modal serve comfyui_modal.py
 
 空闲 **5 秒** 缩掉 GPU。`modal deploy` 才保存 snapshot。列表：`modal run hydrate_modal.py --action profiles`
 
+示例工作流在 `examples/`。LTX-2.5 官方 JSON 不能直接 `POST /prompt`，见文档「工作流与锁文件」。
+
 ## 开发
 
 ```bash

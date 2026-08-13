@@ -226,6 +226,48 @@ def load_launch_state(storage_root: str | Path) -> dict | None:
     return data
 
 
+def launch_fingerprint(
+    launch: Mapping[str, Any] | None,
+    *,
+    profile_name: str,
+    install_lock_nodes: bool,
+) -> str:
+    """Identity of Volume launch state that requires a ComfyUI process restart.
+
+    Model files can appear after ``Volume.reload()`` without restarting.
+    Custom nodes and profile ``comfy_args`` cannot.
+    """
+    payload = launch or {}
+    lock = payload.get("workflow_lock") if isinstance(payload.get("workflow_lock"), Mapping) else {}
+    nodes = []
+    for node in lock.get("custom_nodes") or ():
+        if isinstance(node, Mapping) and node.get("id"):
+            nodes.append(f"{node.get('id')}@{node.get('version') or ''}")
+    return json.dumps(
+        {
+            "custom_nodes": sorted(nodes),
+            "install_lock_nodes": bool(
+                payload.get("install_lock_nodes", install_lock_nodes)
+            ),
+            "profile": str(payload.get("profile") or profile_name or "base"),
+        },
+        sort_keys=True,
+    )
+
+
+def stop_comfyui(process: subprocess.Popen | None, *, timeout: float = 15.0) -> None:
+    if process is None or process.poll() is not None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=timeout)
+    except Exception:  # noqa: BLE001
+        try:
+            process.kill()
+        except OSError:
+            return
+
+
 def _asset_lock_entry(lock: Mapping[str, Any], category: str, filename: str) -> dict | None:
     assets = lock.get("assets", {})
     return assets.get(f"{category}/{filename}") or assets.get(f"models/{category}/{filename}")
@@ -995,14 +1037,88 @@ def prepare_runtime(
     write_optional_node_configs(comfy_root, workspace)
 
 
-def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
-    """Materialize secret-backed node config without storing credentials in Git."""
-    candidates = (
-        comfy_root / "custom_nodes" / "ComfyUI-OllamaGemini",
-        workspace / "custom_nodes" / "ComfyUI-OllamaGemini",
+def apply_volume_launch(
+    *,
+    storage_root: str | Path,
+    workspace: str | Path,
+    comfy_root: str | Path,
+    default_profile: str,
+    default_install_lock_nodes: bool,
+    previous_fingerprint: str | None = None,
+    process: subprocess.Popen | None = None,
+    extra_args: tuple[str, ...] | list[str] = (),
+    port: int = 3001,
+    startup_timeout: int = 900,
+    install_nodes: Callable[..., list[str]] | None = None,
+    start_fn: Callable[..., subprocess.Popen] | None = None,
+    wait_fn: Callable[..., None] | None = None,
+) -> tuple[subprocess.Popen, str, list[str]]:
+    """Repair Volume layout, verify models, install lock CNR, start/restart ComfyUI.
+
+    Call this after ``Volume.reload()`` on every container start (``snap=False``)
+    so hydrate can change ``launch.json`` without freezing it into a memory
+    snapshot. Restarts ComfyUI when the launch fingerprint changes or CNR was
+    newly installed.
+    """
+    comfy_root = Path(comfy_root)
+    workspace = Path(workspace)
+    storage_root = Path(storage_root)
+    prepare_runtime(comfy_root, workspace, storage_root)
+    launch = load_launch_state(storage_root) or {}
+    workflow_lock = launch.get("workflow_lock")
+    profile_name = str(launch.get("profile") or default_profile or "base")
+    install_lock_nodes = bool(launch.get("install_lock_nodes", default_install_lock_nodes))
+    if isinstance(workflow_lock, Mapping) and workflow_lock:
+        verify_workflow_models(
+            workflow_lock,
+            workspace,
+            storage_root=storage_root,
+        )
+    newly: list[str] = []
+    nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
+    installer = install_nodes or install_registry_nodes
+    if install_lock_nodes and nodes:
+        newly = installer(
+            nodes,
+            comfy_root=comfy_root,
+            custom_nodes_dir=workspace / "custom_nodes",
+        )
+    fingerprint = launch_fingerprint(
+        launch,
+        profile_name=profile_name,
+        install_lock_nodes=install_lock_nodes,
     )
-    node = next((candidate for candidate in candidates if candidate.exists()), None)
-    if node is None:
+    start = start_fn or start_comfyui
+    wait = wait_fn or wait_comfyui_ready
+    need_restart = (
+        process is None
+        or process.poll() is not None
+        or previous_fingerprint != fingerprint
+        or bool(newly)
+    )
+    if need_restart:
+        stop_comfyui(process)
+        process = start(
+            profile_name=profile_name,
+            comfy_root=comfy_root,
+            workspace=workspace,
+            port=port,
+            extra_args=extra_args,
+        )
+        wait(port=port, timeout=startup_timeout)
+    assert process is not None
+    return process, fingerprint, newly
+
+
+def write_optional_node_configs(comfy_root: Path, workspace: Path) -> None:
+    """Materialize secret-backed node config without storing credentials in Git.
+
+    Only write next to the Image-local node copy. The workspace Volume is
+    persistent; putting API keys there would outlive the Modal Secret.
+    """
+    del workspace  # Volume-backed custom_nodes must not receive secret files.
+    node = comfy_root / "custom_nodes" / "ComfyUI-OllamaGemini"
+    if not node.exists():
         return
 
     values = {

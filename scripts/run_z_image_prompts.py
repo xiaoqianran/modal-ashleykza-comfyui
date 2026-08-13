@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -155,16 +156,34 @@ def wait_history(base: str, prompt_id: str, timeout: int = 900) -> dict:
     raise TimeoutError(f"prompt {prompt_id} did not finish within {timeout}s")
 
 
+def _safe_dest(dest: Path, filename: str) -> Path:
+    dest = dest.resolve()
+    name = Path(str(filename).replace("\\", "/")).name
+    if not name or name in {".", ".."}:
+        raise ValueError(f"unsafe output filename: {filename!r}")
+    path = (dest / name).resolve()
+    if path != dest and dest not in path.parents:
+        raise ValueError(f"output path escapes destination: {filename!r}")
+    return path
+
+
 def download_images(base: str, history: dict, dest: Path) -> list[Path]:
     saved: list[Path] = []
+    dest.mkdir(parents=True, exist_ok=True)
+    status = (history.get("status") or {}).get("status_str")
+    if status and status != "success":
+        raise RuntimeError(f"ComfyUI history status={status!r}")
     for node_output in history.get("outputs", {}).values():
         for image in node_output.get("images", []):
-            query = (
-                f"filename={image['filename']}&subfolder={image.get('subfolder', '')}"
-                f"&type={image.get('type', 'output')}"
+            query = urllib.parse.urlencode(
+                {
+                    "filename": image["filename"],
+                    "subfolder": image.get("subfolder") or "",
+                    "type": image.get("type") or "output",
+                }
             )
             url = f"{base}/view?{query}"
-            path = dest / image["filename"]
+            path = _safe_dest(dest, str(image["filename"]))
             with urllib.request.urlopen(url, timeout=120) as response:
                 path.write_bytes(response.read())
             saved.append(path)
@@ -176,7 +195,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
-    parser.add_argument("--out", default="/opt/cursor/artifacts/z-image-runs")
+    parser.add_argument("--out", default="artifacts/z-image-runs")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
     out = Path(args.out)
@@ -191,9 +210,13 @@ def main() -> None:
             "client_id": "z-image-agent",
         }
         queued = _http_json(f"{base}/prompt", payload)
+        if queued.get("error") or queued.get("node_errors"):
+            raise RuntimeError(json.dumps(queued, ensure_ascii=False)[:4000])
         prompt_id = queued["prompt_id"]
         history = wait_history(base, prompt_id)
         images = download_images(base, history, out)
+        if not images:
+            raise RuntimeError(f"prompt {prompt_id} finished without images")
         elapsed = time.time() - started
         record = {
             "id": item["id"],

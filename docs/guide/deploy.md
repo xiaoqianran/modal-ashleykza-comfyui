@@ -1,6 +1,6 @@
 # GPU 部署
 
-先 hydrate，再 serve / deploy。GPU 容器挂载 Volume：读模型、校验 `.state/launch.json`，把锁内 CNR 装到 workspace（已存在则跳过）。**不要**把工作流打进 Image，否则 Modal 层缓存每次都 miss。
+先 hydrate，再 serve / deploy。GPU 容器挂载 Volume：`snap=False` 时 `reload()` 后读 `.state/launch.json`，把锁内 CNR 装到 workspace（已存在则跳过）。**不要**把工作流打进 Image，否则 Modal 层缓存每次都 miss。
 
 ```bash
 modal serve comfyui_modal.py

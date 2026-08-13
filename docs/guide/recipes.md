@@ -14,14 +14,14 @@ modal deploy comfyui_modal.py
 
 | 名称 | 模型包 | 额外节点 | 说明 |
 |---|---|---|---|
-| `base` | — | — | Ashley runtime + 基础节点 |
+| `base` | — | — | 仅 Ashley runtime（130 个基础节点需 `COMFY_BASE_NODES=1`） |
 | `ltx23` | `ltx23` | — | LTX 2.3 |
 | `nordy-kontext-views` | `nordy-kontext-views` | `flux-kontext-extra` | FLUX Kontext 多视图 |
 | `nordy-clothes` | `nordy-clothes` | `nordy-clothes-extra` | 服装 / inpaint |
 | `qwen-image` | `qwen-image` | `qwen-image-extra` | Qwen Image |
 | `flux-krea` | `flux-krea` | — | FLUX.1 Krea |
 | `flux-kontext` | `flux-kontext` | `flux-kontext-extra` | FLUX Kontext + omini-kontext |
-| `wan22` | `wan22` | — | Wan 2.2（Wan/KJ/VHS/GGUF 已在基础节点中） |
+| `wan22` | `wan22` | — | Wan 2.2 模型（Wan/KJ/VHS/GGUF 节点需 `COMFY_BASE_NODES=1`） |
 | `wan22-notebook-full` | `wan22` | `wan-notebook-extra` | Wan 2.2 + notebook 额外节点 |
 | `nunchaku` | — | `nunchaku` | Nunchaku 节点 |
 

@@ -1,6 +1,6 @@
 # 快速开始
 
-两种启动方式二选一。本机需要 Python 3.10+。工作流 JSON 锁里的 CNR 装到 workspace Volume，**不会**为每个工作流重建 GPU Image；也**不会**默认去克隆 130 个上游仓库。
+两种启动方式二选一。本机需要 Python 3.12+。工作流 JSON 锁里的 CNR 装到 workspace Volume，**不会**为每个工作流重建 GPU Image；也**不会**默认去克隆 130 个上游仓库。
 
 ## 1. 安装并写入凭证
 
