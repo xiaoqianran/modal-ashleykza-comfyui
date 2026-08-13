@@ -88,6 +88,7 @@ COMFY_BASE_NODES=0 MODAL_GPU=L4 modal serve comfyui_modal.py
 - 之后从快照恢复，ComfyUI 进程启动那 ~90s 可以砍掉一大截。首张把 safetensors 装进显存（~50s）官方说不一定更快。
 - 快照没有单独加价；只付实际 GPU 秒数。恢复更快时，每次冷启动通常更省。
 - 关掉：`COMFY_MEMORY_SNAPSHOT=0`。只关 GPU 快照：`COMFY_GPU_SNAPSHOT=0`。
+- 空闲 **5 秒** 后缩掉 GPU（`COMFY_SCALEDOWN_SECONDS`，Modal 下限 2 秒）。
 
 ```bash
 COMFY_BASE_NODES=0 MODAL_GPU=L4 modal deploy comfyui_modal.py

@@ -150,9 +150,9 @@ class ModalSettings:
             ui_scaledown_window_seconds=_integer(
                 environ,
                 "COMFY_SCALEDOWN_SECONDS",
-                5 * 60,
-                minimum=60,
-                maximum=60 * 60,
+                5,
+                minimum=2,
+                maximum=20 * 60,
             ),
             ui_max_inputs=max_inputs,
             ui_target_inputs=target_inputs,

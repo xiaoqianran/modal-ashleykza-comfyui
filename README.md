@@ -227,7 +227,7 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 | `MODAL_GPU` | `T4,L4,L40S,RTX-PRO-6000` | GPU fallback 顺序 |
 | `COMFY_TIMEOUT_SECONDS` | `86400` | Function 最长存活时间 |
 | `COMFY_STARTUP_TIMEOUT_SECONDS` | `900` | 容器 / Web server 启动上限 |
-| `COMFY_SCALEDOWN_SECONDS` | `300` | 空闲缩容窗口 |
+| `COMFY_SCALEDOWN_SECONDS` | `5` | 空闲缩容窗口（Modal 允许 2–1200 秒） |
 | `COMFY_MAX_INPUTS` | `20` | 单容器最大并发输入 |
 | `COMFY_TARGET_INPUTS` | `10` | 触发扩容的目标并发 |
 | `COMFY_REQUIRE_PROXY_AUTH` | `false` | 要求 Modal 代理认证头 |
