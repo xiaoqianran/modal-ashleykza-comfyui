@@ -51,6 +51,28 @@ class ExampleLockTests(unittest.TestCase):
         self.assertIn(("diffusion_models", "triposplat_fp16.safetensors"), names)
         self.assertIn("background_removal", recipes.MODEL_DIRS)
 
+    def test_pixal3d_lock_is_curated_and_matches_workflow_hash(self):
+        source = ROOT / "examples" / "pixal3d-image-to-3d.json"
+        lock_path = ROOT / "examples" / "pixal3d-image-to-3d.lock.json"
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        self.assertEqual(committed["unresolved"], [])
+        ids = {node["id"] for node in committed["custom_nodes"]}
+        self.assertIn("Pixal3D-ComfyUI", ids)
+        self.assertIn("comfyui-custom-scripts", ids)
+        pixal = next(node for node in committed["custom_nodes"] if node["id"] == "Pixal3D-ComfyUI")
+        self.assertEqual(pixal.get("version"), "0.2.4")
+        self.assertNotIn("url", pixal)
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertIn(("Pixal3D", "TencentARC_Pixal3D/pipeline.json"), names)
+        self.assertIn(("Pixal3D", "briaai_RMBG-2.0/model.safetensors"), names)
+        self.assertIn(("geometry_estimation", "moge_2_vitl_normal_fp16.safetensors"), names)
+        self.assertIn("Pixal3D", recipes.MODEL_DIRS)
+        self.assertIn("geometry_estimation", recipes.MODEL_DIRS)
+        reused, origin = workflow_resolver.select_workflow_lock(source, lock_path)
+        self.assertEqual(origin, "reused")
+        self.assertEqual(len(reused["models"]), len(committed["models"]))
+
     def test_ltx_lock_is_curated_and_matches_workflow_hash(self):
         source = ROOT / "examples" / "ltx-2.5-t2v-i2v-distilled.json"
         lock_path = ROOT / "examples" / "ltx-2.5-t2v-i2v-distilled.lock.json"

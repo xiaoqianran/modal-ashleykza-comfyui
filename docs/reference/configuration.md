@@ -11,7 +11,7 @@
 | `MODAL_VOLUME_NAME` | `comfyui-ashleykza-workspace` | workspace Volume |
 | `MODAL_MODELS_VOLUME` | `comfyui-ashleykza-models` | 模型 Volume |
 | `COMFY_STORAGE_ROOT` | `/mnt/comfy-storage` | 模型 Volume 挂载点 |
-| `COMFY_IMAGE` | `ghcr.io/ashleykleynhans/comfyui:cu128-py312-v0.32.0` | 基础镜像 |
+| `COMFY_IMAGE` | `ghcr.io/ashleykleynhans/comfyui:cu128-py312-v0.32.0` | 基础镜像。GPU Image 额外 apt：`cmake` `ninja-build` `build-essential` `python3-dev`（Pixal3D 的 flex_gemm 等 CUDA 扩展；natten / flash-attn 走预构建 wheel） |
 
 ## GPU 与扩缩容
 

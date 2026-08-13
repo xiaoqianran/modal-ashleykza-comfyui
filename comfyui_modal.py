@@ -78,7 +78,16 @@ node_commands = (
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
-    .apt_install("git", "ca-certificates")
+    # cmake/ninja remain for Pixal3D CUDA extensions (flex_gemm / cumesh / o-voxel / drtk).
+    # natten and flash-attn use prebuilt wheels at GPU start, not source builds.
+    .apt_install(
+        "git",
+        "ca-certificates",
+        "cmake",
+        "ninja-build",
+        "build-essential",
+        "python3-dev",
+    )
     # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
     .run_commands(
         "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"

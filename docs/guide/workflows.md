@@ -112,6 +112,25 @@ python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
 
 `--no-glb` 可关掉 mesh 重建（省显存）。空闲 scaledown 默认 5 秒。
 
+## 仓库示例：Pixal3D 图生 GLB
+
+| 文件 | 作用 |
+|---|---|
+| `examples/pixal3d-image-to-3d.json` | 官方 UI 工作流（[Saganaki22/Pixal3D-ComfyUI](https://github.com/Saganaki22/Pixal3D-ComfyUI)） |
+| `examples/pixal3d-image-to-3d.lock.json` | **手修**锁：Pixal3D / DINOv3 / RMBG-2.0 / MoGe + CNR 节点 |
+
+锁里是 Registry id `Pixal3D-ComfyUI@0.2.4` 与 `comfyui-custom-scripts@1.2.5`。GPU 启动时先装预构建 wheel：`natten==0.21.6+torch2110cu128`（[whl.natten.org](https://whl.natten.org/)）和 `flash-attn 2.8.3`（torch 2.11 + cu12）。不要用 PyPI 上的 `natten==0.21.6` sdist，那会在 GPU 上编 CUDA kernel。`cmake` / `ninja-build` 仍留在 Image 里，给 `flex_gemm` / `cumesh` / o-voxel / DRTK 用。Storage 增加了 `Pixal3D/` 与 `geometry_estimation/`。`briaai/RMBG-2.0` 在 Hugging Face 上 gated，hydrate 需要已授权的 `HF_TOKEN`。建议 **L40S**（工作流 `1024_cascade`，约 20–32GB 显存）。
+
+```bash
+modal run hydrate_modal.py --workflow examples/pixal3d-image-to-3d.json
+COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal serve comfyui_modal.py
+python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
+  --workflow examples/pixal3d-image-to-3d.json \
+  --images gecko.png
+```
+
+空闲 scaledown 默认 5 秒。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。
+
 ## 自定义工作流
 
 1. 在本地 ComfyUI 导出 API / workflow JSON（或带嵌入工作流的 PNG）。
