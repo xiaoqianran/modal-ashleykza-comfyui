@@ -8,7 +8,9 @@ import json
 import mimetypes
 import random
 import sys
+import threading
 import uuid
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -438,18 +440,40 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Local catalog control plane")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
-    args = parser.parse_args()
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="do not open the default browser",
+    )
+    return parser.parse_args(argv)
+
+
+def studio_url(host: str, port: int) -> str:
+    shown = "127.0.0.1" if host in {"localhost", "::1"} else host
+    return f"http://{shown}:{port}"
+
+
+def open_browser(url: str) -> None:
+    webbrowser.open(url)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
     if args.host not in {"127.0.0.1", "localhost", "::1"}:
         raise SystemExit("studio binds localhost only")
+    url = studio_url(args.host, args.port)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Studio  http://{args.host}:{args.port}", flush=True)
+    print(f"Studio  {url}", flush=True)
+    print("顶栏配方可选 Z-Image / FLUX.2 [dev] / Qwen-Image-2512 / Pixal3D / TripoSplat。", flush=True)
     print("密钥只存在本机 .studio.env，不会进 Git。", flush=True)
     print("默认 GPU 是 T4；生成结束后会停掉 serve，避免空闲还计费。", flush=True)
     atexit.register(stop_serve)
+    if not args.no_browser:
+        threading.Timer(0.4, lambda: open_browser(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
