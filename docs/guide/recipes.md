@@ -5,7 +5,7 @@
 ```bash
 modal run hydrate_modal.py --action profiles
 modal run hydrate_modal.py --profile qwen-image
-COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+modal deploy comfyui_modal.py
 ```
 
 未指定时默认 `COMFY_PROFILE=base`。配方里的 **node packs 默认不安装**。

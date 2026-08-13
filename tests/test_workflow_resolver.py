@@ -189,5 +189,53 @@ class WorkflowResolverTests(unittest.TestCase):
         self.assertNotIn("comfy-cli==", commands[0])
 
 
+class RegistryVolumeInstallTests(unittest.TestCase):
+    def test_install_moves_new_dirs_onto_volume_and_skips_next_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            image_custom = comfy_root / "custom_nodes"
+            volume_custom = root / "workspace" / "custom_nodes"
+            image_custom.mkdir(parents=True)
+            volume_custom.mkdir(parents=True)
+            (image_custom / "already-in-image").mkdir()
+
+            def installer(node, *, comfy_root):
+                pack = comfy_root / "custom_nodes" / "ComfyUI-KJNodes"
+                pack.mkdir()
+                (pack / "__init__.py").write_text("ok\n", encoding="utf-8")
+
+            first = comfy_engine.install_registry_nodes(
+                [{"id": "comfyui-kjnodes", "version": "1.2.3"}],
+                comfy_root=comfy_root,
+                custom_nodes_dir=volume_custom,
+                installer=installer,
+            )
+            self.assertEqual(first, ["comfyui-kjnodes"])
+            dest = volume_custom / "ComfyUI-KJNodes" / "__init__.py"
+            self.assertTrue(dest.is_file())
+            self.assertFalse((image_custom / "ComfyUI-KJNodes").exists())
+            self.assertTrue((image_custom / "already-in-image").is_dir())
+            marker = volume_custom.parent / "state" / "cnr" / "comfyui-kjnodes"
+            self.assertTrue(marker.is_file())
+
+            second = comfy_engine.install_registry_nodes(
+                [{"id": "comfyui-kjnodes", "version": "1.2.3"}],
+                comfy_root=comfy_root,
+                custom_nodes_dir=volume_custom,
+                installer=installer,
+            )
+            self.assertEqual(second, [])
+
+    def test_gpu_module_does_not_bake_lock_into_image(self):
+        text = (Path(__file__).resolve().parents[1] / "comfyui_modal.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("build_registry_node_commands", text)
+        self.assertNotIn("workflow.lock.json", text)
+        self.assertIn("install_registry_nodes", text)
+        self.assertIn("load_launch_state", text)
+
+
 if __name__ == "__main__":
     unittest.main()

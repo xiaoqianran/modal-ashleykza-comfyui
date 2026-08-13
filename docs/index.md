@@ -1,6 +1,6 @@
 # ComfyUI on Modal
 
-把 [ashleykleynhans/comfyui](https://github.com/ashleykleynhans/comfyui) 部署到 [Modal](https://modal.com)。两种启动方式。工作流锁里的 CNR 节点会装进 GPU Image；130 个上游插件默认不开。
+把 [ashleykleynhans/comfyui](https://github.com/ashleykleynhans/comfyui) 部署到 [Modal](https://modal.com)。两种启动方式。GPU Image 对所有工作流共用一层缓存；锁里的 CNR 装到 workspace Volume。130 个上游插件默认不开。
 
 ## 最短路径
 
@@ -8,14 +8,14 @@
 python -m pip install -U modal
 modal secret create comfyui-creds --from-dotenv .env --force
 modal run hydrate_modal.py --workflow examples/z-image-base.json
-COMFY_WORKFLOW=examples/z-image-base.json modal serve comfyui_modal.py
+modal serve comfyui_modal.py
 ```
 
 或按配方：
 
 ```bash
 modal run hydrate_modal.py --profile qwen-image
-COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
+modal serve comfyui_modal.py
 ```
 
 ## 约定
@@ -23,7 +23,7 @@ COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
 | 项 | 默认值 |
 |---|---|
 | 启动方式 | `--workflow` JSON，或 `--profile` 配方 |
-| 插件 | 锁内 CNR 默认安装；130 个上游 / 配方额外包默认关 |
+| 插件 | 锁内 CNR 装到 Volume（不重建 Image）；130 个上游 / 配方额外包默认关 |
 | GPU App | `comfyui-ashleykza-cu128` |
 | Hydrate App | `comfyui-ashleykza-cu128-hydrate` |
 | 模型 Volume | `comfyui-ashleykza-models` → `/mnt/comfy-storage` |

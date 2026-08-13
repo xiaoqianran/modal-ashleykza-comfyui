@@ -126,11 +126,14 @@ class HydrateStorageTests(unittest.TestCase):
                     workspace,
                     storage_root=storage,
                     workers=2,
+                    workflow_source="examples/demo.json",
+                    lock_source="examples/demo.lock.json",
                 )
 
             vae = storage / "vae" / "ae.safetensors"
             clip = storage / "text_encoders" / "clip.safetensors"
             state = (storage / ".state" / "comfy.lock.json").read_text(encoding="utf-8")
+            launch = comfy_engine.load_launch_state(storage)
             verified = comfy_engine.verify_workflow_models(
                 lock,
                 workspace,
@@ -150,6 +153,11 @@ class HydrateStorageTests(unittest.TestCase):
             self.assertIn("vae/ae.safetensors", state)
             self.assertEqual(verified["verified"], 2)
             self.assertIn("base_path: " + str(storage), yaml_path.read_text(encoding="utf-8"))
+            self.assertEqual(launch["mode"], "workflow")
+            self.assertEqual(launch["workflow"], "examples/demo.json")
+            self.assertTrue(launch["install_lock_nodes"])
+            self.assertEqual(launch["workflow_lock"]["workflow"]["name"], "demo.json")
+            self.assertTrue((storage / ".state" / "workflow.lock.json").is_file())
 
     def test_hydrate_promotes_legacy_workspace_models(self):
         lock = {
@@ -269,6 +277,12 @@ class HydrateStorageTests(unittest.TestCase):
 
             self.assertTrue((storage / "vae" / "model.safetensors").is_file())
             self.assertEqual(result["downloaded"], 1)
+            launch = comfy_engine.load_launch_state(storage)
+            self.assertEqual(launch["mode"], "profile")
+            self.assertEqual(launch["profile"], "demo")
+            self.assertFalse(launch["install_lock_nodes"])
+            self.assertIsNone(launch["workflow_lock"])
+            self.assertFalse((storage / ".state" / "workflow.lock.json").exists())
 
 
 class WaitReadyTests(unittest.TestCase):

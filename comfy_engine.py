@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -30,6 +30,9 @@ from storage import (
 from workflow_resolver import validate_workflow_lock
 
 LOCK_SCHEMA = 1
+LAUNCH_STATE_SCHEMA = 1
+LAUNCH_STATE_FILE = "launch.json"
+WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
 
 
 def _quote(value: str | Path) -> str:
@@ -154,6 +157,68 @@ def _save_lock(state_dir: Path, lock: dict) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(path)
+
+
+def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    tmp.replace(path)
+
+
+def persist_launch_state(
+    storage_root: str | Path,
+    *,
+    mode: str,
+    profile: str = "base",
+    workflow: str = "",
+    lock_source: str = "",
+    install_lock_nodes: bool = True,
+    workflow_lock: Mapping[str, Any] | None = None,
+) -> dict:
+    """Write the active workflow/profile onto the models Volume.
+
+    GPU start reads this instead of baking the lock into the Image, so every
+    workflow shares the same cached Image layers.
+    """
+    storage_root = ensure_storage_layout(storage_root)
+    state_dir = storage_root / ".state"
+    lock_payload = dict(workflow_lock) if workflow_lock is not None else None
+    if lock_payload is not None:
+        validate_workflow_lock(lock_payload, require_resolved=True)
+        _write_json(state_dir / WORKFLOW_LOCK_STATE_FILE, lock_payload)
+    else:
+        stale = state_dir / WORKFLOW_LOCK_STATE_FILE
+        if stale.exists():
+            stale.unlink()
+
+    payload = {
+        "schema": LAUNCH_STATE_SCHEMA,
+        "mode": mode,
+        "profile": profile or "base",
+        "workflow": workflow,
+        "lock_source": lock_source,
+        "install_lock_nodes": bool(install_lock_nodes),
+        "workflow_lock": lock_payload,
+    }
+    _write_json(state_dir / LAUNCH_STATE_FILE, payload)
+    return payload
+
+
+def load_launch_state(storage_root: str | Path) -> dict | None:
+    path = Path(storage_root) / ".state" / LAUNCH_STATE_FILE
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
 
 
 def _asset_lock_entry(lock: Mapping[str, Any], category: str, filename: str) -> dict | None:
@@ -461,6 +526,13 @@ def sync_profile_models(
                     )
                 )
 
+    persist_launch_state(
+        storage_root,
+        mode="profile",
+        profile=profile_name,
+        install_lock_nodes=False,
+    )
+
     if not wanted:
         print(f"Profile {profile_name!r} has no model assets.")
         return {
@@ -496,11 +568,17 @@ def sync_workflow_models(
     *,
     storage_root: str | Path = DEFAULT_STORAGE_ROOT,
     workers: int = 4,
+    install_lock_nodes: bool = True,
+    workflow_source: str = "",
+    lock_source: str = "",
+    profile_name: str = "base",
 ) -> dict:
     """Download every resolved workflow model into the Modal models Volume.
 
     The lock is produced locally and serialized into the CPU-only Modal Function,
     so arbitrary local workflow files never need to be mounted in a GPU container.
+    The active lock is also written to Volume ``.state/`` so the GPU Image can
+    stay workflow-agnostic.
     """
     validate_workflow_lock(workflow_lock, require_resolved=True)
     workspace = Path(workspace)
@@ -511,6 +589,15 @@ def sync_workflow_models(
     workflow = workflow_lock.get("workflow", {})
     workflow_name = str(workflow.get("name", "workflow"))
     workflow_sha256 = str(workflow.get("sha256", ""))
+    persist_launch_state(
+        storage_root,
+        mode="workflow",
+        profile=profile_name,
+        workflow=workflow_source or workflow_name,
+        lock_source=lock_source,
+        install_lock_nodes=install_lock_nodes,
+        workflow_lock=workflow_lock,
+    )
 
     jobs: list[tuple[str, str, ModelAsset, dict]] = []
     for model in workflow_lock["models"]:
@@ -654,7 +741,11 @@ def build_registry_node_commands(
     *,
     comfy_cli_version: str | None = "1.16.0",
 ) -> list[str]:
-    """Install workflow-declared CNR nodes in CPU-backed Image build layers."""
+    """Shell layers for optional Image-time CNR installs (tests / opt-in packs).
+
+    Default GPU runtime does **not** use this. Workflow lock nodes go onto the
+    workspace Volume via ``install_registry_nodes`` so the Image cache stays shared.
+    """
     nodes = list(custom_nodes)
     if not nodes:
         return []
@@ -695,6 +786,112 @@ def build_registry_node_commands(
             )
         )
     return commands
+
+
+def _cnr_marker_path(marker_dir: Path, node_id: str) -> Path:
+    safe_id = node_id.replace("/", "_")
+    return marker_dir / safe_id
+
+
+def _dir_names(path: Path) -> set[str]:
+    if not path.is_dir():
+        return set()
+    return {item.name for item in path.iterdir() if item.is_dir() and not item.name.startswith(".")}
+
+
+def _registry_install_one(node: Mapping[str, Any], *, comfy_root: Path) -> None:
+    node_id = str(node["id"])
+    version = node.get("version")
+    comfy = comfy_root / "venv" / "bin" / "comfy"
+    binary = str(comfy) if comfy.is_file() else "comfy"
+    cmd = [binary, f"--workspace={comfy_root}", "node", "registry-install", node_id]
+    if version:
+        cmd.extend(["--version", str(version)])
+    _run(cmd)
+
+
+def install_registry_nodes(
+    custom_nodes: Iterable[Mapping[str, Any]],
+    *,
+    comfy_root: str | Path = "/ComfyUI",
+    custom_nodes_dir: str | Path = "/workspace/custom_nodes",
+    marker_dir: str | Path | None = None,
+    skip_existing: bool = True,
+    installer: Callable[..., None] | None = None,
+) -> list[str]:
+    """Install CNR nodes into a Volume-backed ``custom_nodes`` directory.
+
+    ``comfy node registry-install`` writes under ``<comfy_root>/custom_nodes``.
+    Newly created folders are moved onto the Volume so they survive scaledown
+    and do not bust the GPU Image cache. Existing Volume installs are skipped.
+    Markers live under ``/workspace/state/cnr`` so ComfyUI does not scan them.
+    """
+    nodes = list(custom_nodes)
+    if not nodes:
+        return []
+
+    comfy_root = Path(comfy_root)
+    image_custom = comfy_root / "custom_nodes"
+    volume_custom = Path(custom_nodes_dir)
+    volume_custom.mkdir(parents=True, exist_ok=True)
+    markers = Path(marker_dir) if marker_dir is not None else volume_custom.parent / "state" / "cnr"
+    markers.mkdir(parents=True, exist_ok=True)
+    image_custom.mkdir(parents=True, exist_ok=True)
+    run_install = installer or _registry_install_one
+
+    installed: list[str] = []
+    for node in nodes:
+        node_id = str(node["id"])
+        version = str(node.get("version") or "")
+        marker = _cnr_marker_path(markers, node_id)
+        previous = {}
+        if marker.is_file():
+            try:
+                loaded = json.loads(marker.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                loaded = {}
+            if isinstance(loaded, dict):
+                previous = loaded
+        if skip_existing and previous.get("version") == version and previous.get("dirs"):
+            missing = [
+                name
+                for name in previous["dirs"]
+                if not (volume_custom / str(name)).is_dir()
+            ]
+            if not missing:
+                print(f"[SKIP] CNR {node_id}@{version} already on Volume", flush=True)
+                continue
+
+        for name in previous.get("dirs") or ():
+            stale = volume_custom / str(name)
+            if stale.is_dir():
+                shutil.rmtree(stale)
+
+        before = _dir_names(image_custom)
+        run_install(node, comfy_root=comfy_root)
+        new_names = sorted(_dir_names(image_custom) - before)
+        moved: list[str] = []
+        for name in new_names:
+            src = image_custom / name
+            dest = volume_custom / name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            shutil.move(str(src), str(dest))
+            moved.append(name)
+        marker.write_text(
+            json.dumps({"id": node_id, "version": version, "dirs": moved}, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"[INSTALL] CNR {node_id}@{version} -> {volume_custom} ({', '.join(moved) or 'no new dirs'})",
+            flush=True,
+        )
+        installed.append(node_id)
+    return installed
 
 
 def write_extra_model_paths(

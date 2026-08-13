@@ -25,7 +25,11 @@ GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hyd
 - `modal serve` **不保存** snapshot，请用 `modal deploy`
 - 换了 GPU 类型会重新捕获 snapshot
 - 快照不能加速「权重从磁盘装进 VRAM」；第一张图仍可能要额外几十秒
-- 确认没有误开 `COMFY_LATEST=1`（会重建节点 Image）
+- 确认没有误开 `COMFY_LATEST=1` / `COMFY_BASE_NODES=1` / `COMFY_INSTALL_NODES=1`（会重建节点 Image）
+
+## 换工作流每次都在重建 Image
+
+锁内 CNR 不能写进 Image 的 `run_commands` / `add_local_file`。当前实现里 hydrate 只更新 Volume `.state/launch.json`，`modal serve comfyui_modal.py` 应复用同一 Image。若日志里仍在 `Building image` 且层哈希在变，检查是否带了 `COMFY_INSTALL_NODES=1` 或 `COMFY_BASE_NODES=1`。
 
 ## Secret 找不到
 
@@ -37,7 +41,7 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## GitHub clone 失败 / 限额
 
-在 Secret 里提供 `GITHUB_TOKEN`。锁内 CNR 默认会装。130 个上游克隆只要 `COMFY_BASE_NODES=1`。
+在 Secret 里提供 `GITHUB_TOKEN`。锁内 CNR 默认会装到 workspace Volume。130 个上游克隆只要 `COMFY_BASE_NODES=1`。
 
 ## 工作流仍有 unresolved
 
