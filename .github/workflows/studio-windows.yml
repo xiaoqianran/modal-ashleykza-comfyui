@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Create a GitHub Release with Studio-windows.zip"
+        description: "Create a GitHub Release with Studio.exe"
         type: boolean
         default: false
   push:
@@ -36,12 +36,12 @@ jobs:
           python-version: "3.12"
       - name: Install PyInstaller
         run: python -m pip install --upgrade pip pyinstaller
-      - name: Build portable zip
+      - name: Build Studio.exe
         run: python packaging/build_windows.py
       - uses: actions/upload-artifact@v4
         with:
-          name: Studio-windows
-          path: dist/Studio-windows.zip
+          name: Studio
+          path: dist/Studio.exe
           if-no-files-found: error
       - name: Publish draft from workflow_dispatch
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
@@ -50,17 +50,19 @@ jobs:
           tag_name: studio-windows-${{ github.run_number }}
           name: Studio Windows ${{ github.run_number }}
           draft: true
-          files: dist/Studio-windows.zip
+          files: dist/Studio.exe
           body: |
-            解压后双击 `Studio.exe`。需要本机联网、Modal 账号，以及 Hugging Face token。
-            工作流配方（FLUX / Qwen / Krea / Pixal3D / TripoSplat）还需要本机 Chrome 或 Edge。
-            GPU 仍在 Modal 上，本机 exe 只是控制台。
+            只下载这一个 `Studio.exe`，双击即可。不要再解一堆目录。
+            第一次会把运行时写到 `%LOCALAPPDATA%\ComfyStudio`。
+            需要本机联网、Modal 账号、Hugging Face token。
+            工作流配方还需要本机 Chrome 或 Edge。GPU 仍在 Modal 上。
       - name: Publish tagged release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/studio-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Studio-windows.zip
+          files: dist/Studio.exe
           body: |
-            解压后双击 `Studio.exe`。需要本机联网、Modal 账号，以及 Hugging Face token。
-            工作流配方（FLUX / Qwen / Krea / Pixal3D / TripoSplat）还需要本机 Chrome 或 Edge。
-            GPU 仍在 Modal 上，本机 exe 只是控制台。
+            只下载这一个 `Studio.exe`，双击即可。不要再解一堆目录。
+            第一次会把运行时写到 `%LOCALAPPDATA%\ComfyStudio`。
+            需要本机联网、Modal 账号、Hugging Face token。
+            工作流配方还需要本机 Chrome 或 Edge。GPU 仍在 Modal 上。

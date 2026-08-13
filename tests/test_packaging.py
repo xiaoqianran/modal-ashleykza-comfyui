@@ -23,12 +23,28 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertEqual(python, Path("/bundle/Studio/python/python.exe"))
         self.assertEqual(app, Path("/bundle/Studio/app"))
 
-    def test_missing_python_exits_nonzero(self):
+    def test_missing_payload_exits_nonzero(self):
         launcher = _load("windows_launcher")
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            with patch.object(launcher, "bundle_root", return_value=base):
+            with patch.object(launcher, "meipass", return_value=base):
                 self.assertEqual(launcher.main([]), 1)
+
+    def test_ensure_runtime_copies_once(self):
+        launcher = _load("windows_launcher")
+        with tempfile.TemporaryDirectory() as directory:
+            src = Path(directory) / "src"
+            dest = Path(directory) / "dest"
+            python, app = launcher.layout(src)
+            python.parent.mkdir(parents=True)
+            python.write_text("", encoding="utf-8")
+            (app / "studio").mkdir(parents=True)
+            (src / launcher.STAMP_NAME).write_text("abc\n", encoding="utf-8")
+            self.assertTrue(launcher.ensure_runtime(src, dest))
+            self.assertTrue((dest / "python" / "python.exe").is_file())
+            self.assertTrue((dest / "app" / "studio").is_dir())
+            self.assertEqual(launcher.stamp_of(dest), "abc")
+            self.assertFalse(launcher.ensure_runtime(src, dest))
 
 
 class WindowsBundleTests(unittest.TestCase):
@@ -45,6 +61,14 @@ class WindowsBundleTests(unittest.TestCase):
             self.assertTrue((app / "examples" / "krea2-turbo-t2i.json").is_file())
             self.assertTrue((app / "README.txt").is_file())
             self.assertNotIn(".env", {path.name for path in app.iterdir()})
+
+    def test_write_stamp(self):
+        build = _load("build_windows")
+        with tempfile.TemporaryDirectory() as directory:
+            payload = Path(directory)
+            with patch.dict("os.environ", {"GITHUB_SHA": "deadbeef"}, clear=False):
+                path = build.write_stamp(payload)
+            self.assertEqual(path.read_text(encoding="utf-8").strip(), "deadbeef")
 
 
 if __name__ == "__main__":
