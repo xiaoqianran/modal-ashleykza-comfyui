@@ -30,6 +30,8 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
 
+官方模板很多时，先 `python3 -m template_analyzer` 分类，不要每个都手写适配。见 [官方模板分析](templates.md)。
+
 ## 生成锁文件
 
 ```bash
