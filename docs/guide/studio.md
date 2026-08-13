@@ -14,9 +14,12 @@ python -m studio
 
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. **准备权重**：`modal run hydrate_modal.py --workflow examples/z-image-base.json`
-3. **启动 GPU**：本机拉起 `modal serve`（按 catalog 默认 GPU，可改）。
+3. **启动 GPU**：本机拉起 `modal serve`。catalog 默认 **T4**（省钱）。L40S 是下拉里的可选项，不会自动升级。
 4. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 5. 提示词一行一条，调步数 / CFG / 尺寸 / 种子，生成。同一张 GPU 上是 Comfy 队列，不是多卡并行。
+6. **生成结束后默认停止 GPU**（包括杀掉 leftover 容器）。`scaledown_window=5s` 挡不住一直挂着的 `modal serve`。需要接着画，勾选「任务结束后继续占着 GPU」。
+
+关掉 Studio（Ctrl+C）也会尝试停掉它拉起的 serve。
 
 ## 契约
 

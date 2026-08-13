@@ -28,7 +28,7 @@ from comfy_engine import (
     output_manifest,
     stop_comfyui,
 )
-from modal_config import ModalSettings
+from modal_config import ModalSettings, idle_release_kwargs
 from recipes import get_profile
 from storage import workspace_dir
 
@@ -162,12 +162,12 @@ UI_CLS_KWARGS: dict = {
     "gpu": GPU,
     "timeout": SETTINGS.ui_timeout_seconds,
     "startup_timeout": SETTINGS.ui_startup_timeout_seconds,
-    "scaledown_window": SETTINGS.ui_scaledown_window_seconds,
     "volumes": APP_VOLUMES,
     "secrets": APP_SECRETS,
     "max_containers": 1,
     "enable_memory_snapshot": SETTINGS.memory_snapshot,
 }
+UI_CLS_KWARGS.update(idle_release_kwargs(SETTINGS))
 if SETTINGS.gpu_snapshot:
     UI_CLS_KWARGS["experimental_options"] = {"enable_gpu_snapshot": True}
 

@@ -4,6 +4,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+# Cheap-only default. Modal treats a GPU tuple as fallback: T4,L40S silently
+# upgrades to L40S when T4 is out of capacity. Expensive cards must be explicit.
+DEFAULT_GPU = ("T4",)
+CHEAP_GPUS = frozenset({"T4", "L4"})
+GPU_IDLE_REMINDER = (
+    "任务已结束。scaledown_window=5s 只在没有 HTTP/WebSocket、也没有 modal serve "
+    "保活时生效。测完请停掉 serve；浏览器开着 ComfyUI 或继续轮询 /system_stats "
+    "会一直占 GPU。默认 GPU 是 T4，L40S / RTX-PRO-6000 必须显式设置 MODAL_GPU。"
+)
+
 
 def _integer(
     environ: Mapping[str, str],
@@ -52,6 +62,21 @@ def _argv_option(argv: Sequence[str] | None, name: str) -> str:
     return ""
 
 
+def parse_gpu(raw: str) -> tuple[str, ...]:
+    """Parse ``MODAL_GPU``. Empty means T4 only — never a silent expensive fallback."""
+    gpu = tuple(item.strip() for item in raw.split(",") if item.strip())
+    return gpu or DEFAULT_GPU
+
+
+def idle_release_kwargs(settings: ModalSettings) -> dict[str, int]:
+    """Cls kwargs so idle GPUs go to zero. ``modal serve`` still bills until stopped."""
+    return {
+        "scaledown_window": settings.ui_scaledown_window_seconds,
+        "min_containers": 0,
+        "buffer_containers": 0,
+    }
+
+
 def wants_latest_dependencies(
     environ: Mapping[str, str],
     argv: Sequence[str] | None = None,
@@ -97,10 +122,7 @@ class ModalSettings:
         environ: Mapping[str, str],
         argv: Sequence[str] | None = None,
     ) -> ModalSettings:
-        gpu_raw = environ.get("MODAL_GPU", "").strip()
-        gpu = tuple(item.strip() for item in gpu_raw.split(",") if item.strip())
-        if not gpu:
-            gpu = ("T4", "L4", "L40S", "RTX-PRO-6000")
+        gpu = parse_gpu(environ.get("MODAL_GPU", ""))
 
         workflow_source = (
             _argv_option(argv, "workflow")

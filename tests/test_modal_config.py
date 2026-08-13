@@ -9,7 +9,7 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.ui_timeout_seconds, 24 * 60 * 60)
         self.assertEqual(settings.ui_startup_timeout_seconds, 15 * 60)
         self.assertEqual(settings.ui_scaledown_window_seconds, 5)
-        self.assertEqual(settings.gpu, ("T4", "L4", "L40S", "RTX-PRO-6000"))
+        self.assertEqual(settings.gpu, ("T4",))
         self.assertEqual(settings.secret_name, "comfyui-creds")
         self.assertFalse(settings.base_nodes_enabled)
         self.assertFalse(settings.install_nodes)
@@ -58,6 +58,16 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.models_volume_name, "comfyui-ashleykza-models")
         self.assertEqual(settings.storage_root, "/mnt/comfy-storage")
         self.assertEqual(settings.hydrate_workers, 4)
+
+    def test_idle_release_does_not_keep_warm_containers(self):
+        from modal_config import CHEAP_GPUS, idle_release_kwargs
+
+        settings = ModalSettings.from_env({})
+        self.assertTrue(set(settings.gpu) <= CHEAP_GPUS)
+        kwargs = idle_release_kwargs(settings)
+        self.assertEqual(kwargs["scaledown_window"], 5)
+        self.assertEqual(kwargs["min_containers"], 0)
+        self.assertEqual(kwargs["buffer_containers"], 0)
 
     def test_parses_storage_and_hydrate_settings(self):
         settings = ModalSettings.from_env(

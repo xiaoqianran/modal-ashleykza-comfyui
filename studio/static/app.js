@@ -214,6 +214,7 @@ $("generate").onclick = async () => {
         base_url: $("base-url").value.trim(),
         prompts,
         params: readParams(),
+        keep_gpu: $("keep-gpu").checked,
       }),
     });
     const job = await pollJob(started.job_id, $("job-log"));

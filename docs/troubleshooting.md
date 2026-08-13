@@ -1,5 +1,25 @@
 # 故障排除
 
+## GPU 跑完还不释放 / 一直在计费
+
+`scaledown_window=5` **已经写在 Cls 上**，但这只在容器真正空闲时生效。常见原因：
+
+1. `modal serve` 还在本机跑（SIGINT 有时还留下容器）
+2. 浏览器开着 ComfyUI，WebSocket 算活动
+3. 脚本还在轮询 `/system_stats`
+4. Pixal3D 等还在 `@modal.enter` 里编译，这是启动不是空闲
+
+处理：
+
+```bash
+# 停掉本机 serve
+pkill -INT -f "modal serve comfyui_modal.py" || true
+modal container list
+modal container stop <container-id>   # 有残留就立刻杀
+```
+
+Studio 生成结束后会默认做这件事。测试请用 **T4**（`MODAL_GPU` 默认就是 T4）。不要把 `L40S,RTX-PRO-6000` 写进 fallback：Modal 会在 T4 没货时改开贵卡。
+
 ## App has no function named 'ui'
 
 旧版本曾用 `sys.argv` 判断是否注册 GPU 端点。远程 hydrate / deploy 的 argv 不含 `modal serve`，导致 `ui` 未定义。

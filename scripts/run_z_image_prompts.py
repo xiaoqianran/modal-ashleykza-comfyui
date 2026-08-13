@@ -180,6 +180,9 @@ def main() -> None:
         json.dumps(timings, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    from modal_config import GPU_IDLE_REMINDER
+
+    print(GPU_IDLE_REMINDER, flush=True)
 
 
 if __name__ == "__main__":

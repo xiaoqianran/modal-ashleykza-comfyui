@@ -100,7 +100,7 @@ python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow ex
 
 Ashley 0.32.0 已有核心节点（`TripoSplatConditioning`、`SplatToFile3D`、`SaveGLB` 等），锁里 `custom_nodes` 为空。`background_removal/` 已加入 Storage 目录。官方模板把 `SplatToMesh` / 第二路 `SaveGLB` 设成 bypass；原生输出仍是 `spz` + 已启用的 `SaveGLB`。
 
-`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `scripts/queue_triposplat.py`：展平 subgraph、可选打开 mesh/GLB、排队、把模型拉到 `artifacts/triposplat`。这不是部署必需步骤。建议 **L40S**（约 48GB），不要让默认 GPU fallback 落到 T4。
+`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `scripts/queue_triposplat.py`：展平 subgraph、可选打开 mesh/GLB、排队、把模型拉到 `artifacts/triposplat`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（默认是 T4，不会再静默升到贵卡）。跑完立刻停掉 `modal serve`，不要把 L40S 挂着。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/triposplat-image-to-gaussian-splat.json
@@ -110,7 +110,7 @@ python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
   --images img1.png img2.png img3.png
 ```
 
-`--no-glb` 可关掉 mesh 重建（省显存）。空闲 scaledown 默认 5 秒。
+`--no-glb` 可关掉 mesh 重建（省显存）。空闲 scaledown 默认 5 秒，但 leftover `modal serve` / 开着的 ComfyUI 页会阻止缩容。
 
 ## 仓库示例：Pixal3D 图生 GLB
 
@@ -129,7 +129,7 @@ python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
   --images gecko.png
 ```
 
-空闲 scaledown 默认 5 秒。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。
+空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。测试请用完即停，不要把 L40S 挂着。
 
 ## 自定义工作流
 

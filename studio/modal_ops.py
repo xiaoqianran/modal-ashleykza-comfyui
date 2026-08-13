@@ -19,6 +19,7 @@ STATE_DIR = ROOT / ".studio"
 STATE_PATH = STATE_DIR / "state.json"
 CREDS_ENV = STATE_DIR / "comfyui-creds.env"
 URL_RE = re.compile(r"https://[a-z0-9.-]+\.modal\.run", re.I)
+GPU_APP_NAME = "comfyui-ashleykza-cu128"
 
 _SERVE_LOCK = threading.Lock()
 _SERVE_PROC: subprocess.Popen[str] | None = None
@@ -147,10 +148,72 @@ def _read_serve_output(proc: subprocess.Popen[str], log: Any | None) -> None:
             save_state({"base_url": match.group(0).rstrip("/")})
 
 
+def _container_rows(raw: str) -> list[dict[str, str]]:
+    text = (raw or "").strip()
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(data, dict):
+        data = data.get("containers") or data.get("items") or []
+    if not isinstance(data, list):
+        return []
+    rows: list[dict[str, str]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        lower = {str(key).lower().replace(" ", "_"): value for key, value in item.items()}
+        rows.append(
+            {
+                "container_id": str(lower.get("container_id") or lower.get("id") or ""),
+                "app_id": str(lower.get("app_id") or ""),
+                "app_name": str(
+                    lower.get("app_name") or lower.get("description") or ""
+                ),
+            }
+        )
+    return rows
+
+
+def is_billable_gpu_app(name: str) -> bool:
+    text = name.lower()
+    if "hydrate" in text:
+        return False
+    return GPU_APP_NAME in text
+
+
+def stop_gpu_containers(log: Any | None = None) -> list[str]:
+    """Stop leftover GPU containers. SIGINT on modal serve is not enough."""
+    env = subprocess_env()
+    listed = _run([modal_bin(), "container", "list", "--json"], env=env, timeout=30)
+    stopped: list[str] = []
+    for row in _container_rows(listed.stdout or ""):
+        container_id = row["container_id"]
+        if not container_id or not is_billable_gpu_app(row["app_name"]):
+            continue
+        if log:
+            log(f"stopping leftover GPU container {container_id} ({row['app_name']})")
+        try:
+            _run(
+                [modal_bin(), "container", "stop", container_id],
+                env=env,
+                log=log,
+                timeout=60,
+            )
+        except RuntimeError as exc:
+            if log:
+                log(str(exc))
+            continue
+        stopped.append(container_id)
+    return stopped
+
+
 def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, Any]:
     global _SERVE_PROC
     catalog = load_catalog(recipe_id)
-    chosen = gpu or str(catalog.get("gpu") or "L40S")
+    chosen = gpu or str(catalog.get("gpu") or "T4")
     allowed = set(catalog.get("gpu_choices") or (chosen,))
     if chosen not in allowed:
         raise ValueError(f"gpu {chosen!r} not in {sorted(allowed)}")
@@ -219,7 +282,8 @@ def stop_serve(log: Any | None = None) -> dict[str, Any]:
             except (ProcessLookupError, ValueError, PermissionError):
                 pass
         save_state({"serve_pid": None})
-        return {"stopped": True, "pid": pid}
+        leftover = _safe_stop_gpu_containers(log)
+        return {"stopped": True, "pid": pid, "containers": leftover}
     if log:
         log(f"stopping modal serve pid={proc.pid}")
     proc.send_signal(signal.SIGINT)
@@ -228,7 +292,17 @@ def stop_serve(log: Any | None = None) -> dict[str, Any]:
     except subprocess.TimeoutExpired:
         proc.kill()
     save_state({"serve_pid": None})
-    return {"stopped": True, "pid": proc.pid}
+    leftover = _safe_stop_gpu_containers(log)
+    return {"stopped": True, "pid": proc.pid, "containers": leftover}
+
+
+def _safe_stop_gpu_containers(log: Any | None = None) -> list[str]:
+    try:
+        return stop_gpu_containers(log=log)
+    except (RuntimeError, FileNotFoundError, OSError) as exc:
+        if log:
+            log(f"GPU container cleanup failed: {exc}")
+        return []
 
 
 def runtime_status() -> dict[str, Any]:
