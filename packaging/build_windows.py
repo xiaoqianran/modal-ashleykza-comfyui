@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the Windows portable Studio folder. Run on windows-latest CI."""
+"""Build a single Studio.exe. Run on windows-latest CI."""
 
 from __future__ import annotations
 
@@ -30,25 +30,16 @@ MODULES = (
     "workflow_queue.py",
     "workflow_resolver.py",
 )
-README = """Studio（Windows 便携版）
-========================
+README = """Studio
+======
 
-双击 Studio.exe。会打开浏览器 http://127.0.0.1:8787
+只需要这一个 Studio.exe。双击即可，浏览器打开 http://127.0.0.1:8787
 
-本机不需要先装 Python / ComfyUI / 显卡。图跑在 Modal 云上。
+第一次会把运行时写到 %LOCALAPPDATA%\\ComfyStudio，下载目录里始终只有 exe。
+图跑在 Modal 云上。本机要联网、Modal 账号、Hugging Face token。
 
-第一次：
-1. 在页面填 Modal Token（或事先 modal setup）和 HF_TOKEN，保存
-2. 顶栏选配方（默认 Z-Image）
-3. 准备权重 → 启动 GPU → 生成
-4. 图生配方（Pixal3D / TripoSplat）把图片拖进页面再点生成
-
-FLUX.2 / Qwen / Krea-2 / Pixal3D / TripoSplat 需要本机已安装 Chrome（或 Edge），
-用来把官方工作流转成 API prompt。Z-Image 不需要。
-
-密钥只写在解压目录 app/.studio.env，不会上传 Git。
-
-不要把 GPU 挂着不管。生成结束默认会停卡。
+FLUX.2 / Qwen / Krea-2 / Pixal3D / TripoSplat 需要本机 Chrome 或 Edge。
+Z-Image 不需要。生成结束默认停 GPU。
 """
 
 
@@ -67,6 +58,13 @@ def _copy_tree(src: Path, dest: Path) -> None:
         dest,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".studio", ".env"),
     )
+
+
+def write_stamp(payload_dir: Path) -> Path:
+    stamp = os.environ.get("GITHUB_SHA") or os.environ.get("STUDIO_PAYLOAD_STAMP") or "dev"
+    path = payload_dir / "payload.stamp"
+    path.write_text(stamp.strip() + "\n", encoding="utf-8")
+    return path
 
 
 def prepare_embed(python_dir: Path) -> Path:
@@ -99,6 +97,34 @@ def prepare_embed(python_dir: Path) -> Path:
     return python_dir / "python.exe"
 
 
+def slim_embed(python_dir: Path) -> None:
+    python_exe = python_dir / "python.exe"
+    subprocess.call(
+        [
+            str(python_exe),
+            "-m",
+            "pip",
+            "uninstall",
+            "-y",
+            "pip",
+            "setuptools",
+            "wheel",
+        ]
+    )
+    for name in ("get-pip.py",):
+        path = python_dir / name
+        if path.is_file():
+            path.unlink()
+    scripts = python_dir / "Scripts"
+    if scripts.is_dir():
+        for path in scripts.iterdir():
+            lowered = path.name.lower()
+            if lowered.startswith(("pip", "wheel", "easy_install")):
+                path.unlink(missing_ok=True)
+    for cache in list(python_dir.rglob("__pycache__")):
+        shutil.rmtree(cache, ignore_errors=True)
+
+
 def install_deps(python_exe: Path) -> None:
     get_pip = python_exe.parent / "get-pip.py"
     _download(GET_PIP_URL, get_pip)
@@ -109,11 +135,13 @@ def install_deps(python_exe: Path) -> None:
             "-m",
             "pip",
             "install",
+            "--no-cache-dir",
             "--no-warn-script-location",
             "modal",
             "playwright",
         ]
     )
+    slim_embed(python_exe.parent)
 
 
 def copy_app(app_dir: Path) -> None:
@@ -131,7 +159,12 @@ def copy_app(app_dir: Path) -> None:
     (app_dir / "README.txt").write_text(README, encoding="utf-8")
 
 
-def build_launcher(out_dir: Path) -> None:
+def build_launcher(payload_dir: Path, dist_dir: Path) -> Path:
+    python = payload_dir / "python"
+    app = payload_dir / "app"
+    stamp = payload_dir / "payload.stamp"
+    sep = os.pathsep
+    dist_dir.mkdir(parents=True, exist_ok=True)
     subprocess.check_call(
         [
             sys.executable,
@@ -144,41 +177,41 @@ def build_launcher(out_dir: Path) -> None:
             "--name",
             "Studio",
             "--distpath",
-            str(out_dir),
+            str(dist_dir),
             "--workpath",
             str(ROOT / "build" / "studio-launcher"),
             "--specpath",
             str(ROOT / "build"),
+            "--add-data",
+            f"{python}{sep}python",
+            "--add-data",
+            f"{app}{sep}app",
+            "--add-data",
+            f"{stamp}{sep}payload.stamp",
             str(ROOT / "packaging" / "windows_launcher.py"),
         ]
     )
-
-
-def zip_bundle(out_dir: Path, zip_path: Path) -> None:
-    if zip_path.exists():
-        zip_path.unlink()
-    shutil.make_archive(str(zip_path.with_suffix("")), "zip", root_dir=out_dir.parent, base_dir=out_dir.name)
+    return dist_dir / "Studio.exe"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", default=str(ROOT / "dist" / "Studio"))
+    parser.add_argument("--out", default=str(ROOT / "dist" / "payload"))
     parser.add_argument("--skip-embed", action="store_true")
     parser.add_argument("--skip-launcher", action="store_true")
     args = parser.parse_args(argv)
-    out_dir = Path(args.out).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    copy_app(out_dir / "app")
-    (out_dir / "README.txt").write_text(README, encoding="utf-8")
+    payload_dir = Path(args.out).resolve()
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    copy_app(payload_dir / "app")
+    write_stamp(payload_dir)
     if not args.skip_embed:
-        python_exe = prepare_embed(out_dir / "python")
+        python_exe = prepare_embed(payload_dir / "python")
         install_deps(python_exe)
     if not args.skip_launcher:
-        build_launcher(out_dir)
-    zip_path = out_dir.parent / "Studio-windows.zip"
-    zip_bundle(out_dir, zip_path)
-    print(f"bundle {out_dir}", flush=True)
-    print(f"zip {zip_path} bytes={zip_path.stat().st_size}", flush=True)
+        exe = build_launcher(payload_dir, payload_dir.parent)
+        print(f"exe {exe} bytes={exe.stat().st_size}", flush=True)
+        return 0
+    print(f"payload {payload_dir}", flush=True)
     return 0
 
 
