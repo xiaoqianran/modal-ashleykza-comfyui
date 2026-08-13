@@ -1,6 +1,6 @@
 # Hydrate Storage
 
-CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。插件写入 lock，由 GPU Image 安装 CNR。
+CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。插件写入 lock 和 Volume `.state/launch.json`，由 GPU **启动时**装到 `/workspace/custom_nodes`（已存在则跳过）。换工作流不会重建 GPU Image。
 
 ## 两种方式
 
@@ -10,7 +10,7 @@ CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。�
     modal run hydrate_modal.py --workflow examples/z-image-base.json
     ```
 
-    解析 JSON（或带工作流的 PNG）：模型 URL、CNR 插件 id。模型并行下载；插件写入 `.lock.json`，`modal serve` 时按 CNR 安装。
+    解析 JSON（或带工作流的 PNG）：模型 URL、CNR 插件 id。模型并行下载；插件写入 `.lock.json` 和 Volume state。`modal serve` 时按 CNR 往 Volume 安装，不打进 Image。
 
 === "Profile"
 
@@ -31,7 +31,8 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 | `--workflow` | 工作流 JSON / PNG → workflow 模式 |
 | `--profile` | 配方名 → profile 模式（默认 `base`） |
 | `--lock-out` | 锁文件路径；默认把工作流后缀改成 `.lock.json` |
-| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info` |
+| `--skip-lock-nodes` | 写入 launch.json，让 GPU 启动时跳过 CNR |
+| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info`、`outputs`、`repair` |
 
 给了 `--workflow` 就是 workflow 模式，不再用 profile 拉模型包。
 
@@ -40,3 +41,11 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 默认 4 路（`COMFY_HYDRATE_WORKERS`，1–16）。8 CPU / 16 GiB，超时 6 小时。
 
 已存在且匹配则 `[SKIP]`；旧 workspace 布局会 `[PROMOTE]`。成功后 `commit()` 两个 Volume。
+
+GPU 空闲 5s 后应缩到 0。成片在 workspace Volume 的 `/output`，用 CPU 读取：
+
+```bash
+modal run hydrate_modal.py --action outputs
+modal run hydrate_modal.py --action repair
+modal volume get comfyui-ashleykza-workspace /output ./output
+```

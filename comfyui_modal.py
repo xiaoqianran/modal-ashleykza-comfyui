@@ -1,14 +1,14 @@
 """Deploy ashleykleynhans/comfyui on Modal.
 
-Launch modes (set env or pass the same flags used by hydrate):
+The GPU Image is workflow-agnostic so Modal can cache it. Hydrate writes the
+active lock to Volume ``.state/launch.json``; GPU start installs lock CNR
+nodes into ``/workspace/custom_nodes`` (skip if already present).
 
-    COMFY_WORKFLOW=examples/z-image-base.json modal serve comfyui_modal.py
-    COMFY_PROFILE=qwen-image modal serve comfyui_modal.py
+    modal run hydrate_modal.py --workflow examples/z-image-base.json
+    modal serve comfyui_modal.py
 
-Custom nodes from a workflow lock are installed on the GPU Image.
 The 130 GitHub base clones and profile extra packs stay off unless
-``COMFY_BASE_NODES=1`` / ``COMFY_INSTALL_NODES=1``. Hydrate models
-with ``hydrate_modal.py``.
+``COMFY_BASE_NODES=1`` / ``COMFY_INSTALL_NODES=1`` (those do change the Image).
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import shlex
 import sys
+import threading
 from pathlib import Path
 
 import modal
@@ -23,7 +24,9 @@ import modal
 from base_nodes import INSTALLER_REMOTE_PATH, build_base_nodes_commands
 from comfy_engine import (
     build_node_commands,
-    build_registry_node_commands,
+    install_registry_nodes,
+    load_launch_state,
+    output_manifest,
     prepare_runtime,
     start_comfyui,
     verify_workflow_models,
@@ -31,7 +34,7 @@ from comfy_engine import (
 )
 from modal_config import ModalSettings
 from recipes import get_profile
-from workflow_resolver import load_workflow_lock, write_workflow_lock
+from storage import workspace_dir
 
 SETTINGS = ModalSettings.from_env(os.environ, sys.argv)
 APP_NAME = SETTINGS.app_name
@@ -40,7 +43,6 @@ COMFY_ROOT = Path("/ComfyUI")
 WORKSPACE = Path("/workspace")
 STORAGE_ROOT = Path(SETTINGS.storage_root)
 COMFY_PORT = 3001
-IMAGE_WORKFLOW_LOCK = Path("/opt/comfy/workflow.lock.json")
 
 PROFILE_NAME = SETTINGS.profile_name
 PROFILE = get_profile(PROFILE_NAME)
@@ -48,22 +50,6 @@ FORCE_LATEST = SETTINGS.latest_dependencies
 BASE_NODES_ENABLED = SETTINGS.base_nodes_enabled
 INSTALL_LOCK_NODES = SETTINGS.install_lock_nodes
 INSTALL_NODES = SETTINGS.install_nodes
-
-if SETTINGS.workflow_source and modal.is_local():
-    BUILD_WORKFLOW_LOCK = write_workflow_lock(
-        SETTINGS.workflow_source,
-        SETTINGS.workflow_lock_source,
-    )
-    WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
-elif SETTINGS.workflow_lock_source and modal.is_local():
-    WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
-    BUILD_WORKFLOW_LOCK = load_workflow_lock(
-        WORKFLOW_LOCK_SOURCE,
-        require_resolved=True,
-    )
-else:
-    WORKFLOW_LOCK_SOURCE = SETTINGS.workflow_lock_source
-    BUILD_WORKFLOW_LOCK = None
 
 GPU = list(SETTINGS.gpu)
 
@@ -88,17 +74,9 @@ APP_VOLUMES = {
 }
 
 
-# Workflow-lock CNR nodes are required by the JSON. Profile extras stay opt-in.
+# Profile extras stay opt-in Image layers. Workflow-lock CNR is Volume-backed.
 node_commands = (
     build_node_commands(PROFILE.node_packs) if INSTALL_NODES else ()
-)
-registry_node_commands = (
-    build_registry_node_commands(
-        BUILD_WORKFLOW_LOCK["custom_nodes"] if BUILD_WORKFLOW_LOCK else (),
-        comfy_cli_version=None if FORCE_LATEST else "1.16.0",
-    )
-    if INSTALL_LOCK_NODES
-    else ()
 )
 
 runtime_image = (
@@ -108,6 +86,10 @@ runtime_image = (
     # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
     .run_commands(
         "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"
+    )
+    # Stable for every workflow; runtime lock-CNR install uses this binary.
+    .run_commands(
+        "/ComfyUI/venv/bin/python -m pip install --no-cache-dir 'comfy-cli==1.16.0'"
     )
 )
 
@@ -145,19 +127,6 @@ for node_command in node_commands:
         node_command,
         secrets=APP_SECRETS,
         force_build=FORCE_LATEST,
-    )
-
-for registry_command in registry_node_commands:
-    runtime_image = runtime_image.run_commands(
-        registry_command,
-        force_build=FORCE_LATEST,
-    )
-
-if BUILD_WORKFLOW_LOCK:
-    runtime_image = runtime_image.add_local_file(
-        WORKFLOW_LOCK_SOURCE,
-        remote_path=str(IMAGE_WORKFLOW_LOCK),
-        copy=True,
     )
 
 runtime_image = (
@@ -198,6 +167,36 @@ if SETTINGS.gpu_snapshot:
     UI_CLS_KWARGS["experimental_options"] = {"enable_gpu_snapshot": True}
 
 
+def _commit_workspace_output(reason: str) -> None:
+    workspace_vol.commit()
+    print(f"Committed workspace Volume ({reason})", flush=True)
+
+
+def start_output_commit_watch(
+    output_dir: Path,
+    *,
+    interval: float = 2.0,
+) -> tuple[threading.Event, threading.Thread]:
+    """Commit ``/workspace/output`` when SaveVideo writes, so 5s GPU scaledown keeps files."""
+    stop = threading.Event()
+    last = output_manifest(output_dir)
+
+    def loop() -> None:
+        nonlocal last
+        while not stop.wait(interval):
+            try:
+                current = output_manifest(output_dir)
+                if current != last:
+                    _commit_workspace_output("output changed")
+                    last = current
+            except Exception as exc:  # noqa: BLE001
+                print(f"workspace output commit skipped: {exc}", flush=True)
+
+    thread = threading.Thread(target=loop, name="workspace-output-commit", daemon=True)
+    thread.start()
+    return stop, thread
+
+
 @app.cls(**UI_CLS_KWARGS)
 @modal.concurrent(
     max_inputs=SETTINGS.ui_max_inputs,
@@ -211,26 +210,42 @@ class UI:
 
     @modal.enter(snap=True)
     def start(self):
-        if IMAGE_WORKFLOW_LOCK.is_file():
-            workflow_lock = load_workflow_lock(IMAGE_WORKFLOW_LOCK, require_resolved=True)
+        launch = load_launch_state(STORAGE_ROOT) or {}
+        workflow_lock = launch.get("workflow_lock")
+        profile_name = str(launch.get("profile") or PROFILE_NAME or "base")
+        install_lock_nodes = bool(launch.get("install_lock_nodes", INSTALL_LOCK_NODES))
+        if workflow_lock:
             verify_workflow_models(
                 workflow_lock,
                 WORKSPACE,
                 storage_root=STORAGE_ROOT,
             )
         prepare_runtime(COMFY_ROOT, WORKSPACE, STORAGE_ROOT)
+        nodes = list((workflow_lock or {}).get("custom_nodes") or ())
+        if install_lock_nodes and nodes:
+            newly = install_registry_nodes(
+                nodes,
+                comfy_root=COMFY_ROOT,
+                custom_nodes_dir=WORKSPACE / "custom_nodes",
+            )
+            if newly:
+                workspace_vol.commit()
         extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
         self.process = start_comfyui(
-            profile_name=PROFILE_NAME,
+            profile_name=profile_name,
             comfy_root=COMFY_ROOT,
             workspace=WORKSPACE,
             port=COMFY_PORT,
             extra_args=extra,
         )
         wait_comfyui_ready(port=COMFY_PORT, timeout=SETTINGS.ui_startup_timeout_seconds)
+        self._output_commit_stop, self._output_commit_thread = start_output_commit_watch(
+            workspace_dir(WORKSPACE, "output")
+        )
         print(
-            f"ComfyUI mode={SETTINGS.launch_mode!r} profile={PROFILE_NAME!r} "
-            f"lock_nodes={INSTALL_LOCK_NODES} extra_nodes={INSTALL_NODES} "
+            f"ComfyUI mode={launch.get('mode') or SETTINGS.launch_mode!r} "
+            f"profile={profile_name!r} "
+            f"lock_nodes={install_lock_nodes} extra_nodes={INSTALL_NODES} "
             f"ready on :{COMFY_PORT}"
         )
 
@@ -244,6 +259,13 @@ class UI:
 
     @modal.exit()
     def stop(self):
+        stop_event = getattr(self, "_output_commit_stop", None)
+        if stop_event is not None:
+            stop_event.set()
+        try:
+            _commit_workspace_output("gpu exit")
+        except Exception as exc:  # noqa: BLE001
+            print(f"workspace commit on exit skipped: {exc}", flush=True)
         process = getattr(self, "process", None)
         if process is None:
             return
@@ -263,24 +285,24 @@ App:       {APP_NAME}
 Mode:      {SETTINGS.launch_mode}
 Image:     {IMAGE_TAG}
 Profile:   {PROFILE_NAME}
-Workflow:  {SETTINGS.workflow_source or WORKFLOW_LOCK_SOURCE or '(none)'}
+Workflow:  {SETTINGS.workflow_source or SETTINGS.workflow_lock_source or '(volume launch.json)'}
 GPU:       {GPU}
 Port:      {COMFY_PORT}
 Workspace: {SETTINGS.volume_name} -> {WORKSPACE}
 Storage:   {SETTINGS.models_volume_name} -> {STORAGE_ROOT}
 Secret:    {SECRET_NAME}
-InstallLockNodes: {INSTALL_LOCK_NODES}
+InstallLockNodes: {INSTALL_LOCK_NODES} (Volume, not Image)
 InstallExtraNodes: {INSTALL_NODES}
 BaseNodes: {BASE_NODES_ENABLED}
 Latest:    {FORCE_LATEST}
 Snapshot:  memory={SETTINGS.memory_snapshot} gpu={SETTINGS.gpu_snapshot}
 
-# 1. Hydrate models (CPU)
+# 1. Hydrate models (CPU) — writes Volume .state/launch.json
 modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 
-# 2. GPU UI (lock CNR nodes on; 130 clones / profile extras off)
-COMFY_WORKFLOW=examples/z-image-base.json MODAL_GPU=T4 modal serve comfyui_modal.py
-COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal deploy comfyui_modal.py
+# 2. GPU UI (same Image for every workflow; lock CNR on workspace Volume)
+MODAL_GPU=T4 modal serve comfyui_modal.py
+MODAL_GPU=T4 modal deploy comfyui_modal.py
 """.strip()
     )

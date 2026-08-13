@@ -12,24 +12,32 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from recipes import MODEL_DIRS, MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 from storage import (
     DEFAULT_STORAGE_ROOT,
+    canonical_relpath,
+    download_target,
     ensure_storage_layout,
+    ensure_workspace_layout,
     extra_model_paths_yaml,
     legacy_model_path,
+    repair_storage_layout,
+    repair_workspace_layout,
     resolve_model_file,
     storage_model_path,
 )
 from workflow_resolver import validate_workflow_lock
 
 LOCK_SCHEMA = 1
+LAUNCH_STATE_SCHEMA = 1
+LAUNCH_STATE_FILE = "launch.json"
+WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
 
 
 def _quote(value: str | Path) -> str:
@@ -156,6 +164,68 @@ def _save_lock(state_dir: Path, lock: dict) -> None:
     tmp.replace(path)
 
 
+def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    tmp.replace(path)
+
+
+def persist_launch_state(
+    storage_root: str | Path,
+    *,
+    mode: str,
+    profile: str = "base",
+    workflow: str = "",
+    lock_source: str = "",
+    install_lock_nodes: bool = True,
+    workflow_lock: Mapping[str, Any] | None = None,
+) -> dict:
+    """Write the active workflow/profile onto the models Volume.
+
+    GPU start reads this instead of baking the lock into the Image, so every
+    workflow shares the same cached Image layers.
+    """
+    storage_root = ensure_storage_layout(storage_root)
+    state_dir = storage_root / ".state"
+    lock_payload = dict(workflow_lock) if workflow_lock is not None else None
+    if lock_payload is not None:
+        validate_workflow_lock(lock_payload, require_resolved=True)
+        _write_json(state_dir / WORKFLOW_LOCK_STATE_FILE, lock_payload)
+    else:
+        stale = state_dir / WORKFLOW_LOCK_STATE_FILE
+        if stale.exists():
+            stale.unlink()
+
+    payload = {
+        "schema": LAUNCH_STATE_SCHEMA,
+        "mode": mode,
+        "profile": profile or "base",
+        "workflow": workflow,
+        "lock_source": lock_source,
+        "install_lock_nodes": bool(install_lock_nodes),
+        "workflow_lock": lock_payload,
+    }
+    _write_json(state_dir / LAUNCH_STATE_FILE, payload)
+    return payload
+
+
+def load_launch_state(storage_root: str | Path) -> dict | None:
+    path = Path(storage_root) / ".state" / LAUNCH_STATE_FILE
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
 def _asset_lock_entry(lock: Mapping[str, Any], category: str, filename: str) -> dict | None:
     assets = lock.get("assets", {})
     return assets.get(f"{category}/{filename}") or assets.get(f"models/{category}/{filename}")
@@ -173,17 +243,19 @@ def _promote_legacy_if_needed(legacy: Path, primary: Path) -> bool:
     return True
 
 
-def ensure_workspace_layout(workspace: Path) -> None:
-    for directory in (
-        "custom_nodes",
-        "input",
-        "output",
-        "user",
-        "logs",
-        "state",
-        *(f"models/{name}" for name in MODEL_DIRS),
-    ):
-        (workspace / directory).mkdir(parents=True, exist_ok=True)
+def output_manifest(output_dir: str | Path) -> tuple[tuple[str, int, int], ...]:
+    """Filename, mtime_ns, size for every file under ComfyUI ``output/``."""
+    root = Path(output_dir)
+    if not root.is_dir():
+        return ()
+    entries = []
+    for path in root.rglob("*"):
+        if path.is_file():
+            stat = path.stat()
+            entries.append(
+                (str(path.relative_to(root)), int(stat.st_mtime_ns), int(stat.st_size))
+            )
+    return tuple(sorted(entries))
 
 
 def _is_asset_current(path: Path, asset: ModelAsset, lock_entry: dict | None) -> bool:
@@ -229,6 +301,9 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
 
     Modern huggingface_hub installs hf_xet automatically. The Modal sync Image
     enables HF_XET_HIGH_PERFORMANCE=1, so this is the preferred path for HF.
+
+    Downloads into /tmp first. ``--local-dir <category>`` plus a repo path of
+    ``<category>/<file>`` would nest directories on the Volume and break.
     """
     parsed = _parse_hf_url(asset.url)
     hf = shutil.which("hf") or shutil.which("huggingface-cli")
@@ -236,7 +311,12 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
         raise RuntimeError("Hugging Face CLI/Xet downloader is unavailable for this URL.")
 
     repo_id, revision, file_path = parsed
-    before = {p.resolve() for p in target_dir.rglob("*") if p.is_file()}
+    tmp_root = Path("/tmp/hf-download") / hashlib.sha256(
+        f"{repo_id}:{revision}:{file_path}".encode()
+    ).hexdigest()[:16]
+    if tmp_root.exists():
+        shutil.rmtree(tmp_root)
+    tmp_root.mkdir(parents=True, exist_ok=True)
     cmd = [
         hf,
         "download",
@@ -247,32 +327,47 @@ def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> 
         "--repo-type",
         "model",
         "--local-dir",
-        str(target_dir),
+        str(tmp_root),
     ]
     env = os.environ.copy()
     env.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    token = (env.get("HF_TOKEN") or env.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    if token:
+        env.setdefault("HF_TOKEN", token)
+        env.setdefault("HUGGING_FACE_HUB_TOKEN", token)
     _run(cmd, env=env)
 
-    expected = target_dir / file_path
-    if expected.exists() and expected.resolve() != target.resolve():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        expected.replace(target)
-        parent = expected.parent
-        while parent != target_dir and parent.exists():
-            try:
-                parent.rmdir()
-            except OSError:
-                break
-            parent = parent.parent
+    expected = tmp_root / file_path
+    if not expected.is_file():
+        named = tmp_root / Path(file_path).name
+        if named.is_file():
+            expected = named
+        else:
+            matches = [
+                path
+                for path in tmp_root.rglob("*")
+                if path.is_file() and path.name == Path(file_path).name
+                and ".cache" not in path.parts
+            ]
+            if len(matches) != 1:
+                raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
+            expected = matches[0]
 
-    if not target.exists():
-        after = [p for p in target_dir.rglob("*") if p.is_file() and p.resolve() not in before]
-        after = [p for p in after if ".cache/huggingface" not in p.as_posix()]
-        if len(after) == 1:
-            after[0].replace(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        target.unlink()
+    shutil.move(str(expected), str(target))
+    shutil.rmtree(tmp_root, ignore_errors=True)
 
     if not target.exists():
         raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
+
+
+def _hf_auth_header() -> str | None:
+    token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    if not token:
+        return None
+    return f"Authorization: Bearer {token}"
 
 
 def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> None:
@@ -293,15 +388,20 @@ def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> N
         "--console-log-level=notice",
         "-d", str(target.parent),
         "-o", target.name,
-        url,
     ]
-    display_cmd = [*cmd[:-1], redact_url(url)]
+    header = _hf_auth_header() if "huggingface.co" in url else None
+    if header:
+        cmd.extend(["--header", header])
+    cmd.append(url)
+    display_cmd = list(cmd)
+    if header:
+        display_cmd[display_cmd.index(header)] = "Authorization: Bearer ***"
+    display_cmd[-1] = redact_url(url)
     _run(cmd, display_cmd=display_cmd)
 
 
 def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / asset_filename(asset)
+    target = download_target(target_dir, asset_filename(asset))
     target.parent.mkdir(parents=True, exist_ok=True)
 
     if _is_asset_current(target, asset, lock_entry):
@@ -351,7 +451,13 @@ def _hydrate_one_asset(
     storage_root: Path,
     lock_entry: dict | None,
 ) -> tuple[dict, str]:
-    filename = asset_filename(asset)
+    filename = canonical_relpath(asset_filename(asset), category=category)
+    asset = ModelAsset(
+        url=asset.url,
+        filename=filename,
+        sha256=asset.sha256,
+        extract=asset.extract,
+    )
     primary = storage_model_path(storage_root, category, filename)
     legacy = legacy_model_path(workspace, category, filename)
     promoted = _promote_legacy_if_needed(legacy, primary)
@@ -437,6 +543,8 @@ def sync_profile_models(
     workspace = Path(workspace)
     storage_root = ensure_storage_layout(storage_root)
     ensure_workspace_layout(workspace)
+    repair_storage_layout(storage_root)
+    repair_workspace_layout(workspace)
     state_dir = storage_root / ".state"
     profile = get_profile(profile_name)
     lock = _load_lock(state_dir)
@@ -460,6 +568,13 @@ def sync_profile_models(
                         {"packs": [pack_name]},
                     )
                 )
+
+    persist_launch_state(
+        storage_root,
+        mode="profile",
+        profile=profile_name,
+        install_lock_nodes=False,
+    )
 
     if not wanted:
         print(f"Profile {profile_name!r} has no model assets.")
@@ -496,21 +611,38 @@ def sync_workflow_models(
     *,
     storage_root: str | Path = DEFAULT_STORAGE_ROOT,
     workers: int = 4,
+    install_lock_nodes: bool = True,
+    workflow_source: str = "",
+    lock_source: str = "",
+    profile_name: str = "base",
 ) -> dict:
     """Download every resolved workflow model into the Modal models Volume.
 
     The lock is produced locally and serialized into the CPU-only Modal Function,
     so arbitrary local workflow files never need to be mounted in a GPU container.
+    The active lock is also written to Volume ``.state/`` so the GPU Image can
+    stay workflow-agnostic.
     """
     validate_workflow_lock(workflow_lock, require_resolved=True)
     workspace = Path(workspace)
     storage_root = ensure_storage_layout(storage_root)
     ensure_workspace_layout(workspace)
+    repair_storage_layout(storage_root)
+    repair_workspace_layout(workspace)
     state_dir = storage_root / ".state"
     state_lock = _load_lock(state_dir)
     workflow = workflow_lock.get("workflow", {})
     workflow_name = str(workflow.get("name", "workflow"))
     workflow_sha256 = str(workflow.get("sha256", ""))
+    persist_launch_state(
+        storage_root,
+        mode="workflow",
+        profile=profile_name,
+        workflow=workflow_source or workflow_name,
+        lock_source=lock_source,
+        install_lock_nodes=install_lock_nodes,
+        workflow_lock=workflow_lock,
+    )
 
     jobs: list[tuple[str, str, ModelAsset, dict]] = []
     for model in workflow_lock["models"]:
@@ -654,7 +786,11 @@ def build_registry_node_commands(
     *,
     comfy_cli_version: str | None = "1.16.0",
 ) -> list[str]:
-    """Install workflow-declared CNR nodes in CPU-backed Image build layers."""
+    """Shell layers for optional Image-time CNR installs (tests / opt-in packs).
+
+    Default GPU runtime does **not** use this. Workflow lock nodes go onto the
+    workspace Volume via ``install_registry_nodes`` so the Image cache stays shared.
+    """
     nodes = list(custom_nodes)
     if not nodes:
         return []
@@ -695,6 +831,112 @@ def build_registry_node_commands(
             )
         )
     return commands
+
+
+def _cnr_marker_path(marker_dir: Path, node_id: str) -> Path:
+    safe_id = node_id.replace("/", "_")
+    return marker_dir / safe_id
+
+
+def _dir_names(path: Path) -> set[str]:
+    if not path.is_dir():
+        return set()
+    return {item.name for item in path.iterdir() if item.is_dir() and not item.name.startswith(".")}
+
+
+def _registry_install_one(node: Mapping[str, Any], *, comfy_root: Path) -> None:
+    node_id = str(node["id"])
+    version = node.get("version")
+    comfy = comfy_root / "venv" / "bin" / "comfy"
+    binary = str(comfy) if comfy.is_file() else "comfy"
+    cmd = [binary, f"--workspace={comfy_root}", "node", "registry-install", node_id]
+    if version:
+        cmd.extend(["--version", str(version)])
+    _run(cmd)
+
+
+def install_registry_nodes(
+    custom_nodes: Iterable[Mapping[str, Any]],
+    *,
+    comfy_root: str | Path = "/ComfyUI",
+    custom_nodes_dir: str | Path = "/workspace/custom_nodes",
+    marker_dir: str | Path | None = None,
+    skip_existing: bool = True,
+    installer: Callable[..., None] | None = None,
+) -> list[str]:
+    """Install CNR nodes into a Volume-backed ``custom_nodes`` directory.
+
+    ``comfy node registry-install`` writes under ``<comfy_root>/custom_nodes``.
+    Newly created folders are moved onto the Volume so they survive scaledown
+    and do not bust the GPU Image cache. Existing Volume installs are skipped.
+    Markers live under ``/workspace/state/cnr`` so ComfyUI does not scan them.
+    """
+    nodes = list(custom_nodes)
+    if not nodes:
+        return []
+
+    comfy_root = Path(comfy_root)
+    image_custom = comfy_root / "custom_nodes"
+    volume_custom = Path(custom_nodes_dir)
+    volume_custom.mkdir(parents=True, exist_ok=True)
+    markers = Path(marker_dir) if marker_dir is not None else volume_custom.parent / "state" / "cnr"
+    markers.mkdir(parents=True, exist_ok=True)
+    image_custom.mkdir(parents=True, exist_ok=True)
+    run_install = installer or _registry_install_one
+
+    installed: list[str] = []
+    for node in nodes:
+        node_id = str(node["id"])
+        version = str(node.get("version") or "")
+        marker = _cnr_marker_path(markers, node_id)
+        previous = {}
+        if marker.is_file():
+            try:
+                loaded = json.loads(marker.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                loaded = {}
+            if isinstance(loaded, dict):
+                previous = loaded
+        if skip_existing and previous.get("version") == version and previous.get("dirs"):
+            missing = [
+                name
+                for name in previous["dirs"]
+                if not (volume_custom / str(name)).is_dir()
+            ]
+            if not missing:
+                print(f"[SKIP] CNR {node_id}@{version} already on Volume", flush=True)
+                continue
+
+        for name in previous.get("dirs") or ():
+            stale = volume_custom / str(name)
+            if stale.is_dir():
+                shutil.rmtree(stale)
+
+        before = _dir_names(image_custom)
+        run_install(node, comfy_root=comfy_root)
+        new_names = sorted(_dir_names(image_custom) - before)
+        moved: list[str] = []
+        for name in new_names:
+            src = image_custom / name
+            dest = volume_custom / name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            shutil.move(str(src), str(dest))
+            moved.append(name)
+        marker.write_text(
+            json.dumps({"id": node_id, "version": version, "dirs": moved}, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"[INSTALL] CNR {node_id}@{version} -> {volume_custom} ({', '.join(moved) or 'no new dirs'})",
+            flush=True,
+        )
+        installed.append(node_id)
+    return installed
 
 
 def write_extra_model_paths(
@@ -743,6 +985,8 @@ def prepare_runtime(
 
     ensure_workspace_layout(workspace)
     ensure_storage_layout(storage_root)
+    repair_workspace_layout(workspace)
+    repair_storage_layout(storage_root)
     write_extra_model_paths(comfy_root, workspace, storage_root)
 
     for name in ("input", "output", "user"):
@@ -803,6 +1047,9 @@ def start_comfyui(
         str(comfy_root / "main.py"),
         "--listen", "0.0.0.0",
         "--port", str(port),
+        "--input-directory", str(workspace / "input"),
+        "--output-directory", str(workspace / "output"),
+        "--user-directory", str(workspace / "user"),
         *profile.comfy_args,
         *extra_args,
     ]

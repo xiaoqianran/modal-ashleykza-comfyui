@@ -31,12 +31,12 @@
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `COMFY_WORKFLOW` | 空 | 工作流 JSON/PNG 路径；设置后为 workflow 模式 |
-| `COMFY_PROFILE` | `base` | 配方名；无 `COMFY_WORKFLOW` 时为 profile 模式 |
+| `COMFY_WORKFLOW` | 空 | hydrate 时的工作流 JSON/PNG；写入 Volume `.state/launch.json`。**不要**靠它改 GPU Image |
+| `COMFY_PROFILE` | `base` | hydrate 配方名；无 `COMFY_WORKFLOW` 时为 profile 模式 |
 | `COMFY_WORKFLOW_LOCK` | 空 | 已有锁文件；workflow 模式默认写成同名 `.lock.json` |
-| `COMFY_INSTALL_LOCK_NODES` | `true` | `0` 时跳过工作流锁里的 CNR 节点 |
-| `COMFY_INSTALL_NODES` | `false` | `1` 时安装配方里的额外 node packs |
-| `COMFY_BASE_NODES` | `false` | `1` 时才克隆约 130 个上游 GitHub 节点 |
+| `COMFY_INSTALL_LOCK_NODES` | `true` | hydrate 写入 launch.json；GPU 启动时往 workspace Volume 装 CNR。`0` / `--skip-lock-nodes` 跳过 |
+| `COMFY_INSTALL_NODES` | `false` | `1` 时把配方额外 node packs **打进 Image**（会单独占一层缓存） |
+| `COMFY_BASE_NODES` | `false` | `1` 时才克隆约 130 个上游 GitHub 节点（会单独占一层缓存） |
 | `COMFY_LATEST` | `false` | `1` 时强制重建节点 Image 层 |
 | `EXTRA_ARGS` | 空 | 追加到 ComfyUI 进程的参数 |
 

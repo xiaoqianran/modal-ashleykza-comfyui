@@ -9,6 +9,8 @@ modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 modal run hydrate_modal.py --action resolve --workflow workflow.json
 modal run hydrate_modal.py --action profiles
+modal run hydrate_modal.py --action outputs
+modal run hydrate_modal.py --action repair
 ```
 
 | 参数 | 说明 |
@@ -16,13 +18,14 @@ modal run hydrate_modal.py --action profiles
 | `--workflow` | 工作流 JSON / PNG（workflow 模式） |
 | `--profile` | 配方名（profile 模式，默认 `base`） |
 | `--lock-out` | 锁文件路径 |
-| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info` |
+| `--skip-lock-nodes` | GPU 启动时跳过锁内 CNR |
+| `--action` | `hydrate`（默认）、`resolve`、`profiles`、`info`、`outputs`、`repair` |
 
 ## comfyui_modal.py
 
 ```bash
-COMFY_WORKFLOW=examples/z-image-base.json modal serve comfyui_modal.py
-COMFY_PROFILE=qwen-image modal deploy comfyui_modal.py
+modal serve comfyui_modal.py
+modal deploy comfyui_modal.py
 modal run comfyui_modal.py
 ```
 

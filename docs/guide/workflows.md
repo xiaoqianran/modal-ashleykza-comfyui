@@ -8,7 +8,7 @@ GPU 启动前，工作流引用的权重必须已经在 Storage 里。锁文件�
 modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.json
 ```
 
-默认写出 `examples/z-image-base.lock.json`。`--workflow` 不带 `--action resolve` 时会再下载模型。`custom_nodes` 会在 GPU Image 里按 CNR id/version 安装。
+默认写出 `examples/z-image-base.lock.json`。`--workflow` 不带 `--action resolve` 时会再下载模型。`custom_nodes` 由 GPU 启动时装到 `/workspace/custom_nodes`，不写进 Image。
 
 解析器遍历：
 
@@ -55,10 +55,11 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 }
 ```
 
-部署时把锁文件打进 GPU Image（启动前做存在性检查）：
+hydrate 把锁写到 Volume `.state/launch.json`（GPU 启动前做存在性检查）：
 
 ```bash
-COMFY_WORKFLOW=examples/z-image-base.json modal deploy comfyui_modal.py
+modal run hydrate_modal.py --workflow examples/z-image-base.json
+modal deploy comfyui_modal.py
 ```
 
 ## 仓库示例：Z-Image

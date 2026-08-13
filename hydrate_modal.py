@@ -6,7 +6,8 @@ Two launch modes (plugins are parsed, never installed here):
     modal run hydrate_modal.py --profile qwen-image
 
 GPU serve/deploy stays in ``comfyui_modal.py``. This App does not build the
-GPU Image or clone custom nodes.
+GPU Image or clone custom nodes. The active lock is written to Volume
+``.state/launch.json`` so the GPU Image can stay cached across workflows.
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ import modal
 from comfy_engine import sync_profile_models, sync_workflow_models
 from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
-from workflow_resolver import validate_workflow_lock, write_workflow_lock
+from storage import list_output_files, repair_storage_layout, repair_workspace_layout
+from workflow_resolver import load_workflow_lock, validate_workflow_lock, write_workflow_lock
 
 SETTINGS = ModalSettings.from_env(os.environ)
 APP_NAME = f"{SETTINGS.app_name}-hydrate"
@@ -71,6 +73,7 @@ def _launch(
     workflow: str,
     lock_out: str,
     install_nodes: bool,
+    skip_lock_nodes: bool,
 ) -> ModalSettings:
     env = dict(os.environ)
     if workflow.strip():
@@ -83,6 +86,8 @@ def _launch(
         env["COMFY_WORKFLOW_LOCK"] = lock_out.strip()
     if install_nodes:
         env["COMFY_INSTALL_NODES"] = "1"
+    if skip_lock_nodes:
+        env["COMFY_INSTALL_LOCK_NODES"] = "0"
     return ModalSettings.from_env(env)
 
 
@@ -117,23 +122,87 @@ def sync_models(profile: str) -> dict:
     memory=16384,
     max_containers=1,
 )
-def sync_workflow(workflow_lock: dict) -> dict:
+def sync_workflow(
+    workflow_lock: dict,
+    install_lock_nodes: bool = True,
+    workflow_source: str = "",
+    lock_source: str = "",
+    profile_name: str = "base",
+) -> dict:
     result = sync_workflow_models(
         workflow_lock,
         WORKSPACE,
         storage_root=STORAGE_ROOT,
         workers=HYDRATE_WORKERS,
+        install_lock_nodes=install_lock_nodes,
+        workflow_source=workflow_source,
+        lock_source=lock_source,
+        profile_name=profile_name,
     )
     _commit_storage()
     return result
 
 
+@app.function(
+    image=sync_image,
+    volumes=APP_VOLUMES,
+    timeout=5 * MINUTES,
+    cpu=1.0,
+    memory=2048,
+)
+def list_outputs() -> dict:
+    """Read ``/workspace/output`` on CPU after the GPU has scaled to zero."""
+    workspace_vol.reload()
+    files = list_output_files(WORKSPACE)
+    return {
+        "volume": SETTINGS.volume_name,
+        "root": "/output",
+        "files": files,
+        "get": "modal volume get comfyui-ashleykza-workspace /output ./output",
+    }
+
+
+@app.function(
+    image=sync_image,
+    volumes=APP_VOLUMES,
+    timeout=5 * MINUTES,
+    cpu=1.0,
+    memory=2048,
+)
+def repair_paths() -> dict:
+    """Flatten leftover ``vae/vae/`` and ``output/output/`` trees on both Volumes."""
+    workspace_vol.reload()
+    models_vol.reload()
+    workspace = repair_workspace_layout(WORKSPACE)
+    storage = repair_storage_layout(STORAGE_ROOT)
+    _commit_storage()
+    return {
+        "workspace": workspace,
+        "storage": storage,
+        "outputs": list_output_files(WORKSPACE),
+    }
+
+
 def _hydrate_workflow(settings: ModalSettings) -> dict:
-    lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
-    validate_workflow_lock(lock, require_resolved=True)
+    lock_path = Path(settings.workflow_lock_source)
+    lock = None
+    if lock_path.is_file():
+        try:
+            lock = load_workflow_lock(lock_path, require_resolved=True)
+        except Exception:
+            lock = None
+    if lock is None:
+        lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
+        validate_workflow_lock(lock, require_resolved=True)
     plugins = lock["custom_nodes"]
     result = {
-        **sync_workflow.remote(lock),
+        **sync_workflow.remote(
+            lock,
+            settings.install_lock_nodes,
+            settings.workflow_source,
+            settings.workflow_lock_source,
+            settings.profile_name,
+        ),
         "mode": "workflow",
         "workflow": settings.workflow_source,
         "lock": settings.workflow_lock_source,
@@ -142,8 +211,9 @@ def _hydrate_workflow(settings: ModalSettings) -> dict:
         ],
         "plugins_downloaded": 0,
         "plugins_note": (
-            "custom nodes recorded in the lock; GPU serve/deploy installs them "
-            "unless COMFY_INSTALL_LOCK_NODES=0"
+            "custom nodes recorded in Volume .state/launch.json; GPU start "
+            "installs them into /workspace/custom_nodes (skip if present). "
+            "The GPU Image is not rebuilt."
         ),
     }
     return result
@@ -158,7 +228,7 @@ def _hydrate_profile(settings: ModalSettings) -> dict:
         "plugins_installed": 0,
         "plugins_note": (
             "profile node packs stay off. Opt in with COMFY_INSTALL_NODES=1 "
-            "on serve/deploy."
+            "on serve/deploy (that does change the GPU Image)."
         ),
     }
 
@@ -170,14 +240,16 @@ def main(
     workflow: str = "",
     lock_out: str = "",
     install_nodes: bool = False,
+    skip_lock_nodes: bool = False,
 ):
-    """Hydrate models. ``--workflow`` or ``--profile``; plugins are not installed."""
+    """Hydrate models. ``--workflow`` or ``--profile``; plugins are not installed here."""
     action = action.strip().lower()
     settings = _launch(
         profile=profile,
         workflow=workflow,
         lock_out=lock_out,
         install_nodes=install_nodes,
+        skip_lock_nodes=skip_lock_nodes,
     )
 
     if action == "profiles":
@@ -202,9 +274,20 @@ def main(
                 "custom_nodes": lock["custom_nodes"],
                 "unresolved": lock["unresolved"],
                 "plugins_installed": False,
-                "plugins_note": "lock custom_nodes are installed on GPU Image by default",
+                "plugins_note": (
+                    "lock custom_nodes are installed onto the workspace Volume "
+                    "at GPU start, not into the Image"
+                ),
             }
         )
+        return
+
+    if action == "outputs":
+        print(list_outputs.remote())
+        return
+
+    if action == "repair":
+        print(repair_paths.remote())
         return
 
     if action in {"hydrate", "sync", "workflow-sync"}:
@@ -215,7 +298,9 @@ def main(
         return
 
     if action != "info":
-        raise ValueError("action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync")
+        raise ValueError(
+            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync, outputs, repair"
+        )
 
     print(
         f"""
@@ -230,8 +315,12 @@ modal run hydrate_modal.py --workflow examples/z-image-base.json
 # named profile: download that profile's model packs
 modal run hydrate_modal.py --profile qwen-image
 
-# GPU UI (lock CNR nodes install by default)
-COMFY_WORKFLOW=examples/z-image-base.json MODAL_GPU=T4 modal serve comfyui_modal.py
-COMFY_PROFILE=qwen-image MODAL_GPU=T4 modal serve comfyui_modal.py
+# GPU UI (same cached Image; lock CNR on workspace Volume)
+MODAL_GPU=T4 modal serve comfyui_modal.py
+
+# 成片在 workspace Volume；GPU 空闲 5s 后应缩到 0。用 CPU 列目录 / 摊平套层：
+modal run hydrate_modal.py --action outputs
+modal run hydrate_modal.py --action repair
+modal volume get comfyui-ashleykza-workspace /output ./output
 """.strip()
     )

@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from recipes import MODEL_DIRS
+from storage import PathError, canonical_relpath
 
 WORKFLOW_LOCK_SCHEMA = 1
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -198,7 +199,15 @@ def _model_destination(directory: str, name: str) -> tuple[str, str]:
 
     category = parts.pop(0)
     name_path = _safe_relative(name, field="model name")
-    filename = PurePosixPath(*parts, *name_path.parts).as_posix()
+    joined = PurePosixPath(*parts, *name_path.parts)
+    try:
+        filename = canonical_relpath(
+            joined.as_posix(),
+            category=category,
+            field="model name",
+        )
+    except PathError as exc:
+        raise WorkflowResolutionError(str(exc)) from exc
     return category, filename
 
 
@@ -373,9 +382,15 @@ def validate_workflow_lock(lock: Mapping[str, Any], *, require_resolved: bool = 
         filename = model.get("filename")
         if category not in MODEL_DIRS or not isinstance(filename, str):
             raise WorkflowResolutionError("Locked model has an invalid category or filename.")
-        normalized_filename = _safe_relative(filename, field="locked model filename").as_posix()
-        if normalized_filename != filename.replace("\\", "/"):
-            raise WorkflowResolutionError(f"Locked model filename is not normalized: {filename!r}")
+        try:
+            normalized_filename = canonical_relpath(
+                filename,
+                category=str(category),
+                field="locked model filename",
+            )
+        except PathError as exc:
+            raise WorkflowResolutionError(str(exc)) from exc
+        model["filename"] = normalized_filename
         _model_url(model.get("url"))
         sha256 = model.get("sha256")
         if sha256 is not None and (not isinstance(sha256, str) or not SHA256_RE.fullmatch(sha256)):

@@ -16,6 +16,23 @@
 
 GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再开新的 GPU 容器；已运行的容器看不到尚未 `commit` / 尚未重建的 Volume 快照。
 
+## 模型或成片套了两层目录
+
+例如 `vae/vae/*.safetensors` 或 `output/output/*.mp4`。这是旧下载把 category 又拼进文件名导致的。
+
+当前 `storage.py` 在 hydrate 和 GPU 启动时会摊平。也可以只跑 CPU：
+
+```bash
+modal run hydrate_modal.py --action repair
+modal run hydrate_modal.py --action outputs
+```
+
+正确位置永远是：
+
+- 模型：`/mnt/comfy-storage/<category>/<filename>`
+- 成片：`/workspace/output/<filename>`（Volume 上是 `/output/<filename>`）
+
+
 ## modal run hydrate 在构建巨大 GPU Image
 
 用错了入口。请使用 `hydrate_modal.py`，不要 `modal run comfyui_modal.py` 做下载。
@@ -25,7 +42,11 @@ GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hyd
 - `modal serve` **不保存** snapshot，请用 `modal deploy`
 - 换了 GPU 类型会重新捕获 snapshot
 - 快照不能加速「权重从磁盘装进 VRAM」；第一张图仍可能要额外几十秒
-- 确认没有误开 `COMFY_LATEST=1`（会重建节点 Image）
+- 确认没有误开 `COMFY_LATEST=1` / `COMFY_BASE_NODES=1` / `COMFY_INSTALL_NODES=1`（会重建节点 Image）
+
+## 换工作流每次都在重建 Image
+
+锁内 CNR 不能写进 Image 的 `run_commands` / `add_local_file`。当前实现里 hydrate 只更新 Volume `.state/launch.json`，`modal serve comfyui_modal.py` 应复用同一 Image。若日志里仍在 `Building image` 且层哈希在变，检查是否带了 `COMFY_INSTALL_NODES=1` 或 `COMFY_BASE_NODES=1`。
 
 ## Secret 找不到
 
@@ -37,7 +58,7 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## GitHub clone 失败 / 限额
 
-在 Secret 里提供 `GITHUB_TOKEN`。锁内 CNR 默认会装。130 个上游克隆只要 `COMFY_BASE_NODES=1`。
+在 Secret 里提供 `GITHUB_TOKEN`。锁内 CNR 默认会装到 workspace Volume。130 个上游克隆只要 `COMFY_BASE_NODES=1`。
 
 ## 工作流仍有 unresolved
 
