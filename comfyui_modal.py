@@ -228,7 +228,14 @@ class UI:
 
     @modal.enter(snap=False)
     def apply_launch(self):
-        """Re-read Volumes after restore so hydrate can change launch.json."""
+        """Re-read Volumes after restore so hydrate can change launch.json.
+
+        ``Volume.reload()`` fails if ComfyUI still holds workspace files open
+        (``logs/comfyui.log``). Stop the server first; ``apply_volume_launch``
+        starts it again after the reload.
+        """
+        stop_comfyui(getattr(self, "process", None))
+        self.process = None
         models_vol.reload()
         workspace_vol.reload()
         extra = tuple(shlex.split(os.environ.get("EXTRA_ARGS", "")))
@@ -238,8 +245,6 @@ class UI:
             comfy_root=COMFY_ROOT,
             default_profile=PROFILE_NAME,
             default_install_lock_nodes=INSTALL_LOCK_NODES,
-            previous_fingerprint=getattr(self, "_launch_fingerprint", None),
-            process=getattr(self, "process", None),
             extra_args=extra,
             port=COMFY_PORT,
             startup_timeout=SETTINGS.ui_startup_timeout_seconds,

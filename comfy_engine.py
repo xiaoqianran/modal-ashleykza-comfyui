@@ -1171,6 +1171,7 @@ def start_comfyui(
     ]
 
     log_path = workspace / "logs" / "comfyui.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("a", buffering=1)
     print("Starting:", " ".join(shlex.quote(arg) for arg in cmd))
     process = subprocess.Popen(
@@ -1179,6 +1180,7 @@ def start_comfyui(
         stdout=log,
         stderr=log,
     )
+    log.close()
     time.sleep(2)
     if process.poll() is not None:
         tail = ""

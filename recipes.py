@@ -66,7 +66,7 @@ MODEL_DIRS = (
     "checkpoints", "clip", "clip_vision", "controlnet", "diffusion_models",
     "embeddings", "gligen", "hypernetworks", "latent_upscale_models", "loras",
     "photomaker", "style_models", "text_encoders", "unet", "upscale_models",
-    "vae", "vae_approx",
+    "vae", "vae_approx", "background_removal",
 )
 
 
