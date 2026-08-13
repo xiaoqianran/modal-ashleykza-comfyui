@@ -248,6 +248,7 @@ def main() -> None:
     parser.add_argument("--out", default="artifacts/triposplat")
     parser.add_argument("--enable-glb", action="store_true", default=True)
     parser.add_argument("--no-glb", action="store_true")
+    parser.add_argument("--ready-timeout", type=int, default=900)
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
     out = Path(args.out)
@@ -255,7 +256,7 @@ def main() -> None:
     workflow = json.loads(Path(args.workflow).read_text(encoding="utf-8"))
     if args.enable_glb and not args.no_glb:
         enable_glb_export(workflow)
-    stats = wait_ready(base)
+    stats = wait_ready(base, timeout=args.ready_timeout)
     prompt_template = convert_with_browser(base, workflow)
     (out / "triposplat.api.json").write_text(
         json.dumps(prompt_template, indent=2, ensure_ascii=False) + "\n",
