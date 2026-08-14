@@ -66,6 +66,9 @@ class WorkflowInspectTests(unittest.TestCase):
             "cosmos3-super-t2v.json",
             "cosmos3-super-text2image.json",
             "cosmos3-super-image2video.json",
+            "cosmos3-edge-t2v.json",
+            "cosmos3-super-image2video-4step.json",
+            "cosmos3-super-text2image-4step.json",
         ):
             payload = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
             inspect = workflow_queue.inspect_workflow(payload)

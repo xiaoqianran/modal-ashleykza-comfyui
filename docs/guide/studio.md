@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat / Cosmos3-Super-Image2Video 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Super / Cosmos3-Super-Text2Image 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step 仍是提示词。不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -45,9 +45,12 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
 | Ideogram 4 | L40S | RTX-PRO-6000 | 提示词 |
 | Cosmos3-Nano | L40S | RTX-PRO-6000 | 提示词（文生视频） |
+| Cosmos3-Edge | L40S | RTX-PRO-6000 | 提示词（文生视频） |
 | Cosmos3-Super | L40S | RTX-PRO-6000 | 提示词（文生视频） |
 | Cosmos3-Super-Text2Image | L40S | RTX-PRO-6000 | 提示词 |
+| Cosmos3-Super-Text2Image-4Step | L40S | RTX-PRO-6000 | 提示词（蒸馏 4 步） |
 | Cosmos3-Super-Image2Video | L40S | RTX-PRO-6000 | 上传图 + 提示词 |
+| Cosmos3-Super-Image2Video-4Step | L40S | RTX-PRO-6000 | 上传图 + 提示词（蒸馏 4 步） |
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
 | TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 

@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "id": "cosmos3-super-text2image-4step",
+  "title": "Cosmos3-Super-Text2Image-4Step",
+  "summary": "64B 文生图蒸馏 4 步（1024² / 1 帧）。ConvRot 没有 T2I-4Step 专用 int4；官方 bf16 约 120GB。本配方用同目录的 Super-Image2Video-4Step int4 做 1 帧（VAE/tokenizer 与官方 T2I-4Step 相同），euler + cfg 1.0。测试 L40S，正式 RTX-PRO-6000。不要用 T4。",
+  "kind": "t2i",
+  "mode": "workflow",
+  "workflow": "examples/cosmos3-super-text2image-4step.json",
+  "lock": "examples/cosmos3-super-text2image-4step.lock.json",
+  "gpu": "L40S",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": [
+    "L40S",
+    "RTX-PRO-6000"
+  ],
+  "client_id": "studio-cosmos3-super-t2i-4step",
+  "filename_prefix": "Cosmos3_super_t2i_4step",
+  "io": {
+    "images_in": 0
+  },
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。绑 RandomNoise。"
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 4,
+      "minimum": 4,
+      "maximum": 4,
+      "help": "蒸馏日程固定 4 步，改了也会被 distilled_4step 忽略。"
+    },
+    {
+      "id": "cfg",
+      "type": "float",
+      "bind": "cfg",
+      "title": "CFG",
+      "default": 1.0,
+      "minimum": 1.0,
+      "maximum": 1.0,
+      "step": 0.5,
+      "help": "蒸馏模型不要 CFG，必须 1.0。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 1280,
+      "step": 16
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 1280,
+      "step": 16
+    }
+  ]
+}

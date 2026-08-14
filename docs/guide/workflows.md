@@ -295,26 +295,35 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ## 仓库示例：NVIDIA Cosmos 3
 
-Comfy 核心还没有 Cosmos 3 原生节点（[Comfy-Org#14228](https://github.com/Comfy-Org/ComfyUI/issues/14228) 仍 open）。四份配方走 [RyukoMatoiFan/ComfyUI-Cosmos3](https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3)（GitHub 自定义节点，GPU 启动时装到 Volume）。64B bf16 大约 120GB 权重、240GB 主机内存，单卡 RTX-PRO-6000 也放不下；锁里的 transformer 换成 [AkaneTendo25/Cosmos3-ConvRot](https://huggingface.co/AkaneTendo25/Cosmos3-ConvRot) **int4**，Super 系列再打开 `split_reasoner`。
+Comfy 核心还没有 Cosmos 3 原生节点（[Comfy-Org#14228](https://github.com/Comfy-Org/ComfyUI/issues/14228) 仍 open）。七份配方走 [RyukoMatoiFan/ComfyUI-Cosmos3](https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3)（GitHub 自定义节点，GPU 启动时装到 Volume）。64B bf16 大约 120GB 权重、240GB 主机内存，单卡 RTX-PRO-6000 也放不下；锁里的 transformer 换成 [AkaneTendo25/Cosmos3-ConvRot](https://huggingface.co/AkaneTendo25/Cosmos3-ConvRot) **int4**，Super 系列再打开 `split_reasoner`（官方 4-step 示例没拆，本仓库为省主机内存仍拆）。
 
-ConvRot **没有** Super-Text2Image 专用 int4。`cosmos3-super-text2image` 用同架构的 Super int4 做 **1 帧**文生图（VAE / tokenizer 仍来自 `nvidia/Cosmos3-Super`），才能在单卡上跑。Super 系列 int4 主机内存大约 63GB（权重约 47GB）；动态 VRAM 下采样显存大约 8GB，L40S 的 48GB 显存放得下，但主机内存比 Nano 紧。Nano int4 大约 12GB 权重、20GB 主机内存、7GB 显存。
+ConvRot **没有** Super-Text2Image / Super-Text2Image-4Step 专用 int4。`cosmos3-super-text2image` 用同架构的 Super int4 做 **1 帧**文生图（VAE / tokenizer 仍来自 `nvidia/Cosmos3-Super`）。`cosmos3-super-text2image-4step` 同样权宜：和 I2V-4Step **共用** `Cosmos3-Super-Image2Video-4Step` int4 做 1 帧（官方 T2I-4Step bf16 约 120GB，VAE/tokenizer 与 I2V-4Step 相同）。4-step 配方是 DMD2 蒸馏：`euler` + CFG **1.0** + `distilled_4step`（改步数也会被日程忽略）。Super 系列 int4 主机内存大约 63GB（权重约 47GB）；动态 VRAM 下采样显存大约 8GB，L40S 的 48GB 显存放得下，但主机内存比 Nano / Edge 紧。Nano int4 大约 12GB 权重。Edge 是 4B Nemotron-dense，int4 约 3GB，**不** split；提示词建议 JSON `{"temporal_caption": "..."}`。
 
 | 文件 | 作用 |
 |---|---|
 | `examples/cosmos3-nano-t2v.json` | Nano 文生视频（832×480 / 93 帧 / 24fps） |
 | `examples/cosmos3-nano-t2v.lock.json` | 手修锁：`models/cosmos3/Cosmos3-Nano/` + Nano int4 transformer |
 | `catalog/cosmos3-nano.json` | Studio：`kind=t2v`，测试 **L40S** |
+| `examples/cosmos3-edge-t2v.json` | Edge 文生视频（832×480 / 93 帧 / 24fps） |
+| `examples/cosmos3-edge-t2v.lock.json` | Edge int4（约 3GB） |
+| `catalog/cosmos3-edge.json` | Studio：`kind=t2v` |
 | `examples/cosmos3-super-t2v.json` | Super 文生视频 + split_reasoner |
 | `examples/cosmos3-super-t2v.lock.json` | Super int4（约 47GB） |
 | `catalog/cosmos3-super.json` | Studio：`kind=t2v` |
 | `examples/cosmos3-super-text2image.json` | 1 帧文生图，`SaveImage` |
 | `examples/cosmos3-super-text2image.lock.json` | 与 Super T2V **同一套**权重 |
 | `catalog/cosmos3-super-text2image.json` | Studio：`kind=t2i` |
+| `examples/cosmos3-super-text2image-4step.json` | 蒸馏 4 步 1 帧文生图 |
+| `examples/cosmos3-super-text2image-4step.lock.json` | 与 I2V-4Step **同一套** int4 |
+| `catalog/cosmos3-super-text2image-4step.json` | Studio：`kind=t2i`，步数/CFG 锁死 4 / 1.0 |
 | `examples/cosmos3-super-image2video.json` | Super-Image2Video 图生视频（16fps） |
 | `examples/cosmos3-super-image2video.lock.json` | I2V int4 |
 | `catalog/cosmos3-super-image2video.json` | Studio：`kind=i2v`，要上传图 |
+| `examples/cosmos3-super-image2video-4step.json` | I2V 蒸馏 4 步（16fps） |
+| `examples/cosmos3-super-image2video-4step.lock.json` | I2V-4Step int4（约 47GB） |
+| `catalog/cosmos3-super-image2video-4step.json` | Studio：`kind=i2v`，步数/CFG 锁死 4 / 1.0 |
 
-Storage 增加了 `cosmos3/`。不要对这四份 JSON 盲目 `--action resolve`：Loader 的 `model_dir` 是目录名不是文件，自动解析扫不到权重。改了 JSON 不要用未校验的 resolve 覆盖手修锁。不要再写 `queue_cosmos3.py`。
+Storage 增加了 `cosmos3/`。不要对这七份 JSON 盲目 `--action resolve`：Loader 的 `model_dir` 是目录名不是文件，自动解析扫不到权重。改了 JSON 不要用未校验的 resolve 覆盖手修锁。不要再写 `queue_cosmos3.py`。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/cosmos3-nano-t2v.json
@@ -325,7 +334,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
   --out artifacts/cosmos3-nano
 ```
 
-图生视频把 `--images first.png` 交给 `examples/cosmos3-super-image2video.json`。跑完立刻停掉 `modal serve`。不要用 T4。
+图生视频把 `--images first.png` 交给 `examples/cosmos3-super-image2video.json` 或 `examples/cosmos3-super-image2video-4step.json`。4-step 文生图用 `examples/cosmos3-super-text2image-4step.json`（hydrate 一次 I2V-4Step 即可，两份锁同一目录）。跑完立刻停掉 `modal serve`。不要用 T4。
 
 ## 自定义工作流
 
