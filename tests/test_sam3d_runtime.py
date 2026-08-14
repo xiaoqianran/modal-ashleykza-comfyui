@@ -51,6 +51,31 @@ class Sam3dLockGateTests(unittest.TestCase):
         self.assertFalse(sam3d_runtime._lock_has_sam3d([]))
 
 
+def _fake_pixi(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"#!/bin/sh\n")
+    path.chmod(0o755)
+    return path
+
+
+def _ready_pixi_python(workspace: Path) -> Path:
+    env_python = (
+        workspace
+        / ".python"
+        / "comfy-env"
+        / "envs"
+        / "sam3dobjects-nodes"
+        / ".pixi"
+        / "envs"
+        / "default"
+        / "bin"
+        / "python"
+    )
+    env_python.parent.mkdir(parents=True)
+    env_python.write_text("", encoding="utf-8")
+    return env_python
+
+
 class Sam3dRuntimeTests(unittest.TestCase):
     def test_apply_comfy_env_root_exports_volume_path(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -61,6 +86,65 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 self.assertEqual(root, workspace / ".python" / "comfy-env")
                 self.assertTrue(root.is_dir())
                 self.assertEqual(os.environ[sam3d_runtime.COMFY_ENV_ROOT_VAR], str(root))
+
+    def test_ensure_pixi_cli_copies_home_binary_onto_volume_and_relinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            home_bin = _fake_pixi(root / "home" / ".pixi" / "bin" / "pixi")
+            with (
+                patch.dict(os.environ, {"PATH": os.environ.get("PATH", "")}, clear=False),
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi") as download,
+            ):
+                changed = sam3d_runtime.ensure_pixi_cli(workspace)
+                volume = sam3d_runtime.volume_pixi_bin(workspace)
+                self.assertIn(str(volume.parent), os.environ.get("PATH", "").split(os.pathsep))
+            self.assertTrue(changed)
+            self.assertTrue(volume.is_file())
+            self.assertTrue(home_bin.is_symlink())
+            self.assertEqual(home_bin.resolve(), volume.resolve())
+            download.assert_not_called()
+
+    def test_ensure_pixi_cli_downloads_when_volume_and_home_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            home_bin = root / "home" / ".pixi" / "bin" / "pixi"
+
+            def fake_download(dest: Path) -> None:
+                _fake_pixi(dest)
+
+            with (
+                patch.dict(os.environ, {"PATH": os.environ.get("PATH", "")}, clear=False),
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi", side_effect=fake_download),
+            ):
+                changed = sam3d_runtime.ensure_pixi_cli(workspace)
+            volume = sam3d_runtime.volume_pixi_bin(workspace)
+            self.assertTrue(changed)
+            self.assertTrue(volume.is_file())
+            self.assertTrue(home_bin.is_symlink())
+            self.assertEqual(home_bin.resolve(), volume.resolve())
+
+    def test_ensure_pixi_cli_is_idempotent_when_volume_already_has_pixi(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            volume = _fake_pixi(sam3d_runtime.volume_pixi_bin(workspace))
+            home_bin = root / "home" / ".pixi" / "bin" / "pixi"
+            with (
+                patch.dict(os.environ, {"PATH": os.environ.get("PATH", "")}, clear=False),
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi") as download,
+            ):
+                first = sam3d_runtime.ensure_pixi_cli(workspace)
+                second = sam3d_runtime.ensure_pixi_cli(workspace)
+            self.assertFalse(first)
+            self.assertFalse(second)
+            download.assert_not_called()
+            self.assertTrue(home_bin.is_symlink())
+            self.assertEqual(home_bin.resolve(), volume.resolve())
 
     def test_skips_when_node_dir_missing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,33 +163,55 @@ class Sam3dRuntimeTests(unittest.TestCase):
             custom = root / "custom_nodes" / "ComfyUI-SAM3DObjects"
             custom.mkdir(parents=True)
             (custom / "install.py").write_text("raise SystemExit('nope')\n", encoding="utf-8")
-            env_python = (
-                workspace
-                / ".python"
-                / "comfy-env"
-                / "envs"
-                / "sam3dobjects-nodes"
-                / ".pixi"
-                / "envs"
-                / "default"
-                / "bin"
-                / "python"
-            )
-            env_python.parent.mkdir(parents=True)
-            env_python.write_text("", encoding="utf-8")
+            _ready_pixi_python(workspace)
+            _fake_pixi(sam3d_runtime.volume_pixi_bin(workspace))
+            home_bin = root / "home" / ".pixi" / "bin" / "pixi"
             calls: list[list[str]] = []
 
             def fake_run(cmd, **_kwargs):
                 calls.append(cmd)
 
-            with patch.object(comfy_engine, "_run", fake_run):
+            with (
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi") as download,
+            ):
                 changed = sam3d_runtime.ensure_sam3d_runtime(
                     root / "ComfyUI",
                     root / "custom_nodes",
                     workspace=workspace,
                 )
-        self.assertFalse(changed)
-        self.assertEqual(calls, [])
+            self.assertFalse(changed)
+            self.assertEqual(calls, [])
+            download.assert_not_called()
+            self.assertTrue(home_bin.is_symlink())
+
+    def test_returns_true_when_pixi_cli_is_new_even_if_env_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            custom = root / "custom_nodes" / "ComfyUI-SAM3DObjects"
+            custom.mkdir(parents=True)
+            (custom / "install.py").write_text("raise SystemExit('nope')\n", encoding="utf-8")
+            _ready_pixi_python(workspace)
+            home_bin = root / "home" / ".pixi" / "bin" / "pixi"
+
+            def fake_download(dest: Path) -> None:
+                _fake_pixi(dest)
+
+            with (
+                patch.object(comfy_engine, "_run") as run,
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi", side_effect=fake_download),
+            ):
+                changed = sam3d_runtime.ensure_sam3d_runtime(
+                    root / "ComfyUI",
+                    root / "custom_nodes",
+                    workspace=workspace,
+                )
+            run.assert_not_called()
+            self.assertTrue(changed)
+            self.assertTrue(sam3d_runtime.volume_pixi_bin(workspace).is_file())
 
     def test_strips_geometrypack_and_runs_install_py(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -119,27 +225,20 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             calls: list[dict] = []
+            home_bin = root / "home" / ".pixi" / "bin" / "pixi"
 
             def fake_run(cmd, **kwargs):
                 calls.append({"cmd": cmd, "cwd": kwargs.get("cwd"), "env": kwargs.get("env")})
-                env_python = (
-                    workspace
-                    / ".python"
-                    / "comfy-env"
-                    / "envs"
-                    / "sam3dobjects-nodes"
-                    / ".pixi"
-                    / "envs"
-                    / "default"
-                    / "bin"
-                    / "python"
-                )
-                env_python.parent.mkdir(parents=True)
-                env_python.write_text("", encoding="utf-8")
+                _ready_pixi_python(workspace)
+
+            def fake_download(dest: Path) -> None:
+                _fake_pixi(dest)
 
             with (
                 patch.object(comfy_engine, "_comfy_python", return_value="python3"),
                 patch.object(comfy_engine, "_run", fake_run),
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi", side_effect=fake_download),
             ):
                 changed = sam3d_runtime.ensure_sam3d_runtime(
                     root / "ComfyUI",
