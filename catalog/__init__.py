@@ -345,3 +345,35 @@ def workflow_path(catalog: dict[str, Any]) -> Path:
 
 def lock_path(catalog: dict[str, Any]) -> Path:
     return _repo_file(str(catalog["lock"]), field="lock")
+
+
+def apply_catalog_hydrate(
+    recipe_id: str,
+    workflow: str = "",
+    lock_out: str = "",
+) -> tuple[str, str]:
+    """Resolve ``--catalog <id>`` to the workflow / lock paths hydrate already uses.
+
+    Explicit ``--workflow`` / ``--lock-out`` win. Paths stay repo-relative so
+    they match ``examples/*.lock.json`` naming.
+    """
+    item = load_catalog(recipe_id.strip())
+    return (
+        workflow.strip() or str(item["workflow"]),
+        lock_out.strip() or str(item["lock"]),
+    )
+
+
+def catalog_hydrate_rows() -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for item in list_catalogs():
+        catalog = load_catalog(item["id"])
+        rows.append(
+            {
+                "id": str(item["id"]),
+                "title": str(item.get("title") or item["id"]),
+                "workflow": str(catalog["workflow"]),
+                "lock": str(catalog["lock"]),
+            }
+        )
+    return rows
