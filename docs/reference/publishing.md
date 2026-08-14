@@ -34,12 +34,14 @@ CI（`.github/workflows/ci.yml`）也会跑 `mkdocs build --strict`，避免未�
 
 ## 两块站点：文档 + 图库
 
-Pages 顶栏两个 tab：
+顶栏 tab 始终同时显示文档和 **图库**（`navigation.tabs.sticky`，滚动也不消失）：
 
 | Tab | 内容 | 来源 |
 |---|---|---|
-| 文档 | 本仓库 MkDocs | `docs/`，进 git |
-| 图库演示 | 生成图 / 视频 / 3D | 私有 HF 数据集，**不进 git** |
+| 首页 / 指南 / 参考 / … | 本仓库 MkDocs | `docs/`，进 git |
+| 图库 | 生成图 / 视频 / 3D | 私有 HF 数据集，**不进 git** |
+
+图库是和首页同级的导航项，不是文档下面的子页，所以从文档点进去、再点回来都在顶栏。
 
 数据集：[`seachen/modal-comfyui-picture`](https://huggingface.co/datasets/seachen/modal-comfyui-picture)
 

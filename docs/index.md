@@ -2,6 +2,8 @@
 
 把 [ashleykleynhans/comfyui](https://github.com/ashleykleynhans/comfyui) 部署到 [Modal](https://modal.com)。两种启动方式。GPU Image 对所有工作流共用一层缓存；锁里的 CNR 装到 workspace Volume。130 个上游插件默认不开。
 
+配方出图在顶栏 **[图库](gallery/index.md)**，和文档来回切，不必记单独链接。
+
 ## 最短路径
 
 ```bash
@@ -40,3 +42,4 @@ modal serve comfyui_modal.py
 5. [Studio（Z-Image）](guide/studio.md)
 6. [环境变量](reference/configuration.md)
 7. [配方](guide/recipes.md)
+8. [图库](gallery/index.md)
