@@ -83,7 +83,7 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
   - `@modal.enter` 还在启动（编译 CUDA 扩展时算启动，不是空闲）
   - 测完没人 `Ctrl+C` / Studio 没点停止
 - Studio 生成结束后**默认立刻停掉 serve 并 `modal container stop` 残留容器**。要接着占卡，勾选「继续占着 GPU」。
-- 默认 GPU 是 **T4**。不要把 `L40S` / `RTX-PRO-6000` 写进 fallback 列表；Modal 会在便宜卡没货时静默换贵卡。
+- 默认 GPU 是 **L40S**，不要用 T4。不要把 `RTX-PRO-6000` 写进 fallback 列表；Modal 会在 L40S 没货时静默换贵卡。
 - 成片写在 Volume `comfyui-ashleykza-workspace` 的 `/output`。GPU 在 `output/` 变化时和容器退出时 `commit()`，所以缩容后文件还在。
 - 取成片用 CPU，不要为了下视频把贵卡留着：
 

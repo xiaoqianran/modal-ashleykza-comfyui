@@ -86,6 +86,47 @@ class ExampleLockTests(unittest.TestCase):
         self.assertIn(("text_encoders", "mistral_3_small_flux2_bf16.safetensors"), names)
         self.assertIn(("vae", "full_encoder_small_decoder.safetensors"), names)
 
+    def test_z_image_turbo_lock_matches_resolve(self):
+        source = ROOT / "examples" / "z-image-turbo-t2i.json"
+        lock_path = ROOT / "examples" / "z-image-turbo-t2i.lock.json"
+        resolved = workflow_resolver.resolve_workflow(source)
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertEqual(resolved["unresolved"], [])
+        self.assertEqual(committed["custom_nodes"], [])
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertEqual(
+            {(m["category"], m["filename"]) for m in resolved["models"]},
+            names,
+        )
+        self.assertIn(("diffusion_models", "z_image_turbo_bf16.safetensors"), names)
+        self.assertIn(("text_encoders", "qwen_3_4b.safetensors"), names)
+        self.assertIn(("vae", "ae.safetensors"), names)
+
+    def test_ideogram4_lock_is_curated_and_matches_workflow_hash(self):
+        source = ROOT / "examples" / "ideogram4-t2i.json"
+        lock_path = ROOT / "examples" / "ideogram4-t2i.lock.json"
+        resolved = workflow_resolver.resolve_workflow(source)
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertEqual(committed["unresolved"], [])
+        self.assertEqual(committed["custom_nodes"], [])
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        resolved_names = {(m["category"], m["filename"]) for m in resolved["models"]}
+        committed_names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertTrue(resolved_names.issubset(committed_names))
+        self.assertIn(("diffusion_models", "ideogram4_fp8_scaled.safetensors"), committed_names)
+        self.assertIn(
+            ("diffusion_models", "ideogram4_unconditional_fp8_scaled.safetensors"),
+            committed_names,
+        )
+        self.assertIn(("text_encoders", "qwen3vl_8b_fp8_scaled.safetensors"), committed_names)
+        self.assertIn(("text_encoders", "gemma4_e4b_it_fp8_scaled.safetensors"), committed_names)
+        self.assertIn(("vae", "flux2-vae.safetensors"), committed_names)
+        self.assertNotIn(("text_encoders", "gemma4_e4b_it_fp8_scaled.safetensors"), resolved_names)
+        reused, origin = workflow_resolver.select_workflow_lock(source, lock_path)
+        self.assertEqual(origin, "reused")
+        self.assertEqual(len(reused["models"]), len(committed["models"]))
+
     def test_krea2_turbo_lock_matches_resolve(self):
         source = ROOT / "examples" / "krea2-turbo-t2i.json"
         lock_path = ROOT / "examples" / "krea2-turbo-t2i.lock.json"

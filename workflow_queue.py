@@ -409,7 +409,7 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
 
 SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced"}
 SEED_TYPES = SAMPLER_TYPES | {"RandomNoise"}
-SCHEDULER_TYPES = {"Flux2Scheduler"}
+SCHEDULER_TYPES = {"Flux2Scheduler", "Ideogram4Scheduler"}
 NUMBER_KEYS = {"seed", "steps", "cfg", "denoise", "width", "height"}
 SEED_INPUT_KEYS = ("seed", "noise_seed")
 

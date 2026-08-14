@@ -9,7 +9,7 @@ class ModalSettingsTests(unittest.TestCase):
         self.assertEqual(settings.ui_timeout_seconds, 24 * 60 * 60)
         self.assertEqual(settings.ui_startup_timeout_seconds, 15 * 60)
         self.assertEqual(settings.ui_scaledown_window_seconds, 5)
-        self.assertEqual(settings.gpu, ("T4",))
+        self.assertEqual(settings.gpu, ("L40S",))
         self.assertEqual(settings.secret_name, "comfyui-creds")
         self.assertFalse(settings.base_nodes_enabled)
         self.assertFalse(settings.install_nodes)

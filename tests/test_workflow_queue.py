@@ -59,6 +59,8 @@ class WorkflowInspectTests(unittest.TestCase):
             "flux2-dev-t2i.json",
             "qwen-image-2512.json",
             "krea2-turbo-t2i.json",
+            "z-image-turbo-t2i.json",
+            "ideogram4-t2i.json",
         ):
             payload = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
             inspect = workflow_queue.inspect_workflow(payload)
@@ -154,6 +156,33 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["47"]["inputs"]["height"], 768)
         self.assertEqual(prompt["48"]["inputs"]["steps"], 8)
         self.assertEqual(prompt["48"]["inputs"]["width"], 1024)
+
+    def test_bind_number_inputs_ideogram4_scheduler(self):
+        prompt = {
+            "18": {
+                "class_type": "RandomNoise",
+                "inputs": {"noise_seed": 1, "noise_seed_control": "randomize"},
+            },
+            "11": {
+                "class_type": "EmptyFlux2LatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            },
+            "17": {
+                "class_type": "Ideogram4Scheduler",
+                "inputs": {"steps": 20, "width": 512, "height": 512, "mu": 0.0, "std": 1.0},
+            },
+        }
+        workflow_queue.bind_number_inputs(
+            prompt,
+            {"seed": 42, "steps": 12, "width": 768, "height": 1024},
+        )
+        self.assertEqual(prompt["18"]["inputs"]["noise_seed"], 42)
+        self.assertEqual(prompt["11"]["inputs"]["width"], 768)
+        self.assertEqual(prompt["11"]["inputs"]["height"], 1024)
+        self.assertEqual(prompt["17"]["inputs"]["steps"], 12)
+        self.assertEqual(prompt["17"]["inputs"]["width"], 768)
+        self.assertEqual(prompt["17"]["inputs"]["height"], 1024)
+        self.assertEqual(prompt["17"]["inputs"]["mu"], 0.0)
 
     def test_to_api_prompt_passthrough(self):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}

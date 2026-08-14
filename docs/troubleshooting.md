@@ -18,7 +18,7 @@ modal container list
 modal container stop <container-id>   # 有残留就立刻杀
 ```
 
-Studio 生成结束后会默认做这件事。测试请用 **T4**（`MODAL_GPU` 默认就是 T4）。不要把 `L40S,RTX-PRO-6000` 写进 fallback：Modal 会在 T4 没货时改开贵卡。
+Studio 生成结束后会默认做这件事。测试请用 **L40S**（`MODAL_GPU` 默认就是 L40S）。不要用 T4。不要把 `L40S,RTX-PRO-6000` 写进 fallback：Modal 会在 L40S 没货时改开贵卡。
 
 ## App has no function named 'ui'
 
