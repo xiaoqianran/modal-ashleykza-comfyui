@@ -61,17 +61,29 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true
+      base_path:
+        - docs
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
+extra_css:
+  - stylesheets/gallery.css
+
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/xiaoqianran/modal-ashleykza-comfyui
+
+exclude_docs: |
+  gallery/_generated.md
+
+not_in_nav: |
+  gallery/_generated.md
 
 validation:
   omitted_files: warn
@@ -80,19 +92,22 @@ validation:
   anchors: warn
 
 nav:
-  - 首页: index.md
-  - 快速开始: getting-started.md
-  - 指南:
-      - 核心概念: guide/concepts.md
-      - Hydrate Storage: guide/hydrate.md
-      - 工作流与锁文件: guide/workflows.md
-      - 官方模板分析: guide/templates.md
-      - GPU 部署: guide/deploy.md
-      - 配方: guide/recipes.md
-      - Studio: guide/studio.md
-  - 参考:
-      - 环境变量: reference/configuration.md
-      - 命令行: reference/cli.md
-      - 架构: reference/architecture.md
-      - 文档站点: reference/publishing.md
-  - 故障排除: troubleshooting.md
+  - 文档:
+      - 首页: index.md
+      - 快速开始: getting-started.md
+      - 指南:
+          - 核心概念: guide/concepts.md
+          - Hydrate Storage: guide/hydrate.md
+          - 工作流与锁文件: guide/workflows.md
+          - 官方模板分析: guide/templates.md
+          - GPU 部署: guide/deploy.md
+          - 配方: guide/recipes.md
+          - Studio: guide/studio.md
+      - 参考:
+          - 环境变量: reference/configuration.md
+          - 命令行: reference/cli.md
+          - 架构: reference/architecture.md
+          - 文档站点: reference/publishing.md
+      - 故障排除: troubleshooting.md
+  - 图库演示:
+      - 总览: gallery/index.md

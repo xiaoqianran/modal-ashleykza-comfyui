@@ -2,7 +2,9 @@
 
 在 Modal 上跑 ComfyUI。两种启动方式。
 
-**文档：** [https://xiaoqianran.github.io/modal-ashleykza-comfyui/](https://xiaoqianran.github.io/modal-ashleykza-comfyui/)
+**文档：** [https://xiaoqianran.github.io/modal-ashleykza-comfyui/](https://xiaoqianran.github.io/modal-ashleykza-comfyui/)  
+**图库：** [https://xiaoqianran.github.io/modal-ashleykza-comfyui/gallery/](https://xiaoqianran.github.io/modal-ashleykza-comfyui/gallery/)
+
 
 ```bash
 python -m pip install -U modal

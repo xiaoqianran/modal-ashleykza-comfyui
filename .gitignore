@@ -8,7 +8,10 @@ __pycache__/
 .vscode/
 .DS_Store
 site/
+.cache/
+docs/gallery/media/
 artifacts/
+
 .studio.env
 .studio/
 dist/

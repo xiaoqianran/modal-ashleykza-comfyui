@@ -1,0 +1,50 @@
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--md-code-bg-color);
+  box-shadow: var(--md-shadow-z1);
+}
+
+.gallery-card img,
+.gallery-card video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: #111;
+}
+
+.gallery-card p {
+  margin: 0;
+  padding: 0 12px 12px;
+  font-size: 0.85rem;
+}
+
+.gallery-card details {
+  padding: 0 12px;
+  font-size: 0.8rem;
+}
+
+.gallery-card pre {
+  white-space: pre-wrap;
+  max-height: 12rem;
+  overflow: auto;
+  font-size: 0.72rem;
+}
+
+.gallery-download {
+  display: block;
+  padding: 36px 12px;
+  text-align: center;
+}

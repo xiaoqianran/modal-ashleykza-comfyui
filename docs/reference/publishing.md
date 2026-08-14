@@ -31,3 +31,38 @@ mkdocs build --strict
 仓库 **Settings → Pages → Source** 必须选 **GitHub Actions**（不要用 `gh-pages` 分支）。第一次部署若环境不存在，Actions 会创建 `github-pages`；若 404，到 Settings 里确认 Source。
 
 CI（`.github/workflows/ci.yml`）也会跑 `mkdocs build --strict`，避免未通过的文档合入 `main`。
+
+## 两块站点：文档 + 图库
+
+Pages 顶栏两个 tab：
+
+| Tab | 内容 | 来源 |
+|---|---|---|
+| 文档 | 本仓库 MkDocs | `docs/`，进 git |
+| 图库演示 | 生成图 / 视频 / 3D | 私有 HF 数据集，**不进 git** |
+
+数据集：[`seachen/modal-comfyui-picture`](https://huggingface.co/datasets/seachen/modal-comfyui-picture)
+
+```text
+image/     图片模型（t2i / i2i）
+video/     视频模型（t2v / i2v）
+mesh3d/    3D 模型（i23d）
+  <recipe-id>/
+    <collection-id>/
+      collection.json
+      001.png
+      001.json    # 提示词 sidecar
+```
+
+Actions 每小时（`cron: 0 * * * *`）用 `HF_TOKEN` 拉取数据集，生成 `docs/gallery/_generated.md` 和缩略图，再 `mkdocs build`。仓库 Settings 需要 secret **`HF_TOKEN`**（Hugging Face 写/读权限）。没有这个 secret 时文档仍能发布，图库显示占位说明。
+
+推送一批新作品（本机，不经过 git）：
+
+```bash
+python -m gallery_hub.push \
+  --recipe flux2-dev --kind t2i --collection campus-days \
+  --timings artifacts/campus-days-flux2/timings.json
+```
+
+注意：HF 数据集是私有的，但编进 GitHub Pages 的快照是**公开**的。不要上传不能公开的文件。
+
