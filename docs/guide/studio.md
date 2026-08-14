@@ -33,7 +33,7 @@ python -m studio
 
 Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-studio.sh`。启动后会打开浏览器 [http://127.0.0.1:8787](http://127.0.0.1:8787)。不要浏览器：`python -m studio --no-browser`。没有 Python 时用 [Windows：一个 exe](#studio-exe)。
 
-打开后**默认选中 Z-Image**。顶栏「配方」下拉可换成：
+完整 GPU / 权重 / 实测见 [模型列表](models.md)。打开后**默认选中 Z-Image**。顶栏「配方」下拉可换成：
 
 | 配方 | 测试默认 | 正式推理 | 输入 |
 |---|---|---|---|
@@ -68,15 +68,16 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 ## 契约（经得起拷问的模板）
 
-一份新配方 = 三个文件，**不要**再写 `queue_*.py`：
+一份新配方 = 三个文件，**不要**再写 `queue_*.py`。全表（权重、节点、实测）还要登记 overlay：
 
 | 文件 | 作用 |
 |---|---|
 | `examples/<id>.json` | 官方 UI 工作流 |
 | `examples/<id>.lock.json` | hydrate 锁（URL / CNR） |
 | `catalog/<id>.json` | Studio 表单 + 绑定 + GPU |
+| `benchmarks/models.json` | 同一 `id`：权重、节点、冒烟耗时 |
 
-`catalog/<id>.json` 的 id 必须等于文件名。打开 Studio 就会出现在配方下拉里。
+`catalog/<id>.json` 的 id 必须等于文件名。打开 Studio 就会出现在配方下拉里。改完跑 `python3 -m benchmarks --write` 更新 [模型列表](models.md)。
 
 两种执行模式，选错会在加载时被拒绝：
 

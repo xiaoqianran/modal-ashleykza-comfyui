@@ -101,6 +101,7 @@ nav:
       - 工作流与锁文件: guide/workflows.md
       - 官方模板分析: guide/templates.md
       - GPU 部署: guide/deploy.md
+      - 模型列表: guide/models.md
       - 配方: guide/recipes.md
       - Studio: guide/studio.md
   - 参考:

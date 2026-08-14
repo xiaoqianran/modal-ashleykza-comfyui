@@ -2,6 +2,8 @@
 
 GPU 启动前，工作流引用的权重必须已经在 Storage 里。锁文件描述「这份工作流需要哪些文件、从哪下载」。
 
+Studio 全部配方的 GPU / 权重 / 实测见 [模型列表](models.md)。
+
 ## 通用适配（不要每个 JSON 写一份脚本）
 
 引擎、输出目录、缩容都是全局的。官方 UI JSON 带 subgraph，不能直接 `POST /prompt`；浏览器点 Queue 时会先跑 `app.graphToPrompt()`。无头跑也用**同一件事**：
