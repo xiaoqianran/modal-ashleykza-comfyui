@@ -21,7 +21,11 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 from sparse_3d_runtime import (  # noqa: F401
     NATTEN_WHEEL_INDEX,
+    SPARSE_3D_PTH_NAME,
+    SPARSE_3D_SITE_MARK,
     _alias_sparse_3d_packages,
+    _download_file,
+    _ensure_cached_wheel,
     _ensure_cuda_build_tools,
     _ensure_opengl_libs,
     _find_pixal3d_node_dir,
@@ -31,9 +35,12 @@ from sparse_3d_runtime import (  # noqa: F401
     _install_sparse_3d_prebuilt_wheels,
     _install_sparse_3d_python_deps,
     _install_trellis2_python_deps,
+    _link_sparse_3d_site,
     _lock_has_pixal3d,
     _lock_has_trellis2,
     _lock_needs_sparse_3d_runtime,
+    _pip_install,
+    _prepare_sparse_3d_site,
     ensure_pixal3d_prebuilt_wheels,
     ensure_pixal3d_runtime,
     ensure_sparse_3d_prebuilt_wheels,
@@ -42,6 +49,7 @@ from sparse_3d_runtime import (  # noqa: F401
     natten_requirement_version,
     natten_wheel_spec,
     requirements_without_packages,
+    sparse_3d_volume_paths,
     sparse_3d_wheel_urls,
 )
 from storage import (
@@ -1237,6 +1245,7 @@ def apply_volume_launch(
             include_sparse=True,
             include_drtk=include_pixal3d,
             include_nvdiffrast=include_trellis2,
+            workspace=workspace,
         )
     if install_lock_nodes and nodes:
         newly = installer(
@@ -1252,6 +1261,7 @@ def apply_volume_launch(
             include_pixal3d=include_pixal3d,
             include_trellis2=include_trellis2,
             allow_source_compile=False,
+            workspace=workspace,
         )
     fingerprint = launch_fingerprint(
         launch,
@@ -1279,6 +1289,9 @@ def apply_volume_launch(
         )
         wait(port=port, timeout=startup_timeout)
     assert process is not None
+    if wheels_changed or runtime_changed:
+        if SPARSE_3D_SITE_MARK not in newly:
+            newly.append(SPARSE_3D_SITE_MARK)
     return process, fingerprint, newly
 
 

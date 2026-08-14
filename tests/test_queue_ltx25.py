@@ -113,6 +113,14 @@ class Ltx25WorkflowPatchTests(unittest.TestCase):
         int_link = next(link for link in subgraph["links"] if link["id"] == 13424)
         self.assertEqual(int_link["origin_slot"], 1)
 
+    def test_http_helpers_come_from_workflow_queue(self):
+        import workflow_queue
+
+        self.assertIs(self.mod.wait_ready, workflow_queue.wait_ready)
+        self.assertIs(self.mod.download_outputs, workflow_queue.download_outputs)
+        self.assertIs(self.mod.iter_node_lists, workflow_queue.iter_node_lists)
+        self.assertIs(self.mod.queue_prompt, workflow_queue.queue_prompt)
+
     def test_fix_converted_prompt_restores_preprocess_widgets(self):
         prompt = {
             "2004": {"class_type": "LoadImage", "inputs": {"image": ""}},

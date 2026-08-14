@@ -64,7 +64,7 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
 所以锁内 CNR **不进 Image**：
 
 1. hydrate 把锁写到 `.state/launch.json`
-2. GPU `start()` 读 Volume，装到 `/workspace/custom_nodes`
+2. GPU `start()` 读 Volume，装到 `/workspace/custom_nodes`；Pixal3D / TRELLIS CUDA wheels 装到 `/workspace/.python/sparse-3d`
 3. 目录已在 Volume 上则跳过
 4. 需要 `workspace_vol.commit()`，缩容后下次冷启动才能命中 skip
 
@@ -74,8 +74,8 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
 
 `UI` 是带 memory snapshot 的 Modal Cls：
 
-1. `@modal.enter(snap=True)`：`prepare_runtime()`（先摊平套层目录）→ 读 Volume `.state/launch.json` → 校验模型 → 按需把 CNR 装到 workspace Volume → 启动 ComfyUI。这一步会打进 `modal deploy` 的快照。
-2. `@modal.enter(snap=False)`：每次冷启动（含快照恢复）先 `Volume.reload()`，再按**当前** `launch.json` 校验 / 装 CNR。指纹没变则沿用快照里的 ComfyUI；换了工作流或新装了 CNR 则重启进程。输出 watch 线程也在这里启动。
+1. `@modal.enter(snap=True)`：`prepare_runtime()`（先摊平套层目录）→ 读 Volume `.state/launch.json` → 校验模型 → 按需把 CNR 装到 workspace Volume、把 CUDA wheels 装到 `/workspace/.python/sparse-3d` → 启动 ComfyUI。这一步会打进 `modal deploy` 的快照。
+2. `@modal.enter(snap=False)`：每次冷启动（含快照恢复）先 `Volume.reload()`，再按**当前** `launch.json` 校验 / 装 CNR / 挂 CUDA site。指纹没变则沿用快照里的 ComfyUI；换了工作流或新装了 CNR / CUDA site 则重启进程。输出 watch 线程也在这里启动。
 3. `@modal.web_server(port=3001)`：进程已在监听，方法体为空。
 4. `@modal.exit()`：先 `commit()` workspace Volume，再停止 ComfyUI。
 

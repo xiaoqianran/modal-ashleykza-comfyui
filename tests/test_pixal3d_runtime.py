@@ -292,6 +292,8 @@ class InstallNattenWheelTests(unittest.TestCase):
         self.assertIn("natten==0.21.6+torch2110cu128", calls[0])
         self.assertIn(comfy_engine.NATTEN_WHEEL_INDEX, calls[0])
         self.assertNotIn("natten==0.21.6", calls[0])
+        self.assertNotIn("--target", calls[0])
+        self.assertEqual(calls[0][4], "--no-cache-dir")
 
 
 class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
@@ -338,7 +340,7 @@ class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
                     ),
                 ),
             ):
-                comfy_engine.apply_volume_launch(
+                _process, _fingerprint, newly = comfy_engine.apply_volume_launch(
                     storage_root=storage,
                     workspace=workspace,
                     comfy_root=comfy_root,
@@ -355,6 +357,10 @@ class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
         self.assertEqual(runtime_kwargs[0].get("include_pixal3d"), True)
         self.assertEqual(runtime_kwargs[0].get("include_trellis2"), False)
         self.assertEqual(runtime_kwargs[0].get("allow_source_compile"), False)
+        self.assertEqual(wheel_kwargs[0]["workspace"], workspace)
+        self.assertEqual(runtime_kwargs[0]["workspace"], workspace)
+        self.assertIn("Pixal3D-ComfyUI", newly)
+        self.assertIn(comfy_engine.SPARSE_3D_SITE_MARK, newly)
 
 
 class Trellis2LaunchOrderTests(unittest.TestCase):
@@ -440,6 +446,187 @@ class Trellis2LaunchOrderTests(unittest.TestCase):
         self.assertEqual(runtime_kwargs[0].get("include_pixal3d"), False)
         self.assertEqual(runtime_kwargs[0].get("include_trellis2"), True)
         self.assertEqual(runtime_kwargs[0].get("allow_source_compile"), False)
+        self.assertEqual(wheel_kwargs[0]["workspace"], workspace)
+        self.assertEqual(runtime_kwargs[0]["workspace"], workspace)
+
+
+class Sparse3dVolumeSiteTests(unittest.TestCase):
+    def test_pth_points_at_workspace_site(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            venv_site = root / "site-packages"
+            venv_site.mkdir()
+            site, cache = comfy_engine.sparse_3d_volume_paths(workspace)
+            with patch.object(comfy_engine, "_site_packages", return_value=venv_site):
+                self.assertFalse(comfy_engine._link_sparse_3d_site("python3", site))
+            pth = venv_site / comfy_engine.SPARSE_3D_PTH_NAME
+            self.assertEqual(pth.read_text(encoding="utf-8"), f"{site}\n")
+            self.assertTrue(site.is_dir())
+            self.assertEqual(cache, workspace / ".python" / "wheels")
+
+    def test_ensure_wheels_with_workspace_writes_pth_without_pip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            workspace = root / "workspace"
+            venv_site = root / "site-packages"
+            comfy_root.mkdir()
+            venv_site.mkdir()
+            with (
+                patch.object(comfy_engine, "_comfy_python", return_value="python3"),
+                patch.object(comfy_engine, "_site_packages", return_value=venv_site),
+                patch.object(comfy_engine, "_module_available", return_value=True),
+                patch.object(
+                    comfy_engine, "_install_sparse_3d_prebuilt_wheels", return_value=False
+                ),
+                patch.object(comfy_engine, "_run") as run,
+            ):
+                changed = comfy_engine.ensure_pixal3d_prebuilt_wheels(
+                    comfy_root, workspace=workspace
+                )
+            self.assertFalse(changed)
+            run.assert_not_called()
+            site, _cache = comfy_engine.sparse_3d_volume_paths(workspace)
+            self.assertEqual(
+                (venv_site / comfy_engine.SPARSE_3D_PTH_NAME).read_text(encoding="utf-8"),
+                f"{site}\n",
+            )
+
+    def test_volume_pip_uses_target_and_cached_wheel(self):
+        calls: list[list[str]] = []
+        available = {
+            "easydict",
+            "filelock",
+            "numpy",
+            "PIL",
+            "plyfile",
+            "tqdm",
+            "trimesh",
+            "zstandard",
+        }
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with tempfile.TemporaryDirectory() as directory:
+            site = Path(directory) / "site"
+            cache = Path(directory) / "cache"
+            site.mkdir()
+            cache.mkdir()
+            wheel = cache / "flex_gemm_ap.whl"
+            wheel.write_bytes(b"wheel")
+            with (
+                patch.object(
+                    comfy_engine,
+                    "_python_text",
+                    side_effect=["3.12.3", "2.11.0+cu128"],
+                ),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(
+                    comfy_engine,
+                    "_module_available",
+                    lambda name, _p: name in available,
+                ),
+                patch.object(comfy_engine, "_alias_sparse_3d_packages", return_value=False),
+                patch.object(comfy_engine, "_ensure_cached_wheel", return_value=wheel),
+            ):
+                comfy_engine._install_sparse_3d_prebuilt_wheels(
+                    "/ComfyUI/venv/bin/python3",
+                    include_drtk=False,
+                    site_dir=site,
+                    cache_dir=cache,
+                )
+        wheel_calls = [cmd for cmd in calls if cmd and str(cmd[-1]).endswith(".whl")]
+        self.assertTrue(wheel_calls)
+        for cmd in wheel_calls:
+            self.assertIn("--target", cmd)
+            self.assertEqual(cmd[cmd.index("--target") + 1], str(site))
+            self.assertEqual(cmd[-1], str(wheel))
+            self.assertFalse(any(str(part).startswith("https://") for part in cmd))
+            self.assertIn("--no-deps", cmd)
+
+    def test_second_call_skips_pip_when_modules_importable(self):
+        calls: list[list[str]] = []
+        available = {
+            "easydict",
+            "filelock",
+            "numpy",
+            "PIL",
+            "plyfile",
+            "tqdm",
+            "trimesh",
+            "zstandard",
+            "flex_gemm_ap",
+            "flex_gemm",
+            "cumesh_vb",
+            "cumesh",
+            "o_voxel_vb_ap",
+            "o_voxel",
+        }
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with tempfile.TemporaryDirectory() as directory:
+            site = Path(directory) / "site"
+            cache = Path(directory) / "cache"
+            site.mkdir()
+            cache.mkdir()
+            with (
+                patch.object(
+                    comfy_engine,
+                    "_python_text",
+                    side_effect=["3.12.3", "2.11.0+cu128"],
+                ),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(
+                    comfy_engine,
+                    "_module_available",
+                    lambda name, _p: name in available,
+                ),
+                patch.object(comfy_engine, "_alias_sparse_3d_packages", return_value=False),
+                patch.object(comfy_engine, "_ensure_cached_wheel") as cached,
+            ):
+                self.assertFalse(
+                    comfy_engine._install_sparse_3d_prebuilt_wheels(
+                        "/ComfyUI/venv/bin/python3",
+                        include_drtk=False,
+                        site_dir=site,
+                        cache_dir=cache,
+                    )
+                )
+        self.assertEqual(calls, [])
+        cached.assert_not_called()
+
+    def test_cache_hit_skips_download(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "wheels"
+            cache.mkdir()
+            dest = cache / "foo.whl"
+            dest.write_bytes(b"wheel")
+            url = "https://example.com/releases/foo.whl"
+            with patch.object(comfy_engine, "_download_file") as download:
+                path = comfy_engine._ensure_cached_wheel(cache, url)
+            self.assertEqual(path, dest)
+            download.assert_not_called()
+
+    def test_cache_miss_downloads_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "wheels"
+            url = "https://example.com/releases/bar%2Bcu128.whl"
+
+            def fake_download(_url, dest):
+                Path(dest).write_bytes(b"downloaded")
+
+            with patch.object(
+                comfy_engine, "_download_file", side_effect=fake_download
+            ) as download:
+                path = comfy_engine._ensure_cached_wheel(cache, url)
+            self.assertEqual(path.name, "bar+cu128.whl")
+            self.assertEqual(path.read_bytes(), b"downloaded")
+            download.assert_called_once()
+            self.assertEqual(download.call_args[0][0], url)
 
 
 class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):

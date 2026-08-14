@@ -11,10 +11,11 @@ import os
 import re
 import shutil
 import subprocess
+import urllib.request
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlparse
 
 
 def _ce():
@@ -114,6 +115,99 @@ SPARSE_3D_WHEEL_PY_DEPS: tuple[tuple[str, str], ...] = (
 TRELLIS2_PY_DEPS: tuple[tuple[str, str], ...] = (
     ("onnxruntime", "onnxruntime"),
 )
+# Ephemeral Image venv dies on scaledown. Persist CUDA wheels on the workspace
+# Volume and point site-packages at them with a venv-local .pth.
+SPARSE_3D_SITE_MARK = "sparse-3d-site"
+SPARSE_3D_PTH_NAME = "comfy_sparse_3d.pth"
+
+
+def sparse_3d_volume_paths(workspace: str | Path) -> tuple[Path, Path]:
+    root = Path(workspace) / ".python"
+    return root / "sparse-3d", root / "wheels"
+
+
+def _site_install_kwargs(
+    *,
+    site_dir: Path | None = None,
+    cache_dir: Path | None = None,
+) -> dict[str, Path]:
+    kwargs: dict[str, Path] = {}
+    if site_dir is not None:
+        kwargs["site_dir"] = site_dir
+    if cache_dir is not None:
+        kwargs["cache_dir"] = cache_dir
+    return kwargs
+
+
+def _link_sparse_3d_site(python: str, site_dir: str | Path) -> bool:
+    """Write a venv .pth so ComfyUI can import Volume-installed CUDA wheels.
+
+    The .pth lives in the ephemeral Image venv; rewriting it is not a Volume change.
+    """
+    purelib = _site_packages(python)
+    if purelib is None:
+        print("[PIXAL3D] cannot link Volume CUDA site (no site-packages)", flush=True)
+        return False
+    site_dir = Path(site_dir)
+    site_dir.mkdir(parents=True, exist_ok=True)
+    pth = purelib / SPARSE_3D_PTH_NAME
+    marker = f"{site_dir}\n"
+    if not pth.is_file() or pth.read_text(encoding="utf-8") != marker:
+        pth.write_text(marker, encoding="utf-8")
+        print(f"[PIXAL3D] linked Volume CUDA site {site_dir}", flush=True)
+    return False
+
+
+def _prepare_sparse_3d_site(
+    python: str, workspace: str | Path | None
+) -> tuple[Path | None, Path | None]:
+    if workspace is None:
+        return None, None
+    site_dir, cache_dir = sparse_3d_volume_paths(workspace)
+    site_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    _ce()._link_sparse_3d_site(python, site_dir)
+    return site_dir, cache_dir
+
+
+def _pip_install(
+    python: str,
+    *args: str,
+    site_dir: str | Path | None = None,
+) -> None:
+    cmd = [python, "-m", "pip", "install", "--no-cache-dir"]
+    if site_dir is not None:
+        cmd.extend(["--target", str(site_dir)])
+    cmd.extend(args)
+    _run(cmd)
+
+
+def _download_file(url: str, dest: str | Path) -> None:
+    urllib.request.urlretrieve(url, str(dest))
+
+
+def _ensure_cached_wheel(cache_dir: str | Path, url: str) -> Path:
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    name = unquote(Path(urlparse(url).path).name)
+    if not name.endswith(".whl"):
+        raise ValueError(f"not a wheel url: {url}")
+    dest = cache_dir / name
+    if dest.is_file() and dest.stat().st_size > 0:
+        print(f"[PIXAL3D] wheel cache hit {dest.name}", flush=True)
+        return dest
+    tmp = dest.with_name(dest.name + ".part")
+    print(f"[PIXAL3D] download wheel {url}", flush=True)
+    _ce()._download_file(url, tmp)
+    tmp.replace(dest)
+    return dest
+
+
+def _wheel_install_arg(url: str, cache_dir: str | Path | None) -> str:
+    if cache_dir is None:
+        return url
+    return str(_ce()._ensure_cached_wheel(cache_dir, url))
+
 
 def _lock_has_pixal3d(nodes: Iterable[Mapping[str, Any]]) -> bool:
     return any("pixal3d" in str(node.get("id") or "").lower() for node in nodes)
@@ -236,7 +330,10 @@ def _ensure_cuda_build_tools() -> None:
 
 
 def _install_natten_wheel(
-    python: str, natten_version: str = NATTEN_DEFAULT_VERSION
+    python: str,
+    natten_version: str = NATTEN_DEFAULT_VERSION,
+    *,
+    site_dir: str | Path | None = None,
 ) -> bool:
     try:
         spec = _ce().natten_wheel_spec(
@@ -256,18 +353,13 @@ def _install_natten_wheel(
         flush=True,
     )
     try:
-        _run(
-            [
-                python,
-                "-m",
-                "pip",
-                "install",
-                "--no-cache-dir",
-                "--only-binary=:all:",
-                f"natten=={spec}",
-                "-f",
-                NATTEN_WHEEL_INDEX,
-            ]
+        _ce()._pip_install(
+            python,
+            "--only-binary=:all:",
+            f"natten=={spec}",
+            "-f",
+            NATTEN_WHEEL_INDEX,
+            site_dir=site_dir,
         )
     except subprocess.CalledProcessError:
         print("[PIXAL3D] natten wheel missing; will fall back to sdist", flush=True)
@@ -275,7 +367,12 @@ def _install_natten_wheel(
     return _module_available("natten", python)
 
 
-def _install_flash_attn_wheel(python: str) -> bool:
+def _install_flash_attn_wheel(
+    python: str,
+    *,
+    site_dir: str | Path | None = None,
+    cache_dir: str | Path | None = None,
+) -> bool:
     try:
         python_version = _python_text(
             python,
@@ -294,7 +391,11 @@ def _install_flash_attn_wheel(python: str) -> bool:
         return False
     print(f"[PIXAL3D] pip install flash-attn wheel {url}", flush=True)
     try:
-        _run([python, "-m", "pip", "install", "--no-cache-dir", url])
+        _ce()._pip_install(
+            python,
+            _wheel_install_arg(url, cache_dir),
+            site_dir=site_dir,
+        )
     except subprocess.CalledProcessError:
         print(
             "[PIXAL3D] flash-attn wheel install failed; will fall back to source",
@@ -306,7 +407,9 @@ def _install_flash_attn_wheel(python: str) -> bool:
     )
 
 
-def _install_sparse_3d_python_deps(python: str) -> bool:
+def _install_sparse_3d_python_deps(
+    python: str, *, site_dir: str | Path | None = None
+) -> bool:
     missing = [
         pip_name
         for pip_name, import_name in SPARSE_3D_WHEEL_PY_DEPS
@@ -315,11 +418,13 @@ def _install_sparse_3d_python_deps(python: str) -> bool:
     if not missing:
         return False
     print(f"[PIXAL3D] pip install sparse-3d python deps {missing}", flush=True)
-    _run([python, "-m", "pip", "install", "--no-cache-dir", *missing])
+    _ce()._pip_install(python, *missing, site_dir=site_dir)
     return True
 
 
-def _install_trellis2_python_deps(python: str) -> bool:
+def _install_trellis2_python_deps(
+    python: str, *, site_dir: str | Path | None = None
+) -> bool:
     missing = [
         pip_name
         for pip_name, import_name in TRELLIS2_PY_DEPS
@@ -328,7 +433,7 @@ def _install_trellis2_python_deps(python: str) -> bool:
     if not missing:
         return False
     print(f"[TRELLIS2] pip install python deps {missing}", flush=True)
-    _run([python, "-m", "pip", "install", "--no-cache-dir", *missing])
+    _ce()._pip_install(python, *missing, site_dir=site_dir)
     return True
 
 
@@ -348,9 +453,11 @@ def _ensure_opengl_libs() -> None:
     _run(["apt-get", "install", "-y", "libopengl0", "libgl1"])
 
 
-def _alias_sparse_3d_packages(python: str) -> bool:
+def _alias_sparse_3d_packages(
+    python: str, *, site_dir: str | Path | None = None
+) -> bool:
     """PozzettiAndrea wheels import as *_vb / *_ap; Trellis2 imports o_voxel / cumesh / flex_gemm."""
-    purelib = _site_packages(python)
+    purelib = Path(site_dir) if site_dir is not None else _site_packages(python)
     if purelib is None:
         print("[PIXAL3D] cannot locate site-packages for CUDA aliases", flush=True)
         return False
@@ -465,7 +572,12 @@ def _install_blackwell_boot(python: str) -> bool:
 
 
 def _install_sparse_3d_prebuilt_wheels(
-    python: str, *, include_drtk: bool, include_nvdiffrast: bool = False
+    python: str,
+    *,
+    include_drtk: bool,
+    include_nvdiffrast: bool = False,
+    site_dir: str | Path | None = None,
+    cache_dir: str | Path | None = None,
 ) -> bool:
     """Install flex_gemm / cumesh / o-voxel (and optional DRTK) from CUDA wheels."""
     try:
@@ -486,15 +598,21 @@ def _install_sparse_3d_prebuilt_wheels(
             flush=True,
         )
         return False
-    changed = _ce()._install_sparse_3d_python_deps(python)
-    changed = _ce()._alias_sparse_3d_packages(python) or changed
+    site_kw = _site_install_kwargs(site_dir=Path(site_dir) if site_dir is not None else None)
+    changed = _ce()._install_sparse_3d_python_deps(python, **site_kw)
+    changed = _ce()._alias_sparse_3d_packages(python, **site_kw) or changed
     for label, imports, url in specs:
         if any(_module_available(name, python) for name in imports):
             print(f"[PIXAL3D] {label} already importable", flush=True)
             continue
         print(f"[PIXAL3D] pip install {label} wheel {url}", flush=True)
         try:
-            _run([python, "-m", "pip", "install", "--no-cache-dir", "--no-deps", url])
+            _ce()._pip_install(
+                python,
+                "--no-deps",
+                _wheel_install_arg(url, cache_dir),
+                site_dir=site_dir,
+            )
         except subprocess.CalledProcessError:
             print(f"[PIXAL3D] {label} wheel install failed", flush=True)
             continue
@@ -510,7 +628,7 @@ def _install_sparse_3d_prebuilt_wheels(
             f"[PIXAL3D] {label} wheel installed but still not importable ({'; '.join(errors)})",
             flush=True,
         )
-    return changed
+    return _ce()._alias_sparse_3d_packages(python, **site_kw) or changed
 
 
 def ensure_pixal3d_prebuilt_wheels(
@@ -520,24 +638,34 @@ def ensure_pixal3d_prebuilt_wheels(
     include_sparse: bool = True,
     include_drtk: bool = False,
     include_nvdiffrast: bool = False,
+    workspace: str | Path | None = None,
 ) -> bool:
     """Install official/community CUDA wheels before CNR can compile sdists."""
     python = _comfy_python(Path(comfy_root))
+    site_dir, cache_dir = _ce()._prepare_sparse_3d_site(python, workspace)
+    site_kw = _site_install_kwargs(
+        site_dir=Path(site_dir) if site_dir is not None else None
+    )
+    wheel_kw = _site_install_kwargs(
+        site_dir=Path(site_dir) if site_dir is not None else None,
+        cache_dir=Path(cache_dir) if cache_dir is not None else None,
+    )
     changed = False
     if include_attention:
         if not _module_available("natten", python):
-            changed = _ce()._install_natten_wheel(python) or changed
+            changed = _ce()._install_natten_wheel(python, **site_kw) or changed
         attention_ok = _module_available("flash_attn", python) or _module_available(
             "flash_attn_interface", python
         )
         if not attention_ok:
-            changed = _ce()._install_flash_attn_wheel(python) or changed
+            changed = _ce()._install_flash_attn_wheel(python, **wheel_kw) or changed
     if include_sparse:
         changed = (
             _ce()._install_sparse_3d_prebuilt_wheels(
                 python,
                 include_drtk=include_drtk,
                 include_nvdiffrast=include_nvdiffrast,
+                **wheel_kw,
             )
             or changed
         )
@@ -551,6 +679,7 @@ def ensure_pixal3d_runtime(
     include_pixal3d: bool = False,
     include_trellis2: bool = False,
     allow_source_compile: bool = False,
+    workspace: str | Path | None = None,
 ) -> bool:
     """Install sparse-3D Python deps and CUDA kernels (Pixal3D / TRELLIS.2).
 
@@ -560,16 +689,28 @@ def ensure_pixal3d_runtime(
     asks for Pixal3D — leftover node dirs on the Volume are ignored.
     Source compile is opt-in; default is wheel-only so GPU start does not
     compile CUDA.
+    When ``workspace`` is set, wheels go to ``/workspace/.python/sparse-3d``
+    on the Volume and the Image venv only gets a ``.pth`` pointer.
     Returns True if anything was installed (ComfyUI should restart).
     """
     comfy_root = Path(comfy_root)
     python = _comfy_python(comfy_root)
+    site_dir, cache_dir = _ce()._prepare_sparse_3d_site(python, workspace)
+    site_kw = _site_install_kwargs(
+        site_dir=Path(site_dir) if site_dir is not None else None
+    )
+    wheel_kw = _site_install_kwargs(
+        site_dir=Path(site_dir) if site_dir is not None else None,
+        cache_dir=Path(cache_dir) if cache_dir is not None else None,
+    )
+    prebuilt_kw = {"workspace": workspace} if workspace is not None else {}
     changed = _ce().ensure_pixal3d_prebuilt_wheels(
         comfy_root,
         include_attention=include_pixal3d,
         include_sparse=True,
         include_drtk=include_pixal3d,
         include_nvdiffrast=include_trellis2,
+        **prebuilt_kw,
     )
     node_dir = (
         _ce()._find_pixal3d_node_dir(Path(custom_nodes_dir)) if include_pixal3d else None
@@ -586,7 +727,7 @@ def ensure_pixal3d_runtime(
             encoding="utf-8",
         )
         print("[PIXAL3D] pip install requirements.txt (natten uses a prebuilt wheel)", flush=True)
-        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(filtered)])
+        _ce()._pip_install(python, "-r", str(filtered), **site_kw)
         changed = True
         if not _module_available("natten", python):
             if not allow_source_compile:
@@ -596,14 +737,14 @@ def ensure_pixal3d_runtime(
             pin = _ce().natten_requirement_version(source)
             print(f"[PIXAL3D] compiling natten=={pin} from source", flush=True)
             _ce()._ensure_cuda_build_tools()
-            _run([python, "-m", "pip", "install", "--no-cache-dir", f"natten=={pin}"])
+            _ce()._pip_install(python, f"natten=={pin}", **site_kw)
 
     if include_pixal3d:
         attention_ok = _module_available("flash_attn", python) or _module_available(
             "flash_attn_interface", python
         )
         if not attention_ok:
-            if not _ce()._install_flash_attn_wheel(python):
+            if not _ce()._install_flash_attn_wheel(python, **wheel_kw):
                 if not allow_source_compile:
                     raise RuntimeError(
                         "flash-attn wheel missing or not importable; "
@@ -611,16 +752,11 @@ def ensure_pixal3d_runtime(
                     )
                 print("[PIXAL3D] pip install flash-attn from source", flush=True)
                 _ce()._ensure_cuda_build_tools()
-                _run(
-                    [
-                        python,
-                        "-m",
-                        "pip",
-                        "install",
-                        "--no-cache-dir",
-                        "--no-build-isolation",
-                        "flash-attn",
-                    ]
+                _ce()._pip_install(
+                    python,
+                    "--no-build-isolation",
+                    "flash-attn",
+                    **site_kw,
                 )
             changed = True
 
@@ -629,11 +765,12 @@ def ensure_pixal3d_runtime(
             python,
             include_drtk=include_pixal3d,
             include_nvdiffrast=include_trellis2,
+            **wheel_kw,
         )
         or changed
     )
     if include_trellis2:
-        changed = _ce()._install_trellis2_python_deps(python) or changed
+        changed = _ce()._install_trellis2_python_deps(python, **site_kw) or changed
         _ce()._ensure_opengl_libs()
         changed = _ce()._install_blackwell_boot(python) or changed
 
@@ -720,17 +857,12 @@ def ensure_pixal3d_runtime(
         print(f"[PIXAL3D] build {label} from source (no matching wheel)", flush=True)
         _run([*clone, str(dest)])
         install_path = str(dest / subdir) if subdir else str(dest)
-        _run(
-            [
-                python,
-                "-m",
-                "pip",
-                "install",
-                "--no-cache-dir",
-                "--no-deps",
-                "--no-build-isolation",
-                install_path,
-            ]
+        _ce()._pip_install(
+            python,
+            "--no-deps",
+            "--no-build-isolation",
+            install_path,
+            **site_kw,
         )
         changed = True
         if not any(_module_available(name, python) for name in imports):
