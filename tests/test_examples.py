@@ -168,6 +168,22 @@ class ScriptContractTests(unittest.TestCase):
         self.assertIn("ltx-2.5-22b-distilled-transformer-bf16.safetensors", text)
         self.assertIn('"frontendVersion": "1.48.7"', text)
 
+    def test_campus_storyboard_has_100_flux2_frames(self):
+        import json
+
+        path = ROOT / "examples" / "campus-days-storyboard.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        frames = data["frames"]
+        self.assertEqual(len(frames), 100)
+        self.assertEqual(frames[0]["id"], "001")
+        self.assertEqual(frames[-1]["id"], "100")
+        for frame in frames:
+            self.assertIn("text", frame)
+            self.assertGreaterEqual(len(frame["text"].split()), 20)
+        module = _load_script("build_campus_storyboard_json.py")
+        rebuilt = module.build()
+        self.assertEqual(len(rebuilt["frames"]), 100)
+
 
 if __name__ == "__main__":
     unittest.main()
