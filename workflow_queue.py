@@ -952,16 +952,34 @@ def iter_mesh_names(obj: Any) -> list[str]:
     return names
 
 
+def _output_view_parts(path: str) -> tuple[str, str]:
+    """Split ``.../output/<subfolder>/<file>`` into ``(filename, subfolder)``."""
+    normalized = path.replace("\\", "/").strip()
+    name = Path(normalized).name
+    if not name:
+        return "", ""
+    parts = [part for part in normalized.split("/") if part]
+    if "output" in parts:
+        rel = parts[parts.index("output") + 1 :]
+        if rel:
+            return rel[-1], "/".join(rel[:-1])
+    return name, ""
+
+
 def _as_view_item(raw: Any) -> dict[str, str] | None:
     if isinstance(raw, str):
-        filename = raw.replace("\\", "/")
-        if not Path(filename).name:
+        filename, subfolder = _output_view_parts(raw)
+        if not filename:
             return None
-        return {"filename": filename, "subfolder": "", "type": "output"}
+        return {"filename": filename, "subfolder": subfolder, "type": "output"}
     if isinstance(raw, Mapping) and raw.get("filename"):
+        filename = str(raw["filename"]).replace("\\", "/")
+        subfolder = str(raw.get("subfolder") or "")
+        if not subfolder and ("/" in filename or "\\" in filename):
+            filename, subfolder = _output_view_parts(filename)
         return {
-            "filename": str(raw["filename"]).replace("\\", "/"),
-            "subfolder": str(raw.get("subfolder") or ""),
+            "filename": Path(filename).name,
+            "subfolder": subfolder,
             "type": str(raw.get("type") or "output"),
         }
     return None
@@ -1013,8 +1031,21 @@ def download_outputs(base: str, history: dict[str, Any], dest: Path) -> list[Pat
             }
         )
         path = safe_dest_file(dest, item["filename"])
-        with urllib.request.urlopen(f"{root}/view?{query}", timeout=300) as response:
-            path.write_bytes(response.read())
+        try:
+            with urllib.request.urlopen(f"{root}/view?{query}", timeout=300) as response:
+                path.write_bytes(response.read())
+        except urllib.error.HTTPError as exc:
+            print(
+                json.dumps(
+                    {
+                        "view_error": exc.code,
+                        "filename": item["filename"],
+                        "subfolder": item["subfolder"],
+                    }
+                ),
+                flush=True,
+            )
+            continue
         saved.append(path)
         print(
             json.dumps({"saved": str(path), "bytes": path.stat().st_size}),

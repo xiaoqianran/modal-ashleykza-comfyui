@@ -552,6 +552,27 @@ class WorkflowBindTests(unittest.TestCase):
         }
         items = workflow_queue.history_view_items(history)
         self.assertEqual(items[0]["filename"], "pixal3d_demo.glb")
+        self.assertEqual(items[0]["subfolder"], "")
+
+    def test_history_view_items_keeps_sam3d_output_subfolder(self):
+        history = {
+            "outputs": {
+                "73": {
+                    "text": ["/workspace/output/sam3d_run_1/mesh_textured.glb"]
+                }
+            }
+        }
+        items = workflow_queue.history_view_items(history)
+        self.assertEqual(
+            items,
+            [
+                {
+                    "filename": "mesh_textured.glb",
+                    "subfolder": "sam3d_run_1",
+                    "type": "output",
+                }
+            ],
+        )
 
     def test_history_view_items_dedupes_images_and_result(self):
         history = {
