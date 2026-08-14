@@ -32,10 +32,16 @@ PIXI_LINUX_X64_URL = (
     "https://github.com/prefix-dev/pixi/releases/download/"
     f"v{PIXI_VERSION}/pixi-x86_64-unknown-linux-musl"
 )
-# comfy-env 0.3.x waits 60s for the isolation worker. First ``pixi run`` of a
-# CUDA env is slower than that unless the lock is frozen and the timeout is raised.
+# comfy-env 0.3.x accepts the worker socket, then waits a hardcoded 60s for
+# ``{"status": "ready"}``. First ``import torch`` in the pixi env is slower
+# than that on a cold Volume, which surfaces as "failed to send ready signal".
 WORKER_SOCKET_TIMEOUT_SECONDS = 600
+WORKER_LOG = "/workspace/logs/sam3d-isolation-worker.log"
 _TIMEOUT_ASSIGN_RE = re.compile(r"^(SOCKET_ACCEPT_TIMEOUT\s*=\s*)\d+", re.M)
+_READY_RECV = "msg = self._transport.recv(timeout=60)"
+_READY_RECV_FIXED = f"msg = self._transport.recv(timeout={WORKER_SOCKET_TIMEOUT_SECONDS})"
+_STDOUT_DEVNULL = "stdout=subprocess.DEVNULL,"
+_STDOUT_LOG = f"stdout=open({WORKER_LOG!r}, \"ab\"),"
 _PIXI_RUN_AS_IS = 'PIXI, "run", "--as-is",'
 _PIXI_RUN_FROZEN = 'PIXI, "run", "--as-is", "--frozen",'
 _IS_PIXI_RE = re.compile(r"is_pixi = ['\"]\.pixi['\"] in str\(self\.python\)")
@@ -209,6 +215,15 @@ def patch_comfy_env_isolation(comfy_root: str | Path) -> bool:
             if n_pixi:
                 updated = patched_pixi
                 print("[SAM3D] isolation worker uses env python (skip pixi run)", flush=True)
+            if _READY_RECV in updated:
+                updated = updated.replace(_READY_RECV, _READY_RECV_FIXED)
+                print(
+                    f"[SAM3D] ready recv timeout -> {WORKER_SOCKET_TIMEOUT_SECONDS}s",
+                    flush=True,
+                )
+            if _STDOUT_DEVNULL in updated:
+                updated = updated.replace(_STDOUT_DEVNULL, _STDOUT_LOG, 1)
+                print(f"[SAM3D] isolation worker stdout -> {WORKER_LOG}", flush=True)
             if updated != text:
                 worker.write_text(updated, encoding="utf-8")
                 changed = True
@@ -258,7 +273,15 @@ def warm_pixi_env(workspace: str | Path) -> None:
     env = os.environ.copy()
     for python in pythons:
         print(f"[SAM3D] warming isolated python {python}", flush=True)
-        _ce()._run([str(python), "-c", "print('sam3d-python-ok')"], env=env)
+        _ce()._run(
+            [
+                str(python),
+                "-c",
+                "import torch; print('sam3d-python-ok', torch.__version__, "
+                "bool(torch.cuda.is_available()))",
+            ],
+            env=env,
+        )
 
 
 def _strip_optional_node_reqs(node_dir: Path) -> bool:
@@ -289,6 +312,7 @@ def ensure_sam3d_runtime(
         print("[SAM3D] ComfyUI-SAM3DObjects not on Volume; skip pixi", flush=True)
         return False
     root = apply_comfy_env_root(workspace)
+    (Path(workspace) / "logs").mkdir(parents=True, exist_ok=True)
     pixi_changed = ensure_pixi_cli(workspace)
     installed = False
     if _pixi_env_ready(root):

@@ -228,7 +228,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | `examples/sam3d-image-to-3d.lock.json` | **手修**锁：`apozz/sam-3d-objects-safetensors` → `sam3dobjects/` |
 | `catalog/sam3d.json` | Studio 契约：图生带贴图 GLB，测试 **L40S** |
 
-锁里是 GitHub 节点 `ComfyUI-SAM3DObjects@main`。`LoadSAM3DModel` 读 `folder_paths.models_dir / sam3dobjects`，GPU 启动时把 `/ComfyUI/models/sam3dobjects` symlink 到 Volume。节点用 `comfy-env` + pixi 隔离 CUDA（pytorch3d / gsplat / nvdiffrast / flash-attn）；缓存必须落在 workspace Volume 的 `/workspace/.python/comfy-env`（`COMFY_ENV_ROOT`），不要用默认的 `~/.ce`。官方 `comfy-env-root.toml` 里的 GeometryPack / Multiband **不装**（物体图工作流用不到，会拖进 CGAL）。不要写 `queue_*.py`。官方模板用 LoadImage 的 MASK 再 InvertMask，所以**透明底 PNG** 更好。第一次 GPU 冷启动要跑 pixi，把 `COMFY_STARTUP_TIMEOUT_SECONDS` 提到 3600。建议 **L40S**。不要用 T4。
+锁里是 GitHub 节点 `ComfyUI-SAM3DObjects@main`。`LoadSAM3DModel` 读 `folder_paths.models_dir / sam3dobjects`，GPU 启动时把 `/ComfyUI/models/sam3dobjects` symlink 到 Volume。节点用 `comfy-env` + pixi 隔离 CUDA（pytorch3d / gsplat / nvdiffrast / flash-attn）；缓存必须落在 workspace Volume 的 `/workspace/.python/comfy-env`（`COMFY_ENV_ROOT`），不要用默认的 `~/.ce`。官方 `comfy-env-root.toml` 里的 GeometryPack / Multiband **不装**（物体图工作流用不到，会拖进 CGAL）。不要写 `queue_*.py`。官方模板用 LoadImage 的 MASK 再 InvertMask，所以**透明底 PNG** 更好。第一次 GPU 冷启动要跑 pixi，把 `COMFY_STARTUP_TIMEOUT_SECONDS` 提到 3600。comfy-env 0.3.x 连上 worker 之后 ready 等待写死 60s，冷 Volume 上首次 `import torch` 经常超过；启动时改成 600s，stdout 落到 `/workspace/logs/sam3d-isolation-worker.log`。建议 **L40S**。不要用 T4。
 
 ```bash
 modal run hydrate_modal.py --catalog sam3d

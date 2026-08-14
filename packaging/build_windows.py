@@ -28,6 +28,7 @@ MODULES = (
     "modal_config.py",
     "recipes.py",
     "sparse_3d_runtime.py",
+    "uv_runtime.py",
     "sam3d_runtime.py",
     "storage.py",
     "workflow_queue.py",

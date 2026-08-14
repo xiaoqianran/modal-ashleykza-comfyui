@@ -235,7 +235,11 @@ class Sam3dRuntimeTests(unittest.TestCase):
             )
             (site / "subprocess.py").write_text(
                 "is_pixi = '.pixi' in str(self.python)\n"
-                'cmd = [\n    PIXI, "run", "--as-is",\n    "--manifest-path", str(manifest),\n]\n',
+                'cmd = [\n    PIXI, "run", "--as-is",\n    "--manifest-path", str(manifest),\n]\n'
+                "                msg = self._transport.recv(timeout=60)\n"
+                "                if not msg:\n"
+                '                    raise RuntimeError(f"{self.name}: Worker failed to send ready signal")\n'
+                "        stdout=subprocess.DEVNULL,\n",
                 encoding="utf-8",
             )
             (site.parent / "wrap.py").write_text(
@@ -251,6 +255,10 @@ class Sam3dRuntimeTests(unittest.TestCase):
             self.assertIn("SOCKET_ACCEPT_TIMEOUT = 600", ipc)
             self.assertIn("is_pixi = False", worker)
             self.assertIn('PIXI, "run", "--as-is", "--frozen",', worker)
+            self.assertIn("recv(timeout=600)", worker)
+            self.assertNotIn("recv(timeout=60)", worker)
+            self.assertIn(sam3d_runtime.WORKER_LOG, worker)
+            self.assertNotIn("stdout=subprocess.DEVNULL", worker)
             self.assertIn("matches.sort", wrap)
 
     def test_warm_pixi_env_runs_isolated_python(self):
