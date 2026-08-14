@@ -65,6 +65,7 @@ from storage import (
     resolve_model_file,
     storage_model_path,
 )
+from uv_runtime import pip_install_cmd, shell_resolve_uv
 from workflow_resolver import validate_workflow_lock
 
 LOCK_SCHEMA = 1
@@ -830,6 +831,7 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
             f"cd {qname}",
             'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
             '[ -x "$PY" ] || PY=python3',
+            shell_resolve_uv(),
         ]
 
         for command in recipe.pre_commands:
@@ -838,12 +840,12 @@ def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[st
         for req in recipe.requirements:
             qreq = _quote(req)
             steps.append(
-                f'if [ -f {qreq} ]; then "$PY" -m pip install --no-cache-dir -r {qreq}; fi'
+                f'if [ -f {qreq} ]; then "$UV" pip install --python "$PY" --no-cache -r {qreq}; fi'
             )
 
         if recipe.pip:
             steps.append(
-                '"$PY" -m pip install --no-cache-dir '
+                '"$UV" pip install --python "$PY" --no-cache '
                 + " ".join(_quote(package) for package in recipe.pip)
             )
 
@@ -876,7 +878,8 @@ def build_registry_node_commands(
             "set -eux",
             'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
             '[ -x "$PY" ] || PY=python3',
-            f'"$PY" -m pip install --no-cache-dir {_quote(comfy_cli_spec)}',
+            shell_resolve_uv(),
+            f'"$UV" pip install --python "$PY" --no-cache {_quote(comfy_cli_spec)}',
         )
     )
     commands = [bootstrap]
@@ -981,7 +984,7 @@ def install_registry_nodes(
             ]
             if not missing:
                 print(f"[SKIP] CNR {node_id}@{version} already on Volume", flush=True)
-                # Clone lives on the Volume; pip lands in the Image venv and
+                # Clone lives on the Volume; uv pip lands in the Image venv and
                 # disappears on scaledown. GitHub nodes still need
                 # requirements.txt on every cold start (Cosmos3: transformers).
                 if url:
@@ -1040,7 +1043,7 @@ def _github_repo_dir_name(url: str) -> str:
 def _install_node_requirements(dest: Path, python: str | None) -> None:
     requirements = dest / "requirements.txt"
     if python and requirements.is_file():
-        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
+        _run(pip_install_cmd(python, "-r", str(requirements)))
 
 
 def _install_github_node(

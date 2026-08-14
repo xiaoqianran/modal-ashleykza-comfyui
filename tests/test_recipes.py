@@ -142,6 +142,8 @@ class RecipeTests(unittest.TestCase):
         self.assertIn("GITHUB_TOKEN", joined)
         self.assertIn("x-access-token", joined)
         self.assertNotIn("github_pat_", joined)
+        self.assertIn('"$UV" pip install --python "$PY" --no-cache', joined)
+        self.assertNotIn("-m pip", joined)
 
     def test_github_token_handling_happens_before_xtrace(self):
         command = comfy_engine.build_node_commands(["qwen-image-extra"])[0]

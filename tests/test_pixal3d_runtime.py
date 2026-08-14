@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import comfy_engine
+import uv_runtime
 
 
 class DummyProcess:
@@ -293,7 +294,8 @@ class InstallNattenWheelTests(unittest.TestCase):
         self.assertIn(comfy_engine.NATTEN_WHEEL_INDEX, calls[0])
         self.assertNotIn("natten==0.21.6", calls[0])
         self.assertNotIn("--target", calls[0])
-        self.assertEqual(calls[0][4], "--no-cache-dir")
+        self.assertIn("--no-cache", calls[0])
+        self.assertTrue(uv_runtime.is_uv_pip_cmd(calls[0]))
 
 
 class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
