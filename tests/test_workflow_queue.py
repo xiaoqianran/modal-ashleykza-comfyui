@@ -62,6 +62,10 @@ class WorkflowInspectTests(unittest.TestCase):
             "krea2-turbo-t2i.json",
             "z-image-turbo-t2i.json",
             "ideogram4-t2i.json",
+            "cosmos3-nano-t2v.json",
+            "cosmos3-super-t2v.json",
+            "cosmos3-super-text2image.json",
+            "cosmos3-super-image2video.json",
         ):
             payload = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
             inspect = workflow_queue.inspect_workflow(payload)
@@ -111,6 +115,77 @@ class WorkflowBindTests(unittest.TestCase):
     def test_graph_to_prompt_waits_for_loaded_node_types(self):
         self.assertIn("expectedTypes.every", workflow_queue.GRAPH_TO_PROMPT_JS)
         self.assertIn("loaded_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("registered_node_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("nodeData", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("defined_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("entry.class_type = type", workflow_queue.GRAPH_TO_PROMPT_JS)
+
+    def test_repair_converted_prompt_fills_class_type_and_unknown_widgets(self):
+        prompt = {
+            "2": {
+                "class_type": None,
+                "inputs": {
+                    "UNKNOWN": "old prompt",
+                    "UNKNOWN_1": 832,
+                    "UNKNOWN_2": 480,
+                    "text_encoder": ["1", 1],
+                },
+                "_meta": {"title": None},
+            },
+            "4": {
+                "class_type": None,
+                "inputs": {
+                    "UNKNOWN": "",
+                    "UNKNOWN_1": 832,
+                    "UNKNOWN_2": 480,
+                    "text_encoder": ["1", 1],
+                    "prompt": ["3", 0],
+                },
+                "_meta": {"title": "Negative Prompt"},
+            },
+        }
+        ui = {
+            "nodes": [
+                {"id": 2, "type": "Cosmos3TextEncode", "title": "Positive Prompt"},
+                {"id": 4, "type": "Cosmos3TextEncode", "title": "Negative Prompt"},
+            ]
+        }
+        info = {
+            "Cosmos3TextEncode": {
+                "input": {
+                    "required": {
+                        "text_encoder": ["COSMOS3_TEXT_ENCODER"],
+                        "prompt": ["STRING", {}],
+                        "width": ["INT", {}],
+                        "height": ["INT", {}],
+                    }
+                }
+            }
+        }
+        repaired = workflow_queue.repair_converted_prompt(prompt, ui, info)
+        self.assertEqual(repaired["2"]["class_type"], "Cosmos3TextEncode")
+        self.assertEqual(repaired["2"]["_meta"]["title"], "Positive Prompt")
+        self.assertEqual(repaired["2"]["inputs"]["prompt"], "old prompt")
+        self.assertEqual(repaired["2"]["inputs"]["width"], 832)
+        self.assertEqual(repaired["2"]["inputs"]["height"], 480)
+        self.assertEqual(repaired["2"]["inputs"]["text_encoder"], ["1", 1])
+        self.assertEqual(repaired["4"]["inputs"]["prompt"], ["3", 0])
+        self.assertEqual(repaired["4"]["inputs"]["width"], 832)
+        self.assertNotIn("UNKNOWN", repaired["2"]["inputs"])
+        workflow_queue.bind_text_prompt(repaired, text="a celadon teapot")
+        self.assertEqual(repaired["2"]["inputs"]["prompt"], "a celadon teapot")
+        self.assertEqual(repaired["4"]["inputs"]["prompt"], ["3", 0])
+
+    def test_cosmos3_text_bind_uses_prompt_even_without_named_widget(self):
+        prompt = {
+            "2": {
+                "class_type": "Cosmos3TextEncode",
+                "inputs": {"UNKNOWN": "old", "text_encoder": ["1", 1]},
+                "_meta": {"title": "Positive Prompt"},
+            }
+        }
+        workflow_queue.bind_text_prompt(prompt, text="a celadon teapot")
+        self.assertEqual(prompt["2"]["inputs"]["prompt"], "a celadon teapot")
 
     def test_bind_number_inputs_only_touches_existing_keys(self):
         prompt = {
@@ -184,6 +259,73 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["17"]["inputs"]["width"], 768)
         self.assertEqual(prompt["17"]["inputs"]["height"], 1024)
         self.assertEqual(prompt["17"]["inputs"]["mu"], 0.0)
+
+    def test_bind_cosmos3_text_scheduler_guider_and_size(self):
+        prompt = {
+            "2": {
+                "class_type": "Cosmos3TextEncode",
+                "inputs": {"prompt": "old", "width": 832, "height": 480},
+                "_meta": {"title": "Positive Prompt"},
+            },
+            "4": {
+                "class_type": "Cosmos3TextEncode",
+                "inputs": {"prompt": ["3", 0], "width": 832, "height": 480},
+                "_meta": {"title": "Negative Prompt"},
+            },
+            "5": {
+                "class_type": "Cosmos3EmptyLatentVideo",
+                "inputs": {"width": 832, "height": 480, "length": 93},
+            },
+            "6": {"class_type": "CFGGuider", "inputs": {"cfg": 6.0, "model": ["1", 0]}},
+            "16": {
+                "class_type": "DualModelGuider",
+                "inputs": {"cfg": 3.5, "model": ["1", 0]},
+            },
+            "7": {"class_type": "RandomNoise", "inputs": {"noise_seed": 1}},
+            "9": {
+                "class_type": "Cosmos3Scheduler",
+                "inputs": {"steps": 35, "flow_shift": 5.0, "denoise": 1.0},
+            },
+            "15": {
+                "class_type": "Cosmos3ImageToVideo",
+                "inputs": {"width": 832, "height": 480, "length": 93},
+            },
+        }
+        workflow_queue.bind_text_prompt(prompt, text="a celadon teapot")
+        workflow_queue.bind_number_inputs(
+            prompt,
+            {"seed": 99, "steps": 20, "cfg": 4.5, "width": 1024, "height": 576},
+        )
+        self.assertEqual(prompt["2"]["inputs"]["prompt"], "a celadon teapot")
+        self.assertEqual(prompt["4"]["inputs"]["prompt"], ["3", 0])
+        self.assertEqual(prompt["7"]["inputs"]["noise_seed"], 99)
+        self.assertEqual(prompt["9"]["inputs"]["steps"], 20)
+        self.assertEqual(prompt["9"]["inputs"]["flow_shift"], 5.0)
+        self.assertEqual(prompt["6"]["inputs"]["cfg"], 4.5)
+        self.assertEqual(prompt["16"]["inputs"]["cfg"], 4.5)
+        self.assertEqual(prompt["5"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["5"]["inputs"]["height"], 576)
+        self.assertEqual(prompt["2"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["4"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["4"]["inputs"]["height"], 576)
+        self.assertEqual(prompt["15"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["15"]["inputs"]["height"], 576)
+
+    def test_inspect_cosmos3_ui_binds_prompt(self):
+        payload = json.loads(
+            (ROOT / "examples" / "cosmos3-nano-t2v.json").read_text(encoding="utf-8")
+        )
+        inspect = workflow_queue.inspect_workflow(payload)
+        text_binds = [
+            item["bind"]
+            for item in inspect["nodes"]
+            if item["class_type"] == "Cosmos3TextEncode"
+        ]
+        self.assertEqual(text_binds, ["prompt", "negative"])
+        self.assertEqual(
+            next(item["bind"] for item in inspect["nodes"] if item["class_type"] == "SaveVideo"),
+            "save",
+        )
 
     def test_to_api_prompt_passthrough(self):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}
@@ -293,6 +435,7 @@ class ChromePathTests(unittest.TestCase):
                 for item in paths
             )
         )
+        self.assertIn("/usr/local/bin/google-chrome", paths)
 
     def test_missing_browser_returns_none(self):
         with (

@@ -947,6 +947,7 @@ def install_registry_nodes(
                 loaded = {}
             if isinstance(loaded, dict):
                 previous = loaded
+        url = str(node.get("url") or "").strip()
         if skip_existing and previous.get("version") == version and previous.get("dirs"):
             missing = [
                 name
@@ -955,6 +956,13 @@ def install_registry_nodes(
             ]
             if not missing:
                 print(f"[SKIP] CNR {node_id}@{version} already on Volume", flush=True)
+                # Clone lives on the Volume; pip lands in the Image venv and
+                # disappears on scaledown. GitHub nodes still need
+                # requirements.txt on every cold start (Cosmos3: transformers).
+                if url:
+                    python = _comfy_python(comfy_root)
+                    for name in previous["dirs"]:
+                        _install_node_requirements(volume_custom / str(name), python)
                 continue
 
         for name in previous.get("dirs") or ():
@@ -962,9 +970,12 @@ def install_registry_nodes(
             if stale.is_dir():
                 shutil.rmtree(stale)
 
-        url = str(node.get("url") or "").strip()
         if url:
-            moved = _install_github_node(node, volume_custom)
+            moved = _install_github_node(
+                node,
+                volume_custom,
+                python=_comfy_python(comfy_root),
+            )
         else:
             before = _dir_names(image_custom)
             run_install(node, comfy_root=comfy_root)
@@ -1001,7 +1012,18 @@ def _github_repo_dir_name(url: str) -> str:
     return name
 
 
-def _install_github_node(node: Mapping[str, Any], volume_custom: Path) -> list[str]:
+def _install_node_requirements(dest: Path, python: str | None) -> None:
+    requirements = dest / "requirements.txt"
+    if python and requirements.is_file():
+        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
+
+
+def _install_github_node(
+    node: Mapping[str, Any],
+    volume_custom: Path,
+    *,
+    python: str | None = None,
+) -> list[str]:
     url = str(node["url"]).strip()
     name = _github_repo_dir_name(url)
     dest = volume_custom / name
@@ -1021,6 +1043,7 @@ def _install_github_node(node: Mapping[str, Any], volume_custom: Path) -> list[s
         if dest.exists():
             shutil.rmtree(dest)
         _run(["git", "clone", "--depth=1", url, str(dest)])
+    _install_node_requirements(dest, python)
     return [name]
 
 

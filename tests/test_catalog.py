@@ -30,6 +30,10 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("z-image-turbo", ids)
         self.assertIn("ideogram4", ids)
         self.assertIn("qwen-image-2512-lightning", ids)
+        self.assertIn("cosmos3-nano", ids)
+        self.assertIn("cosmos3-super", ids)
+        self.assertIn("cosmos3-super-text2image", ids)
+        self.assertIn("cosmos3-super-image2video", ids)
         self.assertEqual(items[0]["kind"], "t2i")
         self.assertEqual(items[0]["io"]["images_in"], 0)
         for item in items:
@@ -206,6 +210,39 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(public["io"]["prompt"])
         self.assertFalse(public["io"]["negative"])
 
+    def test_cosmos3_recipes_are_workflow_mode_on_l40s(self):
+        nano = load_catalog("cosmos3-nano")
+        super_omni = load_catalog("cosmos3-super")
+        t2i = load_catalog("cosmos3-super-text2image")
+        i2v = load_catalog("cosmos3-super-image2video")
+        self.assertEqual(nano["kind"], "t2v")
+        self.assertEqual(super_omni["kind"], "t2v")
+        self.assertEqual(t2i["kind"], "t2i")
+        self.assertEqual(i2v["kind"], "i2v")
+        self.assertEqual(i2v["io"]["images_in"], 1)
+        self.assertEqual(nano["io"]["images_in"], 0)
+        for catalog in (nano, super_omni, t2i, i2v):
+            self.assertEqual(catalog["mode"], "workflow", catalog["id"])
+            self.assertNotIn("graph", catalog)
+            self.assertEqual(catalog["gpu"], "L40S", catalog["id"])
+            self.assertEqual(catalog["gpu_inference"], "RTX-PRO-6000", catalog["id"])
+            self.assertEqual(catalog["gpu_choices"], ["L40S", "RTX-PRO-6000"], catalog["id"])
+            self.assertNotIn("T4", catalog["gpu_choices"])
+            public = public_catalog(catalog)
+            self.assertTrue(public["io"]["prompt"], catalog["id"])
+            self.assertFalse(public["io"]["negative"], catalog["id"])
+        lock = workflow_resolver.load_workflow_lock(ROOT / nano["lock"], require_resolved=True)
+        names = {model["filename"] for model in lock["models"]}
+        self.assertIn("Cosmos3-Nano/transformer/diffusion_pytorch_model.safetensors", names)
+        t2i_lock = workflow_resolver.load_workflow_lock(ROOT / t2i["lock"], require_resolved=True)
+        super_lock = workflow_resolver.load_workflow_lock(
+            ROOT / super_omni["lock"], require_resolved=True
+        )
+        self.assertEqual(
+            {(m["category"], m["filename"]) for m in t2i_lock["models"]},
+            {(m["category"], m["filename"]) for m in super_lock["models"]},
+        )
+
     def test_rejects_path_escape_in_workflow_field(self):
         catalog = dict(load_catalog("z-image"))
         catalog["workflow"] = "../.env"
@@ -239,6 +276,21 @@ class CatalogJobPlanTests(unittest.TestCase):
             iter_generate_jobs(catalog, {"prompts": []})
         jobs = iter_generate_jobs(catalog, {"images": ["a.png", "b.png"]})
         self.assertEqual([item["image"] for item in jobs], ["a.png", "b.png"])
+
+    def test_cosmos3_i2v_needs_image_and_prompt(self):
+        from studio.server import iter_generate_jobs
+
+        catalog = load_catalog("cosmos3-super-image2video")
+        with self.assertRaisesRegex(RuntimeError, "输入图"):
+            iter_generate_jobs(catalog, {"prompts": ["move"]})
+        with self.assertRaisesRegex(RuntimeError, "提示词"):
+            iter_generate_jobs(catalog, {"images": ["a.png"]})
+        jobs = iter_generate_jobs(
+            catalog,
+            {"prompts": ["move"], "images": ["a.png", "b.png"]},
+        )
+        self.assertEqual([item["image"] for item in jobs], ["a.png", "b.png"])
+        self.assertEqual(jobs[0]["prompt"], "move")
 
 
 class UploadTests(unittest.TestCase):

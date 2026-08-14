@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "workflow": {
+    "name": "cosmos3-super-image2video.json",
+    "sha256": "977817f9b494c6f339976446d6c95de265a8d13fe444baa6d8dbd5707d8b6ecb"
+  },
+  "models": [
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/transformer/config.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/transformer/config.json"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/transformer/diffusion_pytorch_model.safetensors",
+      "sha256": null,
+      "source": "manual:AkaneTendo25/Cosmos3-ConvRot",
+      "url": "https://huggingface.co/AkaneTendo25/Cosmos3-ConvRot/resolve/main/Cosmos3-Super-Image2Video-int4-convrot.safetensors"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/vae/config.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/vae/config.json"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/vae/diffusion_pytorch_model.safetensors",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/vae/diffusion_pytorch_model.safetensors"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/added_tokens.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/added_tokens.json"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/chat_template.jinja",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/chat_template.jinja"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/merges.txt",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/merges.txt"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/special_tokens_map.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/special_tokens_map.json"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/tokenizer.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/tokenizer.json"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/tokenizer_config.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/tokenizer_config.json"
+    },
+    {
+      "category": "cosmos3",
+      "filename": "Cosmos3-Super-Image2Video/text_tokenizer/vocab.json",
+      "sha256": null,
+      "source": "manual",
+      "url": "https://huggingface.co/nvidia/Cosmos3-Super-Image2Video/resolve/main/text_tokenizer/vocab.json"
+    }
+  ],
+  "custom_nodes": [
+    {
+      "id": "ComfyUI-Cosmos3",
+      "version": "main",
+      "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
+      "node_types": [
+        "Cosmos3DefaultNegativePrompt",
+        "Cosmos3ImageToVideo",
+        "Cosmos3Loader",
+        "Cosmos3Scheduler",
+        "Cosmos3TextEncode",
+        "Cosmos3UndTowerLoader"
+      ]
+    }
+  ],
+  "unresolved": [],
+  "warnings": []
+}
