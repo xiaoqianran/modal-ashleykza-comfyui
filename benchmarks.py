@@ -17,9 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from catalog import ROOT, list_catalogs, load_catalog
+from catalog.gates import render_studio_recipe_table
 
 OVERLAY_PATH = ROOT / "benchmarks" / "models.json"
 DOCS_PATH = ROOT / "docs" / "guide" / "models.md"
+STUDIO_SNIPPET_PATH = ROOT / "docs" / "guide" / "_generated_studio_recipes.md"
 SCHEMA = 1
 SMOKE_STATUSES = {"recorded", "pending", "hydrated"}
 KIND_SECTIONS = (
@@ -159,7 +161,8 @@ def render_models_markdown(overlay: dict[str, Any] | None = None) -> str:
         "",
         "Studio 能跑的全部配方。**契约**在 `catalog/*.json`（标题、kind、GPU、工作流）。"
         "**权重 / 节点 / 实测**在 [`benchmarks/models.json`](https://github.com/xiaoqianran/modal-ashleykza-comfyui/blob/main/benchmarks/models.json)。"
-        "加配方时三个 JSON（example + lock + catalog）之外，还要在 overlay 里加同一 `id`，然后：",
+        "加配方时先 `python3 -m recipe_scaffold <json> --id <id> --title … --kind t2i`，"
+        "再手修 unresolved 锁，然后：",
         "",
         "```bash",
         "python3 -m benchmarks --write",
@@ -268,11 +271,12 @@ def render_models_markdown(overlay: dict[str, Any] | None = None) -> str:
         [
             "## 怎么更新",
             "",
-            "1. 加 `examples/*.json` + `*.lock.json` + `catalog/<id>.json`。",
-            "2. 在 `benchmarks/models.json` 加同一 `id`（权重说明、节点、`smoke.status`）。",
-            "3. 冒烟成功后把 `status` 改成 `recorded`，填 `gpu` / `seconds` / `source`。",
-            "4. `python3 -m benchmarks --write` 重写本页。",
-            "5. **停掉** `modal serve`。",
+            "1. `python3 -m recipe_scaffold <官方.json> --id <id> --title … --kind t2i --write`。",
+            "2. 锁里有 `unresolved` 就手补 URL / `MODEL_DIRS`，不要写 `queue_*.py`。",
+            "3. 在 `benchmarks/models.json` 加同一 `id`（或脚手架 `--write-overlay`）。",
+            "4. 冒烟成功后把 `status` 改成 `recorded`，填 `gpu` / `seconds` / `source`。",
+            "5. `python3 -m benchmarks --write` 重写本页和 Studio 配方表。",
+            "6. **停掉** `modal serve`。",
             "",
             "`smoke.status`：`recorded` 已记墙钟；`hydrated` 权重在 Volume 但没排队；`pending` 还没测。",
             "",
@@ -281,11 +285,31 @@ def render_models_markdown(overlay: dict[str, Any] | None = None) -> str:
     return "\n".join(lines)
 
 
+def render_studio_snippet() -> str:
+    return render_studio_recipe_table(list_catalogs())
+
+
+def write_studio_snippet(path: Path | None = None) -> Path:
+    target = path or STUDIO_SNIPPET_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_studio_snippet(), encoding="utf-8")
+    return target
+
+
 def write_docs(path: Path | None = None) -> Path:
     target = path or DOCS_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_models_markdown(), encoding="utf-8")
+    write_studio_snippet()
     return target
+
+
+def docs_are_current() -> bool:
+    models = DOCS_PATH.read_text(encoding="utf-8") if DOCS_PATH.is_file() else ""
+    snippet = (
+        STUDIO_SNIPPET_PATH.read_text(encoding="utf-8") if STUDIO_SNIPPET_PATH.is_file() else ""
+    )
+    return models == render_models_markdown() and snippet == render_studio_snippet()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -297,11 +321,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.write:
         write_docs()
         print(f"wrote {DOCS_PATH}", flush=True)
+        print(f"wrote {STUDIO_SNIPPET_PATH}", flush=True)
         return 0
     if args.check:
-        current = DOCS_PATH.read_text(encoding="utf-8") if DOCS_PATH.is_file() else ""
-        if current != text:
-            raise SystemExit(f"stale {DOCS_PATH}; run python3 -m benchmarks --write")
+        if not docs_are_current():
+            raise SystemExit("stale docs; run python3 -m benchmarks --write")
         print("ok", flush=True)
         return 0
     print(text, end="")

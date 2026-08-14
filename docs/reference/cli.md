@@ -47,6 +47,20 @@ Windows：Releases 里只下一个 `Studio.exe`，双击即可。见 [Studio](..
 
 本机 `127.0.0.1:8787`，启动后默认打开浏览器。顶栏配方、GPU、实测见 [模型列表](../guide/models.md) 与 [Studio](../guide/studio.md)。
 
+## 配方脚手架
+
+新 Studio 配方不要手抄四件套，也不要写 `queue_*.py`：
+
+```bash
+python3 -m recipe_scaffold path/to/official.json --id your-recipe --title "显示名" --kind t2i
+python3 -m recipe_scaffold path/to/official.json --id your-recipe --title "显示名" --kind i23d --write
+python3 -m benchmarks --write
+```
+
+`--write` 写出 `examples/*.json`、锁、`catalog/<id>.json`。锁里有 `unresolved` 时退出码 2，必须手补 URL / `MODEL_DIRS`。`--write-overlay` 会往 `benchmarks/models.json` 追加一条 `pending`。
+
+`mode=graph`、T4、以及未在 `catalog.gates.NON_L40S_DEFAULT_GPU_IDS` 里的 PRO-6000 测试默认会被拒绝。
+
 ## 通用排队
 
 ```bash

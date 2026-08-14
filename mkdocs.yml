@@ -82,9 +82,11 @@ extra:
 
 exclude_docs: |
   gallery/_generated.md
+  guide/_generated_studio_recipes.md
 
 not_in_nav: |
   gallery/_generated.md
+  guide/_generated_studio_recipes.md
 
 validation:
   omitted_files: warn

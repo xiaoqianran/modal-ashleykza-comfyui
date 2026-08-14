@@ -49,32 +49,23 @@ class WindowsLauncherTests(unittest.TestCase):
 
 class WindowsBundleTests(unittest.TestCase):
     def test_copy_app_includes_modal_sources(self):
+        from catalog import list_catalogs, load_catalog
+
         build = _load("build_windows")
         with tempfile.TemporaryDirectory() as directory:
             app = Path(directory) / "app"
             build.copy_app(app)
             for name in build.MODULES:
                 self.assertTrue((app / name).is_file(), name)
-            self.assertTrue((app / "catalog" / "z-image.json").is_file())
+            self.assertTrue((app / "catalog" / "gates.py").is_file())
             self.assertTrue((app / "studio" / "server.py").is_file())
-            self.assertTrue((app / "examples" / "z-image-base.json").is_file())
-            self.assertTrue((app / "examples" / "krea2-turbo-t2i.json").is_file())
-            self.assertTrue((app / "examples" / "z-image-turbo-t2i.json").is_file())
-            self.assertTrue((app / "examples" / "ideogram4-t2i.json").is_file())
-            self.assertTrue((app / "catalog" / "z-image-turbo.json").is_file())
-            self.assertTrue((app / "examples" / "qwen-image-2512-lightning.json").is_file())
-            self.assertTrue((app / "catalog" / "qwen-image-2512-lightning.json").is_file())
-            self.assertTrue((app / "examples" / "cosmos3-nano-t2v.json").is_file())
-            self.assertTrue((app / "catalog" / "cosmos3-super-image2video.json").is_file())
-            self.assertTrue((app / "examples" / "cosmos3-edge-t2v.json").is_file())
-            self.assertTrue((app / "catalog" / "cosmos3-super-image2video-4step.json").is_file())
-            self.assertTrue((app / "catalog" / "cosmos3-super-text2image-4step.json").is_file())
-            self.assertTrue((app / "catalog" / "hunyuan3d-2.1.json").is_file())
-            self.assertTrue((app / "examples" / "hunyuan3d-2.1-image-to-3d.json").is_file())
-            self.assertTrue((app / "catalog" / "trellis2.json").is_file())
-            self.assertTrue((app / "examples" / "trellis2-image-to-3d.json").is_file())
             self.assertTrue((app / "README.txt").is_file())
             self.assertNotIn(".env", {path.name for path in app.iterdir()})
+            for item in list_catalogs():
+                catalog = load_catalog(item["id"])
+                self.assertTrue((app / "catalog" / f"{item['id']}.json").is_file(), item["id"])
+                self.assertTrue((app / catalog["workflow"]).is_file(), item["id"])
+                self.assertTrue((app / catalog["lock"]).is_file(), item["id"])
 
     def test_write_stamp(self):
         build = _load("build_windows")

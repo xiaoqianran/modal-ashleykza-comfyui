@@ -38,10 +38,14 @@ class ModelListTests(unittest.TestCase):
         text = benchmarks.render_models_markdown()
         self.assertTrue(text.startswith(benchmarks.GENERATED_BANNER))
         self.assertEqual(benchmarks.DOCS_PATH.read_text(encoding="utf-8"), text)
+        snippet = benchmarks.render_studio_snippet()
+        self.assertTrue(snippet.startswith(benchmarks.GENERATED_BANNER))
         for item in list_catalogs():
             self.assertIn(f"`{item['id']}`", text, item["id"])
             self.assertIn(item["title"], text, item["id"])
+            self.assertIn(item["title"], snippet, item["id"])
         self.assertNotRegex(text, r"\*\*T4\*\*|`T4`|\| T4 \|")
+        self.assertTrue(benchmarks.docs_are_current())
 
     def test_shared_weight_ids_exist(self):
         ids = {item["id"] for item in list_catalogs()}

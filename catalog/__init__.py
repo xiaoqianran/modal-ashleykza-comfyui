@@ -3,10 +3,9 @@
 Two execution modes:
 
 - ``graph``: catalog embeds a ComfyUI API prompt with ``$placeholders``.
-  Use only when the Image is missing nodes from the official UI JSON
-  (Z-Image / Z-Image-Turbo).
+  Gated to ``catalog.gates.GRAPH_MODE_IDS`` (Z-Image / Z-Image-Turbo).
 - ``workflow``: official UI JSON + ``graphToPrompt()`` + bind by node class.
-  This is the default for new recipes (Pixal3D / TripoSplat / Ideogram 4).
+  This is the default. Scaffold with ``python3 -m recipe_scaffold``.
 """
 
 from __future__ import annotations
@@ -16,6 +15,8 @@ import random
 from pathlib import Path
 from typing import Any
 
+from catalog.gates import CATALOG_MODES, catalog_mode, enforce_recipe_gates
+
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG_DIR = Path(__file__).resolve().parent
 
@@ -24,7 +25,6 @@ DEFAULT_CATALOG_ID = "z-image"
 CATALOG_SCHEMA = 1
 PARAM_TYPES = {"text", "int", "float", "image"}
 CATALOG_KINDS = {"t2i", "i2i", "i23d", "t2v", "i2v", "other"}
-CATALOG_MODES = {"graph", "workflow"}
 KNOWN_BINDS = {
     "prompt",
     "negative",
@@ -71,13 +71,6 @@ def _repo_file(relative: str, *, field: str) -> Path:
     if not path.is_file():
         raise ValueError(f"{field} not found: {relative}")
     return path
-
-
-def catalog_mode(catalog: dict[str, Any]) -> str:
-    mode = catalog.get("mode")
-    if mode in CATALOG_MODES:
-        return str(mode)
-    return "graph" if isinstance(catalog.get("graph"), dict) else "workflow"
 
 
 def has_param(catalog: dict[str, Any], param_id: str) -> bool:
@@ -148,12 +141,14 @@ def validate_catalog(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(
                 f"catalog {recipe_id!r} declares image params but graph has no LoadImage"
             )
-    payload = dict(payload)
+    gated = dict(payload)
+    gated["mode"] = mode
+    gated["gpu_choices"] = choices
+    gated["gpu_inference"] = inference
+    enforce_recipe_gates(gated)
+    payload = gated
     payload["schema"] = CATALOG_SCHEMA
     payload["kind"] = kind
-    payload["mode"] = mode
-    payload["gpu_choices"] = choices
-    payload["gpu_inference"] = inference
     payload["io"] = catalog_io(payload)
     return payload
 

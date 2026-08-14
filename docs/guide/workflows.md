@@ -21,21 +21,29 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 `--inspect` 不占 GPU，只列出能绑定的 LoadImage / 提示词 / Save* 节点。已经是 API prompt（节点带 `class_type`）则跳过浏览器。UI 图需要本机 Chrome + Playwright，去跑正在服务的 ComfyUI 页。
 
-只有下面这些才需要额外文件，不是每个工作流都要：
+只有下面这些才需要额外文件，不是每个工作流都要。清单在 `catalog/gates.py`，单测会卡住新的 `queue_*.py` / `mode=graph`：
 
-| 还要特供 | 原因 |
-|---|---|
-| 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重 |
-| `scripts/queue_ltx25.py` 的 patch | Ashley 0.32.0 缺官方节点 |
-| Pixal3D 预构建 wheel | 否则会在 GPU 上编译 natten |
-| TRELLIS.2 CUDA 扩展 | 只装 PozzettiAndrea 预构建 wheel，不要在 GPU 上编 |
-| `catalog/*.json` | 只给 Studio 控制面填表单 |
+| 还要特供 | 原因 | 闸门 |
+|---|---|---|
+| 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重，或不猜 URL | 脚手架打印 `unresolved` |
+| `scripts/queue_ltx25.py` 的 patch | Image 缺官方节点 | `ALLOWED_QUEUE_SCRIPTS` |
+| Pixal3D / TRELLIS CUDA wheels | 锁里出现对应 CNR 才装到 Volume | `sparse_3d_runtime`（按 lock node id） |
+| `catalog/*.json` | 只给 Studio 控制面填表单 | 新配方 `mode=workflow` |
+| `mode=graph` 内嵌 prompt | 只有 Z-Image / Z-Image-Turbo | `GRAPH_MODE_IDS` |
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
 
 官方模板很多时，先 `python3 -m template_analyzer` 分类，不要每个都手写适配。见 [官方模板分析](templates.md)。
 
 ## 生成锁文件
+
+先用脚手架（本机、不占 GPU）：
+
+```bash
+python3 -m recipe_scaffold examples/你的.json --id your-recipe --title "显示名" --kind t2i --write
+```
+
+有 `unresolved` 就手补 URL，不要再 `--action resolve` 覆盖手修锁。确认锁齐了再：
 
 ```bash
 modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.json

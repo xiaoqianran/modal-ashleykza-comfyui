@@ -62,6 +62,7 @@ Storage 目录表只扩官方 ComfyUI / 官方模板真实在用的文件夹（�
 | 同一目标两个不同文件 / 两个 SHA256 | 丢掉该条，不猜该下哪份 |
 | 节点没有 `cnr_id` | 不编造 GitHub 仓库 |
 | 路径穿越、`file://` | 拒绝；`file://` 跳过该条，不中止其余解析 |
+| 想为缺节点写 `queue_*.py` | 先看 `catalog.gates.ALLOWED_QUEUE_SCRIPTS`；新配方用 `recipe_scaffold` |
 
 运行时仍然只有一条路。缺的是锁里的 URL / CNR，不是又一个 `queue_*.py`。
 

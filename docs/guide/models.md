@@ -2,7 +2,7 @@
 
 # 模型列表
 
-Studio 能跑的全部配方。**契约**在 `catalog/*.json`（标题、kind、GPU、工作流）。**权重 / 节点 / 实测**在 [`benchmarks/models.json`](https://github.com/xiaoqianran/modal-ashleykza-comfyui/blob/main/benchmarks/models.json)。加配方时三个 JSON（example + lock + catalog）之外，还要在 overlay 里加同一 `id`，然后：
+Studio 能跑的全部配方。**契约**在 `catalog/*.json`（标题、kind、GPU、工作流）。**权重 / 节点 / 实测**在 [`benchmarks/models.json`](https://github.com/xiaoqianran/modal-ashleykza-comfyui/blob/main/benchmarks/models.json)。加配方时先 `python3 -m recipe_scaffold <json> --id <id> --title … --kind t2i`，再手修 unresolved 锁，然后：
 
 ```bash
 python3 -m benchmarks --write
@@ -398,10 +398,11 @@ Microsoft TRELLIS.2-4B 图生 GLB（几何）。visualbruno ComfyUI-Trellis2。�
 
 ## 怎么更新
 
-1. 加 `examples/*.json` + `*.lock.json` + `catalog/<id>.json`。
-2. 在 `benchmarks/models.json` 加同一 `id`（权重说明、节点、`smoke.status`）。
-3. 冒烟成功后把 `status` 改成 `recorded`，填 `gpu` / `seconds` / `source`。
-4. `python3 -m benchmarks --write` 重写本页。
-5. **停掉** `modal serve`。
+1. `python3 -m recipe_scaffold <官方.json> --id <id> --title … --kind t2i --write`。
+2. 锁里有 `unresolved` 就手补 URL / `MODEL_DIRS`，不要写 `queue_*.py`。
+3. 在 `benchmarks/models.json` 加同一 `id`（或脚手架 `--write-overlay`）。
+4. 冒烟成功后把 `status` 改成 `recorded`，填 `gpu` / `seconds` / `source`。
+5. `python3 -m benchmarks --write` 重写本页和 Studio 配方表。
+6. **停掉** `modal serve`。
 
 `smoke.status`：`recorded` 已记墙钟；`hydrated` 权重在 Volume 但没排队；`pending` 还没测。
