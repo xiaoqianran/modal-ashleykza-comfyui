@@ -1329,6 +1329,39 @@ def _install_sparse_3d_python_deps(python: str) -> bool:
     return True
 
 
+def _alias_sparse_3d_packages(python: str) -> bool:
+    """PozzettiAndrea wheels import as *_vb / *_ap; Trellis2 imports o_voxel / cumesh / flex_gemm."""
+    try:
+        purelib = Path(
+            _python_text(python, "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[PIXAL3D] cannot locate site-packages for CUDA aliases ({exc})", flush=True)
+        return False
+    aliases = (
+        ("o_voxel_vb_ap", "o_voxel"),
+        ("flex_gemm_ap", "flex_gemm"),
+        ("cumesh_vb", "cumesh"),
+    )
+    changed = False
+    for source, alias in aliases:
+        src = purelib / source
+        dest = purelib / alias
+        if not src.is_dir():
+            continue
+        if dest.is_symlink() and dest.resolve() == src.resolve():
+            continue
+        if dest.exists() or dest.is_symlink():
+            if dest.is_dir() and not dest.is_symlink():
+                print(f"[PIXAL3D] skip alias {alias}: {dest} already exists", flush=True)
+                continue
+            dest.unlink()
+        dest.symlink_to(src, target_is_directory=True)
+        print(f"[PIXAL3D] alias {alias} -> {source}", flush=True)
+        changed = True
+    return changed
+
+
 def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bool:
     """Install flex_gemm / cumesh / o-voxel (and optional DRTK) from CUDA wheels."""
     try:
@@ -1349,6 +1382,7 @@ def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bo
         )
         return False
     changed = _install_sparse_3d_python_deps(python)
+    changed = _alias_sparse_3d_packages(python) or changed
     for label, imports, url in specs:
         if any(_module_available(name, python) for name in imports):
             print(f"[PIXAL3D] {label} already importable", flush=True)

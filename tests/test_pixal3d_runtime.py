@@ -115,6 +115,7 @@ class InstallSparse3dWheelsTests(unittest.TestCase):
                 "_module_available",
                 lambda name, _p: name in cuda,
             ),
+            patch.object(comfy_engine, "_alias_sparse_3d_packages", return_value=False),
         ):
             self.assertTrue(
                 comfy_engine._install_sparse_3d_prebuilt_wheels(
@@ -127,6 +128,25 @@ class InstallSparse3dWheelsTests(unittest.TestCase):
         self.assertIn("easydict", dep_calls[0])
         self.assertNotIn("torch", dep_calls[0])
         self.assertFalse(any(str(cmd[-1]).endswith(".whl") for cmd in calls))
+
+    def test_aliases_vb_packages_to_trellis2_import_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            purelib = Path(directory)
+            (purelib / "o_voxel_vb_ap").mkdir()
+            (purelib / "flex_gemm_ap").mkdir()
+            (purelib / "cumesh_vb").mkdir()
+            with patch.object(comfy_engine, "_python_text", return_value=str(purelib)):
+                self.assertTrue(
+                    comfy_engine._alias_sparse_3d_packages("/ComfyUI/venv/bin/python3")
+                )
+            for source, alias in (
+                ("o_voxel_vb_ap", "o_voxel"),
+                ("flex_gemm_ap", "flex_gemm"),
+                ("cumesh_vb", "cumesh"),
+            ):
+                link = purelib / alias
+                self.assertTrue(link.is_symlink(), alias)
+                self.assertEqual(link.resolve(), (purelib / source).resolve())
 
 
 class FlashAttnWheelTests(unittest.TestCase):
