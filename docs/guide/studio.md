@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**。顶栏配方下拉来自 `catalog/*.json`：图生出现上传框，文生出现提示词。换配方不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -16,7 +16,7 @@
 
 - 本机联网、Modal 账号、Hugging Face token
 - 走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 Modal 带 `api-proxy-support`）；不要代理就设 `MODAL_DISABLE_API_PROXY=1`
-- FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Cosmos3 / Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat：本机已装 Chrome 或 Edge（Z-Image / Z-Image-Turbo 不需要）
+- workflow 模式需要本机 Chrome 或 Edge（`graphToPrompt`）。`mode=graph` 的 Z-Image / Z-Image-Turbo 不需要
 - 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
 
 密钥写在 `%LOCALAPPDATA%\ComfyStudio\runtime\app\.studio.env`，不会上传 Git。生成结束后默认停 GPU。
@@ -33,30 +33,11 @@ python -m studio
 
 Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-studio.sh`。启动后会打开浏览器 [http://127.0.0.1:8787](http://127.0.0.1:8787)。不要浏览器：`python -m studio --no-browser`。没有 Python 时用 [Windows：一个 exe](#studio-exe)。
 
-完整 GPU / 权重 / 实测见 [模型列表](models.md)。打开后**默认选中 Z-Image**。顶栏「配方」下拉可换成：
+完整 GPU / 权重 / 实测见 [模型列表](models.md)。打开后**默认选中 Z-Image**。顶栏「配方」下拉来自 `catalog/*.json`：
 
-| 配方 | 测试默认 | 正式推理 | 输入 |
-|---|---|---|---|
-| Z-Image | L40S | RTX-PRO-6000 | 提示词 |
-| Z-Image-Turbo | L40S | RTX-PRO-6000 | 提示词 |
-| FLUX.2 [dev] | RTX-PRO-6000 | RTX-PRO-6000 | 提示词 |
-| Qwen-Image-2512 | L40S | RTX-PRO-6000 | 提示词 |
-| Qwen-Image-2512 Lightning | L40S | RTX-PRO-6000 | 提示词 |
-| Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
-| Ideogram 4 | L40S | RTX-PRO-6000 | 提示词 |
-| Cosmos3-Nano | L40S | RTX-PRO-6000 | 提示词（文生视频） |
-| Cosmos3-Edge | L40S | RTX-PRO-6000 | 提示词（文生视频） |
-| Cosmos3-Super | L40S | RTX-PRO-6000 | 提示词（文生视频） |
-| Cosmos3-Super-Text2Image | L40S | RTX-PRO-6000 | 提示词 |
-| Cosmos3-Super-Text2Image-4Step | L40S | RTX-PRO-6000 | 提示词（蒸馏 4 步） |
-| Cosmos3-Super-Image2Video | L40S | RTX-PRO-6000 | 上传图 + 提示词 |
-| Cosmos3-Super-Image2Video-4Step | L40S | RTX-PRO-6000 | 上传图 + 提示词（蒸馏 4 步） |
-| Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
-| Hunyuan3D 2.1 | L40S | RTX-PRO-6000 | 上传图 |
-| TRELLIS.2 | RTX-PRO-6000 | RTX-PRO-6000 | 上传图 |
-| TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
+--8<-- "guide/_generated_studio_recipes.md"
 
-换配方只会换表单和允许的卡，不会改引擎代码。
+换配方只会换表单和允许的卡，不会改引擎代码。`python3 -m benchmarks --write` 会重写上面这张表。
 
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
@@ -70,7 +51,13 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 ## 契约（经得起拷问的模板）
 
-一份新配方 = 三个文件，**不要**再写 `queue_*.py`。全表（权重、节点、实测）还要登记 overlay：
+一份新配方 = 脚手架吐出的四个文件，**不要**再写 `queue_*.py`：
+
+```bash
+python3 -m recipe_scaffold path/to/official.json \
+  --id your-recipe --title "显示名" --kind t2i --write
+python3 -m benchmarks --write
+```
 
 | 文件 | 作用 |
 |---|---|
@@ -79,7 +66,18 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | `catalog/<id>.json` | Studio 表单 + 绑定 + GPU |
 | `benchmarks/models.json` | 同一 `id`：权重、节点、冒烟耗时 |
 
-`catalog/<id>.json` 的 id 必须等于文件名。打开 Studio 就会出现在配方下拉里。改完跑 `python3 -m benchmarks --write` 更新 [模型列表](models.md)。
+锁里出现 `unresolved` 就手补 URL 或把新目录加进 `recipes.MODEL_DIRS`。解析器不猜 HuggingFace 仓库。
+
+`catalog/<id>.json` 的 id 必须等于文件名。打开 Studio 就会出现在配方下拉里。例外写在 `catalog/gates.py`，加载时会拒绝：
+
+| 闸门 | 现在允许的例外 |
+|---|---|
+| `mode=graph` | 只有 Z-Image / Z-Image-Turbo |
+| 测试默认不是 L40S | 只有 FLUX.2 / TRELLIS.2 |
+| `scripts/queue_*.py` | 只有 `queue_ltx25.py` |
+| 不进 catalog | LTX-2.5 |
+
+扩这些集合必须改 `catalog/gates.py` 并在 PR 里写原因。
 
 两种执行模式，选错会在加载时被拒绝：
 
@@ -88,7 +86,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | `workflow`（默认，新配方用这个） | 官方 UI JSON 能在当前 Image 里打开 | 运行中的 ComfyUI 做 `graphToPrompt()`，再按 `params.bind` 填 LoadImage / 文本 / sampler |
 | `graph` | Image **缺节点**，官方 JSON 会红（现在只有 Z-Image / Z-Image-Turbo） | 使用 catalog 里嵌好的 API prompt，`$prompt` `$seed` 等占位符 |
 
-Z-Image 与 Z-Image-Turbo 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph 外壳。内层仍是 core 节点，所以 catalog 里嵌一份兼容 prompt。这不是每个配方都要抄的。
+Z-Image 与 Z-Image-Turbo 必须是 `graph`：当前 Image 没有官方模板里的 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph 外壳。内层仍是 core 节点，所以 catalog 里嵌一份兼容 prompt。这不是每个配方都要抄的；脚手架也不会生成 `graph`。
 
 浏览器拿不到 `graph` 字段（`public_catalog` 会剥掉），避免把整份 prompt 泄漏到前端。
 

@@ -15,9 +15,10 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## 启动
 
-**1. Catalog** — 与 Studio 顶栏同一 id：
+**1. Catalog** — 与 Studio 顶栏同一 id。新配方用脚手架，不要写 `queue_*.py`：
 
 ```bash
+python3 -m recipe_scaffold examples/你的.json --id your-recipe --title "显示名" --kind t2i --write
 modal run hydrate_modal.py --catalog z-image
 modal serve comfyui_modal.py
 ```

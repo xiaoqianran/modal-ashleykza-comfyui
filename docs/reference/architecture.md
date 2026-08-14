@@ -15,8 +15,10 @@
 
 catalog
   catalog/*.json        Studio 配方契约（表单 / GPU / 绑定；不是 Python 适配器）
+  catalog/gates.py      例外闸门：mode=graph / 非 L40S 默认卡 / queue_*.py / LTX 不进 catalog
   workflow_queue.py     通用排队：graphToPrompt → /prompt → 取件
-  benchmarks.py         实测 overlay → docs/guide/models.md
+  recipe_scaffold.py    新配方脚手架：workflow + lock + catalog + overlay 草稿
+  benchmarks.py         实测 overlay → docs/guide/models.md + Studio 配方表
 
 Studio
   studio/               本机 UI；读 catalog，调 hydrate / serve / workflow_queue
@@ -41,7 +43,9 @@ Studio
 | `recipes.PROFILES` | 旧 hydrate 包：`nordy-*` / `wan22` / `ltx23` / `qwen-image` 等 | Studio 配方表 |
 | `recipes.MODEL_DIRS` | 锁解析与 Storage 目录 | 产品目录 |
 
-完整 Studio 表见 [模型列表](../guide/models.md)。旧 profile 表见 [旧 hydrate 配方](../guide/recipes.md)。LTX-2.5 仍走手修锁 + `scripts/queue_ltx25.py`，不进 catalog。
+完整 Studio 表见 [模型列表](../guide/models.md)。旧 profile 表见 [旧 hydrate 配方](../guide/recipes.md)。LTX-2.5 仍走手修锁 + `scripts/queue_ltx25.py`，不进 catalog（`catalog.gates.OUT_OF_CATALOG_WORKFLOWS`）。
+
+新配方必须 `mode=workflow`。`mode=graph` 只允许 `catalog.gates.GRAPH_MODE_IDS`（Z-Image / Z-Image-Turbo）。测试默认非 L40S 只允许 `NON_L40S_DEFAULT_GPU_IDS`。`scripts/queue_*.py` 只允许 `ALLOWED_QUEUE_SCRIPTS`。扩这些集合要在 PR 里写原因，不要再写适配器。
 
 ## GPU 类
 

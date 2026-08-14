@@ -1,8 +1,9 @@
 """Generic adapter: official ComfyUI UI JSON → API prompt → queue → download.
 
-Per-workflow scripts should only exist when the Image is missing nodes or the
-lock resolver needs a hand-curated file. Conversion itself is always the same
-thing the web UI does: ``app.graphToPrompt()``.
+Per-workflow scripts are gated in ``catalog.gates.ALLOWED_QUEUE_SCRIPTS``.
+Growing TEXT_CLASS_TYPES / SCHEDULER_TYPES / SIZE_CLASS_TYPES here is an
+exception for a new node class, not a reason to add ``queue_*.py``.
+Conversion itself is always the same thing the web UI does: ``app.graphToPrompt()``.
 """
 
 from __future__ import annotations

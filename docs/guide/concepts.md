@@ -13,7 +13,7 @@ flowchart LR
   GPU --> WEB[*.modal.run]
 ```
 
-Studio 顶栏和 `hydrate --catalog` 读同一份 `catalog/*.json`。`recipes.PROFILES` 只给旧模型包，不是产品目录。
+Studio 顶栏和 `hydrate --catalog` 读同一份 `catalog/*.json`。`recipes.PROFILES` 只给旧模型包，不是产品目录。新配方走 `python3 -m recipe_scaffold`；例外（`mode=graph` / 非 L40S 测试卡 / `queue_*.py`）写在 `catalog/gates.py`。
 
 ## 两个 App
 
