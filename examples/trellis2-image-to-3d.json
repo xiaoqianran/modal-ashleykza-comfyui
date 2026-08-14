@@ -86,7 +86,7 @@
       },
       "widgets_values": [
         10,
-        false,
+        true,
         1024
       ]
     },
@@ -125,7 +125,7 @@
       },
       "widgets_values": [
         "microsoft/TRELLIS.2-4B",
-        "flash_attn",
+        "sdpa",
         "cuda",
         true,
         false,

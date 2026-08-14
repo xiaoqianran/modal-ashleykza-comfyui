@@ -101,6 +101,11 @@ SPARSE_3D_WHEEL_PY_DEPS: tuple[tuple[str, str], ...] = (
     ("trimesh", "trimesh"),
     ("zstandard", "zstandard"),
 )
+# rembg is in ComfyUI-Trellis2/requirements.txt but the extra does not pull
+# onnxruntime on Ashley; without it Trellis2PreProcessImage hangs.
+TRELLIS2_PY_DEPS: tuple[tuple[str, str], ...] = (
+    ("onnxruntime", "onnxruntime"),
+)
 
 
 def _quote(value: str | Path) -> str:
@@ -1364,6 +1369,35 @@ def _install_sparse_3d_python_deps(python: str) -> bool:
     return True
 
 
+def _install_trellis2_python_deps(python: str) -> bool:
+    missing = [
+        pip_name
+        for pip_name, import_name in TRELLIS2_PY_DEPS
+        if not _module_available(import_name, python)
+    ]
+    if not missing:
+        return False
+    print(f"[TRELLIS2] pip install python deps {missing}", flush=True)
+    _run([python, "-m", "pip", "install", "--no-cache-dir", *missing])
+    return True
+
+
+def _ensure_opengl_libs() -> None:
+    """pymeshlab plugins need libOpenGL.so.0; Ashley image does not ship it."""
+    candidates = (
+        Path("/usr/lib/x86_64-linux-gnu/libOpenGL.so.0"),
+        Path("/usr/lib/libOpenGL.so.0"),
+    )
+    if any(path.exists() for path in candidates):
+        return
+    if not shutil.which("apt-get"):
+        print("[TRELLIS2] libOpenGL.so.0 missing and apt-get is unavailable", flush=True)
+        return
+    print("[TRELLIS2] apt-get install libopengl0 libgl1", flush=True)
+    _run(["apt-get", "update"])
+    _run(["apt-get", "install", "-y", "libopengl0", "libgl1"])
+
+
 def _alias_sparse_3d_packages(python: str) -> bool:
     """PozzettiAndrea wheels import as *_vb / *_ap; Trellis2 imports o_voxel / cumesh / flex_gemm."""
     purelib = _site_packages(python)
@@ -1649,6 +1683,8 @@ def ensure_pixal3d_runtime(
         or changed
     )
     if include_trellis2:
+        changed = _install_trellis2_python_deps(python) or changed
+        _ensure_opengl_libs()
         changed = _install_blackwell_boot(python) or changed
 
     tmp = Path("/tmp/pixal3d_extensions")

@@ -2,7 +2,7 @@
   "schema": 1,
   "workflow": {
     "name": "trellis2-image-to-3d.json",
-    "sha256": "cd1d7007115fef39a6d218a8761efead98349707af6a76d88232c3ed305c7ad4"
+    "sha256": "f649b540ab198f8ae0c20474461cc171e30af602d50ee09b691dc25d713c7c73"
   },
   "models": [
     {

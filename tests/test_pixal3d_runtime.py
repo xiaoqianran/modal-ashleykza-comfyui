@@ -174,6 +174,50 @@ class InstallSparse3dWheelsTests(unittest.TestCase):
             self.assertIn("_orig_import", boot)
             self.assertNotIn("Blackwell boot skipped", boot)
 
+    def test_trellis2_installs_onnxruntime_for_rembg(self):
+        calls: list[list[str]] = []
+        available = {
+            "flex_gemm",
+            "flex_gemm_ap",
+            "cumesh",
+            "cumesh_vb",
+            "o_voxel",
+            "o_voxel_vb_ap",
+            "nvdiffrast",
+            "nvdiffrec_render",
+        }
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            custom_nodes = root / "custom_nodes"
+            comfy_root.mkdir()
+            custom_nodes.mkdir()
+            with (
+                patch.object(comfy_engine, "_comfy_python", return_value="/usr/bin/python3"),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(
+                    comfy_engine,
+                    "_module_available",
+                    lambda name, _p: name in available,
+                ),
+                patch.object(comfy_engine, "ensure_pixal3d_prebuilt_wheels", return_value=False),
+                patch.object(comfy_engine, "_install_sparse_3d_prebuilt_wheels", return_value=False),
+                patch.object(comfy_engine, "_install_blackwell_boot", return_value=False),
+                patch.object(comfy_engine, "_ensure_opengl_libs"),
+            ):
+                self.assertTrue(
+                    comfy_engine.ensure_pixal3d_runtime(
+                        comfy_root, custom_nodes, include_trellis2=True
+                    )
+                )
+        joined = " ".join(" ".join(cmd) for cmd in calls)
+        self.assertIn("onnxruntime", joined)
+        self.assertNotIn("torch", joined)
+
 
 class PythonTextTests(unittest.TestCase):
     def test_python_text_keeps_last_stdout_line(self):
