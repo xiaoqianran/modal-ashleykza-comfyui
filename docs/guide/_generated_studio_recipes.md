@@ -17,6 +17,7 @@
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
 | Qwen-Image-2512 | L40S | RTX-PRO-6000 | 提示词 |
 | Qwen-Image-2512 Lightning | L40S | RTX-PRO-6000 | 提示词 |
+| SAM 3D Objects | L40S | RTX-PRO-6000 | 上传图 |
 | TRELLIS.2 | RTX-PRO-6000 | RTX-PRO-6000 | 上传图 |
 | TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 | Z-Image-Turbo | L40S | RTX-PRO-6000 | 提示词 |

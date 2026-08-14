@@ -19,6 +19,12 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from sam3d_runtime import (
+    COMFY_ENV_SITE_MARK,
+    _lock_has_sam3d,
+    apply_comfy_env_root,
+    ensure_sam3d_runtime,
+)
 from sparse_3d_runtime import (  # noqa: F401
     NATTEN_WHEEL_INDEX,
     SPARSE_3D_PTH_NAME,
@@ -1267,11 +1273,11 @@ def prepare_runtime(
 
     for name in ("input", "output", "user"):
         _replace_with_symlink(comfy_root / name, workspace / name)
-    # Trellis2LoadModel joins folder_paths.models_dir / "microsoft/..." and
-    # "facebook/..." instead of extra_model_paths. Point those at the Volume.
+    # Some loaders join folder_paths.models_dir / "<category>/..." instead of
+    # extra_model_paths. Point those Image dirs at the Volume.
     models_dir = comfy_root / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("microsoft", "facebook"):
+    for name in ("microsoft", "facebook", "sam3dobjects"):
         _replace_with_symlink(models_dir / name, storage_root / name)
 
     write_optional_node_configs(comfy_root, workspace)
@@ -1319,6 +1325,9 @@ def apply_volume_launch(
     installer = install_nodes or install_registry_nodes
     include_pixal3d = _lock_has_pixal3d(nodes)
     include_trellis2 = _lock_has_trellis2(nodes)
+    include_sam3d = _lock_has_sam3d(nodes)
+    if include_sam3d:
+        apply_comfy_env_root(workspace)
     wheels_changed = False
     if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
         # Wheel first so CNR / TRELLIS.2 do not compile CUDA sdists.
@@ -1347,6 +1356,15 @@ def apply_volume_launch(
             allow_source_compile=False,
             workspace=workspace,
         )
+    if install_lock_nodes and include_sam3d:
+        runtime_changed = (
+            ensure_sam3d_runtime(
+                comfy_root,
+                workspace / "custom_nodes",
+                workspace=workspace,
+            )
+            or runtime_changed
+        )
     fingerprint = launch_fingerprint(
         launch,
         profile_name=profile_name,
@@ -1374,7 +1392,11 @@ def apply_volume_launch(
         wait(port=port, timeout=startup_timeout)
     assert process is not None
     if wheels_changed or runtime_changed:
-        if SPARSE_3D_SITE_MARK not in newly:
+        if _lock_needs_sparse_3d_runtime(nodes) and SPARSE_3D_SITE_MARK not in newly:
+            newly.append(SPARSE_3D_SITE_MARK)
+        if include_sam3d and COMFY_ENV_SITE_MARK not in newly:
+            newly.append(COMFY_ENV_SITE_MARK)
+        if not newly:
             newly.append(SPARSE_3D_SITE_MARK)
     return process, fingerprint, newly
 

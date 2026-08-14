@@ -322,6 +322,21 @@
       }
     },
     {
+      "id": "sam3d",
+      "family": "sam3d",
+      "quant": "bf16",
+      "weights_gb": 14.9,
+      "vram_gb": null,
+      "weights_note": "Meta SAM 3D Objects 图生带贴图 GLB。手修锁：apozz/sam-3d-objects-safetensors → sam3dobjects/。GitHub 节点 ComfyUI-SAM3DObjects@main。comfy-env/pixi 隔离 CUDA（pytorch3d / gsplat / nvdiffrast）落到 workspace Volume .python/comfy-env。不要用 T4。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-SAM3DObjects",
+      "output": "GLB",
+      "smoke": {
+        "status": "pending",
+        "note": "配方已进 catalog。测完停 modal serve。"
+      }
+    },
+    {
       "id": "qwen-image-2512",
       "family": "qwen",
       "quant": "fp8",

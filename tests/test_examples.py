@@ -130,6 +130,42 @@ class ExampleLockTests(unittest.TestCase):
         self.assertEqual(origin, "reused")
         self.assertEqual(len(reused["models"]), len(committed["models"]))
 
+    def test_sam3d_lock_is_curated_and_matches_workflow_hash(self):
+        source = ROOT / "examples" / "sam3d-image-to-3d.json"
+        lock_path = ROOT / "examples" / "sam3d-image-to-3d.lock.json"
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        self.assertEqual(committed["unresolved"], [])
+        self.assertEqual(len(committed["custom_nodes"]), 1)
+        node = committed["custom_nodes"][0]
+        self.assertEqual(node["id"], "ComfyUI-SAM3DObjects")
+        self.assertEqual(node["version"], "main")
+        self.assertEqual(
+            node["url"],
+            "https://github.com/PozzettiAndrea/ComfyUI-SAM3DObjects.git",
+        )
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertIn(("sam3dobjects", "ss_generator.safetensors"), names)
+        self.assertIn(("sam3dobjects", "slat_generator.safetensors"), names)
+        self.assertIn(("sam3dobjects", "pipeline.yaml"), names)
+        self.assertIn(("sam3dobjects", "dinov2_vitl14_reg.safetensors"), names)
+        self.assertIn(("sam3dobjects", "moge_vitl.safetensors"), names)
+        self.assertIn("sam3dobjects", recipes.MODEL_DIRS)
+        urls = {m["filename"]: m["url"] for m in committed["models"]}
+        self.assertIn(
+            "apozz/sam-3d-objects-safetensors",
+            urls["ss_generator.safetensors"],
+        )
+        text = source.read_text(encoding="utf-8")
+        self.assertIn('"type": "LoadImage"', text)
+        self.assertIn("LoadSAM3DModel", text)
+        self.assertIn("SAM3DGenerateSLAT", text)
+        self.assertIn("SAM3DMeshDecode", text)
+        self.assertIn("SAM3DTextureBake", text)
+        reused, origin = workflow_resolver.select_workflow_lock(source, lock_path)
+        self.assertEqual(origin, "reused")
+        self.assertEqual(len(reused["models"]), len(committed["models"]))
+
     def test_flux2_lock_matches_resolve(self):
         source = ROOT / "examples" / "flux2-dev-t2i.json"
         lock_path = ROOT / "examples" / "flux2-dev-t2i.lock.json"

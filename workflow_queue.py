@@ -689,7 +689,7 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
 
 
 SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced"}
-SEED_TYPES = SAMPLER_TYPES | {"RandomNoise"}
+SEED_TYPES = SAMPLER_TYPES | {"RandomNoise", "SAM3DGenerateSLAT"}
 SCHEDULER_TYPES = {"Flux2Scheduler", "Ideogram4Scheduler", "Cosmos3Scheduler"}
 GUIDER_TYPES = {"CFGGuider", "DualModelGuider"}
 SIZE_CLASS_TYPES = {

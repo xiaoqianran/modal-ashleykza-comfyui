@@ -26,6 +26,7 @@ class ModelPatchCategoryTests(unittest.TestCase):
         self.assertIn("cosmos3", recipes.MODEL_DIRS)
         self.assertIn("microsoft", recipes.MODEL_DIRS)
         self.assertIn("facebook", recipes.MODEL_DIRS)
+        self.assertIn("sam3dobjects", recipes.MODEL_DIRS)
 
 
 class ClassifySyntheticTests(unittest.TestCase):
