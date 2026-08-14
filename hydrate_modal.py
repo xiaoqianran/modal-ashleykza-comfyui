@@ -1,7 +1,9 @@
 """CPU-only hydrate into Modal Storage.
 
-Two launch modes (plugins are parsed, never installed here):
+Launch from a Studio catalog id, a workflow JSON, or a legacy profile
+(plugins are parsed, never installed here):
 
+    modal run hydrate_modal.py --catalog z-image
     modal run hydrate_modal.py --workflow examples/z-image-base.json
     modal run hydrate_modal.py --profile qwen-image
 
@@ -229,17 +231,46 @@ def _hydrate_profile(settings: ModalSettings) -> dict:
     }
 
 
+LEGACY_PROFILES_BANNER = (
+    "recipes.PROFILES 是旧的 hydrate 模型包。"
+    "Studio 不用这张表，请看 catalog/*.json 或 docs/guide/models.md。"
+)
+
+
+def print_recipe_surface() -> None:
+    from catalog import catalog_hydrate_rows
+
+    print(LEGACY_PROFILES_BANNER)
+    print("# legacy hydrate packs")
+    for name, recipe in PROFILES.items():
+        print(
+            f"{name:22} "
+            f"models={','.join(recipe.model_packs) or '-':24} "
+            f"nodes={','.join(recipe.node_packs) or '-':24} "
+            f"{recipe.description}"
+        )
+    print()
+    print("# Studio catalogs — modal run hydrate_modal.py --catalog <id>")
+    for row in catalog_hydrate_rows():
+        print(f"{row['id']:28} {row['workflow']}")
+
+
 @app.local_entrypoint()
 def main(
     action: str = "hydrate",
     profile: str = "",
     workflow: str = "",
+    catalog: str = "",
     lock_out: str = "",
     install_nodes: bool = False,
     skip_lock_nodes: bool = False,
 ):
-    """Hydrate models. ``--workflow`` or ``--profile``; plugins are not installed here."""
+    """Hydrate models. ``--catalog``, ``--workflow``, or legacy ``--profile``."""
     action = action.strip().lower()
+    if catalog.strip():
+        from catalog import apply_catalog_hydrate
+
+        workflow, lock_out = apply_catalog_hydrate(catalog.strip(), workflow, lock_out)
     if install_nodes:
         print(
             "warning: --install-nodes on hydrate is ignored; "
@@ -256,18 +287,12 @@ def main(
     )
 
     if action == "profiles":
-        for name, recipe in PROFILES.items():
-            print(
-                f"{name:22} "
-                f"models={','.join(recipe.model_packs) or '-':24} "
-                f"nodes={','.join(recipe.node_packs) or '-':24} "
-                f"{recipe.description}"
-            )
+        print_recipe_surface()
         return
 
     if action == "resolve":
         if settings.launch_mode != "workflow":
-            raise ValueError("--workflow is required for action=resolve")
+            raise ValueError("--catalog or --workflow is required for action=resolve")
         lock = write_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
         print(
             {
@@ -312,10 +337,13 @@ Mode:    {settings.launch_mode}
 Storage: {SETTINGS.models_volume_name} -> {STORAGE_ROOT}
 Workers: {HYDRATE_WORKERS}
 
+# Studio catalog id: same workflow path Studio uses
+modal run hydrate_modal.py --catalog z-image
+
 # workflow JSON: parse models + plugins, download models only
 modal run hydrate_modal.py --workflow examples/z-image-base.json
 
-# named profile: download that profile's model packs
+# legacy profile: download that pack's models (Studio does not use this table)
 modal run hydrate_modal.py --profile qwen-image
 
 # GPU UI (same cached Image; lock CNR on workspace Volume)

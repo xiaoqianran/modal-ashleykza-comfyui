@@ -9,13 +9,14 @@
 ```bash
 python -m pip install -U modal
 modal secret create comfyui-creds --from-dotenv .env --force
-modal run hydrate_modal.py --workflow examples/z-image-base.json
+modal run hydrate_modal.py --catalog z-image
 modal serve comfyui_modal.py
 ```
 
-或按配方：
+或按工作流 JSON / 旧 pack：
 
 ```bash
+modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 modal serve comfyui_modal.py
 ```
@@ -24,7 +25,7 @@ modal serve comfyui_modal.py
 
 | 项 | 默认值 |
 |---|---|
-| 启动方式 | `--workflow` JSON，或 `--profile` 配方 |
+| 启动方式 | `--catalog` id、`--workflow` JSON，或旧 `--profile` pack |
 | 插件 | 锁内 CNR 装到 Volume（不重建 Image）；130 个上游 / 配方额外包默认关 |
 | GPU App | `comfyui-ashleykza-cu128` |
 | Hydrate App | `comfyui-ashleykza-cu128-hydrate` |
@@ -42,5 +43,5 @@ modal serve comfyui_modal.py
 5. [Studio（Z-Image）](guide/studio.md)
 6. [模型列表](guide/models.md)
 7. [环境变量](reference/configuration.md)
-8. [配方](guide/recipes.md)
+8. [旧 hydrate 配方](guide/recipes.md)
 9. [图库](gallery/index.md)

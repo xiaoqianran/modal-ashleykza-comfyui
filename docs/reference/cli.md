@@ -5,9 +5,10 @@
 CPU App，只下载模型。
 
 ```bash
+modal run hydrate_modal.py --catalog z-image
 modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
-modal run hydrate_modal.py --action resolve --workflow workflow.json
+modal run hydrate_modal.py --action resolve --catalog pixal3d
 modal run hydrate_modal.py --action profiles
 modal run hydrate_modal.py --action outputs
 modal run hydrate_modal.py --action repair
@@ -15,8 +16,9 @@ modal run hydrate_modal.py --action repair
 
 | 参数 | 说明 |
 |---|---|
+| `--catalog` | Studio 配方 id，别名到该 JSON 的 workflow / lock |
 | `--workflow` | 工作流 JSON / PNG（workflow 模式） |
-| `--profile` | 配方名（profile 模式，默认 `base`） |
+| `--profile` | 旧 hydrate pack（profile 模式，默认 `base`；Studio 不用这张表） |
 | `--lock-out` | 锁文件路径 |
 | `--skip-lock-nodes` | GPU 启动时跳过锁内 CNR |
 | `--install-nodes` | **无效**（hydrate 不构建 GPU Image）。配方额外包请在 serve/deploy 时设 `COMFY_INSTALL_NODES=1` |

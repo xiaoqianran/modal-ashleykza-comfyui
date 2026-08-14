@@ -16,20 +16,23 @@ modal secret create comfyui-creds --from-dotenv .env --force
 解析 JSON 里的 model 与插件声明，只把**模型**写入 Storage；锁写到 Volume `.state/launch.json`：
 
 ```bash
-modal run hydrate_modal.py --workflow examples/z-image-base.json
+modal run hydrate_modal.py --catalog z-image
+# 或 modal run hydrate_modal.py --workflow examples/z-image-base.json
 MODAL_GPU=L40S modal serve comfyui_modal.py
 ```
 
 默认 GPU 是 L40S，不要用 T4。测完 **Ctrl+C** 停掉 serve；只把页面开着会阻止 5 秒缩容。
 
-## 2b. Profile
+## 2b. 旧 Profile
+
+Studio 不用 `recipes.PROFILES`。只有下载 nordy / wan / ltx23 这类旧模型包时才用：
 
 ```bash
 modal run hydrate_modal.py --profile qwen-image
 modal serve comfyui_modal.py
 ```
 
-可用名称：`modal run hydrate_modal.py --action profiles`
+`--action profiles` 会说明这一点，并同时列出 Studio catalog id。
 
 ## 3. 验证
 

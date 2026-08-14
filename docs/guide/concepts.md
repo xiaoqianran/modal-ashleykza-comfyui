@@ -4,13 +4,16 @@ GPU 容器不负责下载权重。权重只由 CPU Hydrate 写入 Volume；GPU �
 
 ```mermaid
 flowchart LR
-  WF[工作流 JSON] --> HY[hydrate_modal.py<br/>CPU]
+  CAT[catalog/*.json] --> HY[hydrate_modal.py<br/>CPU]
+  WF[工作流 JSON] --> HY
   HY --> VOL[(Volume<br/>comfyui-ashleykza-models)]
   WS[(Volume<br/>comfyui-ashleykza-workspace)]
   VOL --> GPU[comfyui_modal.py<br/>GPU UI]
   WS --> GPU
   GPU --> WEB[*.modal.run]
 ```
+
+Studio 顶栏和 `hydrate --catalog` 读同一份 `catalog/*.json`。`recipes.PROFILES` 只给旧模型包，不是产品目录。
 
 ## 两个 App
 

@@ -7,8 +7,10 @@ import workflow_resolver
 from catalog import (
     DEFAULT_CATALOG_ID,
     ROOT,
+    apply_catalog_hydrate,
     bind_graph,
     build_prompt,
+    catalog_hydrate_rows,
     list_catalogs,
     load_catalog,
     public_catalog,
@@ -107,6 +109,32 @@ class CatalogTests(unittest.TestCase):
         catalog["graph"] = {"1": {"class_type": "X", "inputs": {"text": "$missing"}}}
         with self.assertRaises(KeyError):
             bind_graph(catalog, {"prompt": "x", "seed": 1})
+
+    def test_catalog_hydrate_alias_uses_repo_relative_paths(self):
+        workflow, lock = apply_catalog_hydrate("z-image")
+        self.assertEqual(workflow, "examples/z-image-base.json")
+        self.assertEqual(lock, "examples/z-image-base.lock.json")
+        pixal_workflow, pixal_lock = apply_catalog_hydrate("pixal3d")
+        self.assertEqual(pixal_workflow, "examples/pixal3d-image-to-3d.json")
+        self.assertEqual(pixal_lock, "examples/pixal3d-image-to-3d.lock.json")
+        explicit_workflow, explicit_lock = apply_catalog_hydrate(
+            "z-image",
+            workflow="examples/other.json",
+            lock_out="tmp/other.lock.json",
+        )
+        self.assertEqual(explicit_workflow, "examples/other.json")
+        self.assertEqual(explicit_lock, "tmp/other.lock.json")
+        rows = catalog_hydrate_rows()
+        ids = [row["id"] for row in rows]
+        self.assertEqual(ids[0], DEFAULT_CATALOG_ID)
+        self.assertIn("trellis2", ids)
+        z_image = next(row for row in rows if row["id"] == "z-image")
+        self.assertEqual(z_image["workflow"], "examples/z-image-base.json")
+        for row in rows:
+            self.assertTrue((ROOT / row["workflow"]).is_file(), row["id"])
+            self.assertTrue((ROOT / row["lock"]).is_file(), row["id"])
+        with self.assertRaises(FileNotFoundError):
+            apply_catalog_hydrate("not-a-recipe")
 
     def test_workflow_file_exists(self):
         self.assertTrue(workflow_path(load_catalog("z-image")).is_file())
