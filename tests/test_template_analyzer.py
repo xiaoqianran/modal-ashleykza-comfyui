@@ -23,6 +23,7 @@ class ModelPatchCategoryTests(unittest.TestCase):
         self.assertIn("detection", recipes.MODEL_DIRS)
         self.assertIn("frame_interpolation", recipes.MODEL_DIRS)
         self.assertIn("optical_flow", recipes.MODEL_DIRS)
+        self.assertIn("cosmos3", recipes.MODEL_DIRS)
 
 
 class ClassifySyntheticTests(unittest.TestCase):

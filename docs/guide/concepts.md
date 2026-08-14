@@ -39,6 +39,8 @@ flowchart LR
   text_encoders/
   vae/
   loras/
+  cosmos3/
+  Pixal3D/
   .state/comfy.lock.json
   .state/launch.json
   .state/workflow.lock.json

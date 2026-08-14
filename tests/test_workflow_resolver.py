@@ -449,6 +449,37 @@ class RegistryVolumeInstallTests(unittest.TestCase):
             )
             self.assertEqual(second, [])
 
+    def test_github_node_clones_onto_volume_and_installs_requirements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            volume_custom = root / "workspace" / "custom_nodes"
+            volume_custom.mkdir(parents=True)
+            calls: list[list[str]] = []
+
+            def fake_run(cmd, **_kwargs):
+                calls.append(list(cmd))
+                if list(cmd[:2]) == ["git", "clone"]:
+                    dest = Path(cmd[-1])
+                    dest.mkdir(parents=True)
+                    (dest / "requirements.txt").write_text("transformers>=4.51\n", encoding="utf-8")
+
+            with patch.object(comfy_engine, "_run", fake_run):
+                moved = comfy_engine._install_github_node(
+                    {
+                        "id": "ComfyUI-Cosmos3",
+                        "version": "main",
+                        "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
+                    },
+                    volume_custom,
+                    python="python3",
+                )
+            self.assertEqual(moved, ["ComfyUI-Cosmos3"])
+            self.assertTrue((volume_custom / "ComfyUI-Cosmos3" / "requirements.txt").is_file())
+            self.assertTrue(any(cmd[:2] == ["git", "clone"] for cmd in calls))
+            self.assertTrue(
+                any(cmd[:3] == ["python3", "-m", "pip"] and "-r" in cmd for cmd in calls)
+            )
+
     def test_gpu_module_does_not_bake_lock_into_image(self):
         text = (Path(__file__).resolve().parents[1] / "comfyui_modal.py").read_text(
             encoding="utf-8"

@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "id": "cosmos3-super",
+  "title": "Cosmos3-Super",
+  "summary": "NVIDIA Cosmos 3 64B 全能基座，文生视频（832×480 / 93 帧 / 24fps）。bf16 约 120GB，单卡放不下；本配方用 ConvRot int4（约 47GB）+ split_reasoner。测试 L40S，正式 RTX-PRO-6000。不要用 T4。",
+  "kind": "t2v",
+  "mode": "workflow",
+  "workflow": "examples/cosmos3-super-t2v.json",
+  "lock": "examples/cosmos3-super-t2v.lock.json",
+  "gpu": "L40S",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": [
+    "L40S",
+    "RTX-PRO-6000"
+  ],
+  "client_id": "studio-cosmos3-super",
+  "filename_prefix": "Cosmos3_super",
+  "io": {
+    "images_in": 0
+  },
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。绑 RandomNoise。"
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 35,
+      "minimum": 4,
+      "maximum": 80
+    },
+    {
+      "id": "cfg",
+      "type": "float",
+      "bind": "cfg",
+      "title": "CFG",
+      "default": 6.0,
+      "minimum": 1.0,
+      "maximum": 12.0,
+      "step": 0.5
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 832,
+      "minimum": 512,
+      "maximum": 1280,
+      "step": 16
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 480,
+      "minimum": 256,
+      "maximum": 720,
+      "step": 16
+    }
+  ]
+}

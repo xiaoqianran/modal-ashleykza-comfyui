@@ -178,6 +178,67 @@ class ExampleLockTests(unittest.TestCase):
         self.assertIn('"Enable 8 Steps LoRA?"', text)
         self.assertIn("enable_turbo_mode", text)
 
+    def test_cosmos3_locks_are_curated_and_match_workflow_hash(self):
+        cases = (
+            (
+                "cosmos3-nano-t2v.json",
+                "cosmos3-nano-t2v.lock.json",
+                "Cosmos3-Nano/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Nano-int4-convrot.safetensors",
+                False,
+            ),
+            (
+                "cosmos3-super-t2v.json",
+                "cosmos3-super-t2v.lock.json",
+                "Cosmos3-Super/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Super-int4-convrot.safetensors",
+                True,
+            ),
+            (
+                "cosmos3-super-text2image.json",
+                "cosmos3-super-text2image.lock.json",
+                "Cosmos3-Super/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Super-int4-convrot.safetensors",
+                True,
+            ),
+            (
+                "cosmos3-super-image2video.json",
+                "cosmos3-super-image2video.lock.json",
+                "Cosmos3-Super-Image2Video/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Super-Image2Video-int4-convrot.safetensors",
+                True,
+            ),
+        )
+        self.assertIn("cosmos3", recipes.MODEL_DIRS)
+        for workflow_name, lock_name, filename, convrot, split in cases:
+            source = ROOT / "examples" / workflow_name
+            lock_path = ROOT / "examples" / lock_name
+            committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+            self.assertTrue(
+                workflow_resolver.lock_matches_workflow(committed, source),
+                workflow_name,
+            )
+            self.assertEqual(committed["unresolved"], [])
+            self.assertEqual(len(committed["custom_nodes"]), 1, workflow_name)
+            node = committed["custom_nodes"][0]
+            self.assertEqual(node["id"], "ComfyUI-Cosmos3")
+            self.assertEqual(node["version"], "main")
+            self.assertEqual(
+                node["url"],
+                "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
+            )
+            names = {(m["category"], m["filename"]) for m in committed["models"]}
+            self.assertIn(("cosmos3", filename), names, workflow_name)
+            urls = {m["filename"]: m["url"] for m in committed["models"]}
+            self.assertIn(convrot, urls[filename], workflow_name)
+            text = source.read_text(encoding="utf-8")
+            self.assertIn('"cnr_id": "ComfyUI-Cosmos3"', text)
+            if split:
+                self.assertIn("Cosmos3UndTowerLoader", text)
+            reused, origin = workflow_resolver.select_workflow_lock(source, lock_path)
+            self.assertEqual(origin, "reused", workflow_name)
+            self.assertEqual(len(reused["models"]), len(committed["models"]))
+
     def test_ltx_lock_is_curated_and_matches_workflow_hash(self):
         source = ROOT / "examples" / "ltx-2.5-t2v-i2v-distilled.json"
         lock_path = ROOT / "examples" / "ltx-2.5-t2v-i2v-distilled.lock.json"

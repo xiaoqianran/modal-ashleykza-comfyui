@@ -964,7 +964,11 @@ def install_registry_nodes(
 
         url = str(node.get("url") or "").strip()
         if url:
-            moved = _install_github_node(node, volume_custom)
+            moved = _install_github_node(
+                node,
+                volume_custom,
+                python=_comfy_python(comfy_root),
+            )
         else:
             before = _dir_names(image_custom)
             run_install(node, comfy_root=comfy_root)
@@ -1001,7 +1005,12 @@ def _github_repo_dir_name(url: str) -> str:
     return name
 
 
-def _install_github_node(node: Mapping[str, Any], volume_custom: Path) -> list[str]:
+def _install_github_node(
+    node: Mapping[str, Any],
+    volume_custom: Path,
+    *,
+    python: str | None = None,
+) -> list[str]:
     url = str(node["url"]).strip()
     name = _github_repo_dir_name(url)
     dest = volume_custom / name
@@ -1021,6 +1030,9 @@ def _install_github_node(node: Mapping[str, Any], volume_custom: Path) -> list[s
         if dest.exists():
             shutil.rmtree(dest)
         _run(["git", "clone", "--depth=1", url, str(dest)])
+    requirements = dest / "requirements.txt"
+    if python and requirements.is_file():
+        _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(requirements)])
     return [name]
 
 

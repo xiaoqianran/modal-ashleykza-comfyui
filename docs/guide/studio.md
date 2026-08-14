@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat / Cosmos3-Super-Image2Video 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Super / Cosmos3-Super-Text2Image 仍是提示词。不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -16,7 +16,7 @@
 
 - 本机联网、Modal 账号、Hugging Face token
 - 走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 Modal 带 `api-proxy-support`）；不要代理就设 `MODAL_DISABLE_API_PROXY=1`
-- FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image / Z-Image-Turbo 不需要）
+- FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Cosmos3 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image / Z-Image-Turbo 不需要）
 - 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
 
 密钥写在 `%LOCALAPPDATA%\ComfyStudio\runtime\app\.studio.env`，不会上传 Git。生成结束后默认停 GPU。
@@ -44,6 +44,10 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | Qwen-Image-2512 Lightning | L40S | RTX-PRO-6000 | 提示词 |
 | Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
 | Ideogram 4 | L40S | RTX-PRO-6000 | 提示词 |
+| Cosmos3-Nano | L40S | RTX-PRO-6000 | 提示词（文生视频） |
+| Cosmos3-Super | L40S | RTX-PRO-6000 | 提示词（文生视频） |
+| Cosmos3-Super-Text2Image | L40S | RTX-PRO-6000 | 提示词 |
+| Cosmos3-Super-Image2Video | L40S | RTX-PRO-6000 | 上传图 + 提示词 |
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
 | TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 

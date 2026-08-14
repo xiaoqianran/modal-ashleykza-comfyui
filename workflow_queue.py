@@ -28,6 +28,7 @@ TEXT_CLASS_TYPES = {
     "CLIPTextEncode",
     "CLIPTextEncodeSDXL",
     "CLIPTextEncodeFlux",
+    "Cosmos3TextEncode",
     "PrimitiveStringMultiline",
     "PrimitiveString",
 }
@@ -409,7 +410,14 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
 
 SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced"}
 SEED_TYPES = SAMPLER_TYPES | {"RandomNoise"}
-SCHEDULER_TYPES = {"Flux2Scheduler", "Ideogram4Scheduler"}
+SCHEDULER_TYPES = {"Flux2Scheduler", "Ideogram4Scheduler", "Cosmos3Scheduler"}
+GUIDER_TYPES = {"CFGGuider"}
+SIZE_CLASS_TYPES = {
+    "Cosmos3EmptyAVLatentVideo",
+    "Cosmos3EmptyLatentVideo",
+    "Cosmos3ImageToVideo",
+    "Cosmos3TextEncode",
+}
 NUMBER_KEYS = {"seed", "steps", "cfg", "denoise", "width", "height"}
 SEED_INPUT_KEYS = ("seed", "noise_seed")
 
@@ -432,13 +440,14 @@ def bind_number_inputs(prompt: dict[str, Any], values: Mapping[str, Any]) -> dic
             for key in SEED_INPUT_KEYS:
                 if key in inputs:
                     inputs[key] = wanted["seed"]
-        if class_type in SAMPLER_TYPES | SCHEDULER_TYPES:
+        if class_type in SAMPLER_TYPES | SCHEDULER_TYPES | GUIDER_TYPES:
             for key in ("steps", "cfg", "denoise"):
                 if key in wanted and key in inputs:
                     inputs[key] = wanted[key]
         if (
-            (class_type.startswith("Empty") and "Latent" in class_type)
+            ("Empty" in class_type and "Latent" in class_type)
             or class_type in SCHEDULER_TYPES
+            or class_type in SIZE_CLASS_TYPES
         ):
             for key in ("width", "height"):
                 if key in wanted and key in inputs:
@@ -460,8 +469,11 @@ def bind_filename_prefix(prompt: dict[str, Any], prefix: str) -> dict[str, Any]:
 
 def _text_input_key(node: dict[str, Any]) -> str:
     inputs = node.setdefault("inputs", {})
-    if "text" in inputs or str(node.get("class_type") or "").startswith("CLIPText"):
+    class_type = str(node.get("class_type") or "")
+    if "text" in inputs or class_type.startswith("CLIPText"):
         return "text"
+    if "prompt" in inputs:
+        return "prompt"
     return "value"
 
 
