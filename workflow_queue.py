@@ -23,7 +23,8 @@ from typing import Any
 
 from storage import safe_dest_file
 
-OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "mesh", "files")
+OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "mesh", "files", "result")
+MESH_SUFFIXES = frozenset({".glb", ".gltf", ".spz", ".splat", ".ply", ".obj"})
 TEXT_CLASS_TYPES = {
     "CLIPTextEncode",
     "CLIPTextEncodeSDXL",
@@ -693,34 +694,90 @@ def queue_prompt(base: str, prompt: dict[str, Any], client_id: str) -> str:
     return str(prompt_id)
 
 
+def iter_mesh_names(obj: Any) -> list[str]:
+    """Collect mesh/splat paths hidden in history ``result`` / ``text`` / nested lists."""
+    names: list[str] = []
+    if isinstance(obj, str):
+        path = obj.replace("\\", "/")
+        if Path(path).suffix.lower() in MESH_SUFFIXES:
+            names.append(path)
+    elif isinstance(obj, Mapping):
+        for value in obj.values():
+            names.extend(iter_mesh_names(value))
+    elif isinstance(obj, list | tuple):
+        for item in obj:
+            names.extend(iter_mesh_names(item))
+    return names
+
+
+def _as_view_item(raw: Any) -> dict[str, str] | None:
+    if isinstance(raw, str):
+        filename = raw.replace("\\", "/")
+        if not Path(filename).name:
+            return None
+        return {"filename": filename, "subfolder": "", "type": "output"}
+    if isinstance(raw, Mapping) and raw.get("filename"):
+        return {
+            "filename": str(raw["filename"]).replace("\\", "/"),
+            "subfolder": str(raw.get("subfolder") or ""),
+            "type": str(raw.get("type") or "output"),
+        }
+    return None
+
+
+def history_view_items(history: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Turn ComfyUI ``/history`` outputs into ``/view`` query items.
+
+    Official Save* nodes use ``images`` / ``gifs`` / ``videos``. TRELLIS.2 and
+    Pixal3D put a filesystem path in ``result`` or ``text`` instead.
+    """
+    items: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def add(raw: Any) -> None:
+        item = _as_view_item(raw)
+        if item is None:
+            return
+        name = Path(item["filename"]).name
+        if not name or name in {".", ".."}:
+            return
+        key = (name, item["subfolder"], item["type"])
+        if key in seen:
+            return
+        seen.add(key)
+        items.append({**item, "filename": name})
+
+    for node_output in (history.get("outputs") or {}).values():
+        if not isinstance(node_output, Mapping):
+            continue
+        for key in OUTPUT_KEYS:
+            for raw in node_output.get(key) or []:
+                add(raw)
+    for path in iter_mesh_names(history):
+        add(path)
+    return items
+
+
 def download_outputs(base: str, history: dict[str, Any], dest: Path) -> list[Path]:
     saved: list[Path] = []
     dest.mkdir(parents=True, exist_ok=True)
     root = base.rstrip("/")
-    for node_output in (history.get("outputs") or {}).values():
-        if not isinstance(node_output, dict):
-            continue
-        for key in OUTPUT_KEYS:
-            for item in node_output.get(key) or []:
-                if isinstance(item, str):
-                    item = {"filename": item}
-                if not isinstance(item, dict) or not item.get("filename"):
-                    continue
-                query = urllib.parse.urlencode(
-                    {
-                        "filename": item["filename"],
-                        "subfolder": item.get("subfolder") or "",
-                        "type": item.get("type") or "output",
-                    }
-                )
-                path = safe_dest_file(dest, str(item["filename"]))
-                with urllib.request.urlopen(f"{root}/view?{query}", timeout=300) as response:
-                    path.write_bytes(response.read())
-                saved.append(path)
-                print(
-                    json.dumps({"saved": str(path), "bytes": path.stat().st_size}),
-                    flush=True,
-                )
+    for item in history_view_items(history):
+        query = urllib.parse.urlencode(
+            {
+                "filename": item["filename"],
+                "subfolder": item["subfolder"],
+                "type": item["type"],
+            }
+        )
+        path = safe_dest_file(dest, item["filename"])
+        with urllib.request.urlopen(f"{root}/view?{query}", timeout=300) as response:
+            path.write_bytes(response.read())
+        saved.append(path)
+        print(
+            json.dumps({"saved": str(path), "bytes": path.stat().st_size}),
+            flush=True,
+        )
     status = (history.get("status") or {}).get("status_str")
     if status and status != "success" and not saved:
         raise RuntimeError(f"ComfyUI history status={status!r} and no outputs")

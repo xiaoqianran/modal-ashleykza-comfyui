@@ -7,8 +7,6 @@ import argparse
 import json
 import sys
 import time
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -20,8 +18,9 @@ from workflow_queue import (  # noqa: E402,I001
     IDLE_REMINDER,
     bind_load_image,
     convert_ui_workflow as convert_with_browser,
-    download_outputs as download_history_outputs,
+    download_outputs,
     http_json as _http_json,
+    iter_mesh_names,
     upload_image,
     wait_history,
     wait_ready,
@@ -31,36 +30,7 @@ CLIENT_ID = "pixal3d-agent"
 
 
 def _iter_glb_names(obj: Any) -> list[str]:
-    names: list[str] = []
-    if isinstance(obj, str) and obj.lower().endswith(".glb"):
-        names.append(obj.replace("\\", "/"))
-    elif isinstance(obj, dict):
-        for value in obj.values():
-            names.extend(_iter_glb_names(value))
-    elif isinstance(obj, list):
-        for item in obj:
-            names.extend(_iter_glb_names(item))
-    return names
-
-
-def download_outputs(base: str, history: dict, dest: Path) -> list[Path]:
-    saved = download_history_outputs(base, history, dest)
-    seen = {path.name for path in saved}
-    for raw in _iter_glb_names(history):
-        name = Path(raw).name
-        if name in seen:
-            continue
-        query = urllib.parse.urlencode(
-            {"filename": name, "subfolder": "", "type": "output"}
-        )
-        path = dest / name
-        dest.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(f"{base}/view?{query}", timeout=300) as response:
-            path.write_bytes(response.read())
-        saved.append(path)
-        seen.add(name)
-        print(json.dumps({"saved": str(path), "bytes": path.stat().st_size}), flush=True)
-    return saved
+    return [name for name in iter_mesh_names(obj) if name.lower().endswith(".glb")]
 
 
 def main() -> None:
