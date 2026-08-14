@@ -191,24 +191,22 @@ def _comfy_env_packages(
     return sorted(found, key=lambda path: str(path))
 
 
-def _clear_volume_comfy_env(workspace: str | Path) -> bool:
-    """Drop Volume ``comfy_env`` so it cannot shadow the patched Image copy."""
-    root = Path(workspace) / ".python" / "node-reqs"
-    removed = False
-    package = root / "comfy_env"
-    if package.is_dir():
-        shutil.rmtree(package)
-        removed = True
-    for item in root.glob("comfy_env-*.dist-info"):
-        if item.is_dir():
-            shutil.rmtree(item)
-            removed = True
-        elif item.is_file():
-            item.unlink()
-            removed = True
-    if removed:
-        print("[SAM3D] removed Volume comfy_env so Image isolation patches apply", flush=True)
-    return removed
+def _ensure_volume_comfy_env(workspace: str | Path, python: str) -> bool:
+    """``comfy-env`` must live on the Volume site because the Image may not have it.
+
+    The parent process imports this copy via ``comfy_node_reqs.pth``. Patch it
+    after this returns; do not delete it.
+    """
+    from uv_runtime import pip_install_cmd
+
+    site = Path(workspace) / ".python" / "node-reqs"
+    package = site / "comfy_env"
+    if package.is_dir() and (package / "isolation" / "workers" / "subprocess.py").is_file():
+        return False
+    site.mkdir(parents=True, exist_ok=True)
+    print(f"[SAM3D] installing comfy-env onto Volume site {site}", flush=True)
+    _ce()._run(pip_install_cmd(python, "comfy-env", site_dir=site))
+    return True
 
 
 def patch_comfy_env_isolation(
@@ -346,7 +344,8 @@ def ensure_sam3d_runtime(
     root = apply_comfy_env_root(workspace)
     (Path(workspace) / "logs").mkdir(parents=True, exist_ok=True)
     pixi_changed = ensure_pixi_cli(workspace)
-    volume_shadow = _clear_volume_comfy_env(workspace)
+    python = _ce()._comfy_python(Path(comfy_root))
+    volume_comfy_env = _ensure_volume_comfy_env(workspace, python)
     installed = False
     if _pixi_env_ready(root):
         print(f"[SAM3D] pixi env already on Volume {root}", flush=True)
@@ -370,4 +369,4 @@ def ensure_sam3d_runtime(
         installed = True
     patch_comfy_env_isolation(comfy_root, workspace=workspace)
     warm_pixi_env(workspace)
-    return pixi_changed or installed or volume_shadow
+    return pixi_changed or installed or volume_comfy_env

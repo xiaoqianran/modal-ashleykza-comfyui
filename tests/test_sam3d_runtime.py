@@ -58,6 +58,22 @@ def _fake_pixi(path: Path) -> Path:
     return path
 
 
+def _volume_comfy_env(workspace: Path) -> Path:
+    worker = (
+        workspace
+        / ".python"
+        / "node-reqs"
+        / "comfy_env"
+        / "isolation"
+        / "workers"
+        / "subprocess.py"
+    )
+    worker.parent.mkdir(parents=True, exist_ok=True)
+    if not worker.is_file():
+        worker.write_text("stdout=subprocess.DEVNULL,\n", encoding="utf-8")
+    return worker
+
+
 def _ready_pixi_python(workspace: Path) -> Path:
     env_python = (
         workspace
@@ -164,6 +180,7 @@ class Sam3dRuntimeTests(unittest.TestCase):
             custom.mkdir(parents=True)
             (custom / "install.py").write_text("raise SystemExit('nope')\n", encoding="utf-8")
             _ready_pixi_python(workspace)
+            _volume_comfy_env(workspace)
             _fake_pixi(sam3d_runtime.volume_pixi_bin(workspace))
             home_bin = root / "home" / ".pixi" / "bin" / "pixi"
             calls: list[list[str]] = []
@@ -195,6 +212,7 @@ class Sam3dRuntimeTests(unittest.TestCase):
             custom.mkdir(parents=True)
             (custom / "install.py").write_text("raise SystemExit('nope')\n", encoding="utf-8")
             _ready_pixi_python(workspace)
+            _volume_comfy_env(workspace)
             home_bin = root / "home" / ".pixi" / "bin" / "pixi"
 
             def fake_download(dest: Path) -> None:
@@ -273,8 +291,9 @@ class Sam3dRuntimeTests(unittest.TestCase):
             self.assertIn("matches.sort", wrap)
             volume_worker = (volume_site / "subprocess.py").read_text(encoding="utf-8")
             self.assertIn("recv(timeout=600)", volume_worker)
-            self.assertTrue(sam3d_runtime._clear_volume_comfy_env(workspace))
-            self.assertFalse((workspace / ".python" / "node-reqs" / "comfy_env").exists())
+            self.assertFalse(
+                sam3d_runtime._ensure_volume_comfy_env(workspace, "python3")
+            )
 
     def test_warm_pixi_env_runs_isolated_python(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -306,6 +325,7 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 '[node_reqs]\nComfyUI-GeometryPack = "PozzettiAndrea/ComfyUI-GeometryPack"\n',
                 encoding="utf-8",
             )
+            _volume_comfy_env(workspace)
             calls: list[dict] = []
             home_bin = root / "home" / ".pixi" / "bin" / "pixi"
 
