@@ -58,19 +58,15 @@ def _fake_pixi(path: Path) -> Path:
     return path
 
 
-def _volume_comfy_env(workspace: Path) -> Path:
-    worker = (
-        workspace
-        / ".python"
-        / "node-reqs"
-        / "comfy_env"
-        / "isolation"
-        / "workers"
-        / "subprocess.py"
-    )
+def _volume_comfy_env(workspace: Path, version: str = sam3d_runtime.COMFY_ENV_VERSION) -> Path:
+    site = workspace / ".python" / "node-reqs"
+    worker = site / "comfy_env" / "isolation" / "workers" / "subprocess.py"
     worker.parent.mkdir(parents=True, exist_ok=True)
     if not worker.is_file():
         worker.write_text("stdout=subprocess.DEVNULL,\n", encoding="utf-8")
+    meta = site / f"comfy_env-{version}.dist-info" / "METADATA"
+    meta.parent.mkdir(parents=True, exist_ok=True)
+    meta.write_text(f"Name: comfy-env\nVersion: {version}\n", encoding="utf-8")
     return worker
 
 
@@ -265,17 +261,13 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 "        sp = Path(matches[0]) if matches else None\n",
                 encoding="utf-8",
             )
-            volume_site = (
-                Path(directory) / "workspace" / ".python" / "node-reqs" / "comfy_env"
-                / "isolation" / "workers"
-            )
-            volume_site.mkdir(parents=True)
-            (volume_site / "subprocess.py").write_text(
+            workspace = Path(directory) / "workspace"
+            volume_worker = _volume_comfy_env(workspace)
+            volume_worker.write_text(
                 "                msg = self._transport.recv(timeout=60)\n"
                 "        stdout=subprocess.DEVNULL,\n",
                 encoding="utf-8",
             )
-            workspace = Path(directory) / "workspace"
             self.assertTrue(sam3d_runtime.patch_comfy_env_isolation(comfy, workspace=workspace))
             self.assertFalse(sam3d_runtime.patch_comfy_env_isolation(comfy, workspace=workspace))
             ipc = (site / "_ipc_shared.py").read_text(encoding="utf-8")
@@ -289,10 +281,32 @@ class Sam3dRuntimeTests(unittest.TestCase):
             self.assertIn(sam3d_runtime.WORKER_LOG, worker)
             self.assertNotIn("stdout=subprocess.DEVNULL", worker)
             self.assertIn("matches.sort", wrap)
-            volume_worker = (volume_site / "subprocess.py").read_text(encoding="utf-8")
+            volume_worker = volume_worker.read_text(encoding="utf-8")
             self.assertIn("recv(timeout=600)", volume_worker)
             self.assertFalse(
                 sam3d_runtime._ensure_volume_comfy_env(workspace, "python3")
+            )
+
+    def test_ensure_volume_comfy_env_reinstalls_unpinned_or_04(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "workspace"
+            _volume_comfy_env(workspace, version="0.4.18")
+            calls: list[list[str]] = []
+
+            def fake_run(cmd, **_kwargs):
+                calls.append(cmd)
+                _volume_comfy_env(workspace)
+
+            with patch.object(comfy_engine, "_run", fake_run):
+                changed = sam3d_runtime._ensure_volume_comfy_env(workspace, "python3")
+            self.assertTrue(changed)
+            self.assertEqual(len(calls), 1)
+            self.assertIn(sam3d_runtime.COMFY_ENV_PIN, calls[0])
+            self.assertEqual(
+                sam3d_runtime._installed_comfy_env_version(
+                    workspace / ".python" / "node-reqs"
+                ),
+                sam3d_runtime.COMFY_ENV_VERSION,
             )
 
     def test_warm_pixi_env_runs_isolated_python(self):

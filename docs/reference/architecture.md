@@ -112,7 +112,7 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
 | Isolation worker 进程 | 容器内拉起 | 必须再拉一次 | 进程跟容器一起死 |
 | OpenGL `apt-get`、Blackwell boot `.pth` | 每次写进当前容器 | 每次都做（便宜） | 不在 Volume 上 |
 
-`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存。serve 还在，下一次 HTTP 会再起一个 GPU 容器；空闲的 `modal deploy`（0 tasks）不计 GPU。comfy-env 0.3.x 连上 socket 之后 ready 等待写死 60s；SAM 3D 首次 `import torch` 经常超过这个时间，所以启动时把 ready 超时改成 600s，并把 worker stdout 落到 Volume 日志。
+`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存。serve 还在，下一次 HTTP 会再起一个 GPU 容器；空闲的 `modal deploy`（0 tasks）不计 GPU。comfy-env 必须钉 `0.3.89`：0.4+ 看不见 0.3 的 pixi 布局，节点会在宿主机执行。0.3.x 连上 socket 之后 ready 等待写死 60s；SAM 3D 首次 `import torch` 经常超过这个时间，所以启动时把 ready 超时改成 600s，并把 worker stdout 落到 Volume 日志。
 
 ## Volume 路径
 

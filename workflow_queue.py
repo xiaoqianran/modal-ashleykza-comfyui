@@ -84,6 +84,17 @@ async (workflow) => {
             const ready = expectedTypes.length > 0 && expectedTypes.every((type) => loadedTypes.includes(type));
             if (ready && nodes.every(widgetsNamed)) break;
         }
+        const graphReady = expectedTypes.length > 0 && expectedTypes.every((type) => loadedTypes.includes(type));
+        if (expectedTypes.length > 0 && !graphReady) {
+            return {
+                ok: false,
+                error: 'loadGraphData did not load expected node types',
+                loadedTypes,
+                expectedTypes,
+                registered,
+                defined,
+            };
+        }
         const converted = await app.graphToPrompt();
         const prompt = converted?.output || converted;
         const missing = [];
@@ -497,6 +508,19 @@ def _is_unknown_input_key(key: str) -> bool:
     return key == "UNKNOWN" or key.startswith("UNKNOWN_")
 
 
+_CONTROL_AFTER_GENERATE = frozenset({"fixed", "increment", "decrement", "randomize"})
+
+
+def _is_widget_spec(spec: Any) -> bool:
+    if not isinstance(spec, list | tuple) or not spec:
+        return False
+    first = spec[0]
+    opts = spec[1] if len(spec) > 1 and isinstance(spec[1], Mapping) else {}
+    if opts.get("forceInput"):
+        return False
+    return isinstance(first, list | tuple) or first in _PRIMITIVE_WIDGET_TYPES
+
+
 def widget_input_names(node_def: Mapping[str, Any] | None) -> list[str]:
     """Widget names in ComfyUI INPUT_TYPES order (required then optional)."""
     names: list[str] = []
@@ -508,10 +532,86 @@ def widget_input_names(node_def: Mapping[str, Any] | None) -> list[str]:
         if not isinstance(block, Mapping):
             continue
         for name, spec in block.items():
-            first = spec[0] if isinstance(spec, list | tuple) and spec else spec
-            if isinstance(first, list | tuple) or first in _PRIMITIVE_WIDGET_TYPES:
+            if _is_widget_spec(spec):
                 names.append(str(name))
     return names
+
+
+def _drop_control_after_generate(values: list[Any]) -> list[Any]:
+    cleaned: list[Any] = []
+    index = 0
+    while index < len(values):
+        cleaned.append(values[index])
+        if (
+            index + 1 < len(values)
+            and str(values[index + 1]).lower() in _CONTROL_AFTER_GENERATE
+        ):
+            index += 2
+            continue
+        index += 1
+    return cleaned
+
+
+def ui_workflow_to_api_prompt(
+    workflow: Mapping[str, Any],
+    object_info: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build an API prompt from UI nodes + ``/object_info`` without Playwright.
+
+    ``graphToPrompt()`` can convert the default welcome graph when
+    ``loadGraphData`` does not replace it. Widget order follows INPUT_TYPES;
+    ``forceInput`` sockets and leftover frontend widgets are skipped.
+    """
+    nodes = [node for node in (workflow.get("nodes") or ()) if isinstance(node, dict)]
+    nodes_by_id = {int(node["id"]): node for node in nodes if node.get("id") is not None}
+    links_by_dest: dict[tuple[int, str], list[Any]] = {}
+    for raw in workflow.get("links") or ():
+        if not isinstance(raw, list | tuple) or len(raw) < 6:
+            continue
+        _link_id, src, src_slot, dest, dest_slot, _type = raw[:6]
+        dest_node = nodes_by_id.get(int(dest))
+        dest_inputs = dest_node.get("inputs") or [] if dest_node else []
+        if not isinstance(dest_inputs, list) or int(dest_slot) >= len(dest_inputs):
+            continue
+        name = dest_inputs[int(dest_slot)].get("name") if isinstance(dest_inputs[int(dest_slot)], Mapping) else None
+        if name:
+            links_by_dest[(int(dest), str(name))] = [str(src), int(src_slot)]
+    prompt: dict[str, Any] = {}
+    for node in nodes:
+        if node.get("mode", 0) != 0 or node.get("id") is None:
+            continue
+        class_type = str(node.get("type") or "")
+        names = widget_input_names(object_info.get(class_type) if isinstance(object_info, Mapping) else None)
+        values = _drop_control_after_generate(list(node.get("widgets_values") or ()))
+        inputs = {name: value for name, value in zip(names, values, strict=False)}
+        for (dest, name), ref in links_by_dest.items():
+            if dest == int(node["id"]):
+                inputs[name] = ref
+        prompt[str(node["id"])] = {
+            "class_type": class_type,
+            "inputs": inputs,
+            "_meta": {"title": str(node.get("title") or class_type)},
+        }
+    return prompt
+
+
+def _prompt_covers_ui(prompt: Mapping[str, Any] | None, workflow: Mapping[str, Any]) -> bool:
+    if not isinstance(prompt, Mapping) or not prompt:
+        return False
+    wanted = {
+        str(node.get("type"))
+        for node in (workflow.get("nodes") or ())
+        if isinstance(node, dict)
+        and node.get("mode", 0) == 0
+        and node.get("type")
+        and str(node.get("type")) not in SKIP_OBJECT_INFO_TYPES
+    }
+    have = {
+        str(node.get("class_type"))
+        for node in prompt.values()
+        if isinstance(node, dict) and node.get("class_type")
+    }
+    return bool(wanted) and wanted <= have
 
 
 def repair_converted_prompt(
@@ -601,12 +701,25 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
         page.wait_for_timeout(1000)
         result = page.evaluate(GRAPH_TO_PROMPT_JS, workflow)
         browser.close()
-    if not result.get("ok"):
-        raise RuntimeError(f"browser convert failed: {result}")
-    prompt = result["prompt"]
-    if not isinstance(prompt, dict):
-        raise RuntimeError(f"graphToPrompt returned no prompt object: {result}")
     info = fetch_object_info(base)
+    prompt = result.get("prompt") if isinstance(result, Mapping) else None
+    via = "graphToPrompt"
+    if not result.get("ok") or not isinstance(prompt, dict) or not _prompt_covers_ui(prompt, workflow):
+        if not info:
+            raise RuntimeError(f"browser convert failed: {result}")
+        print(
+            json.dumps(
+                {
+                    "browser_convert": False,
+                    "error": (result or {}).get("error"),
+                    "loaded_types": (result or {}).get("loadedTypes")
+                    or (result or {}).get("loaded_types"),
+                }
+            ),
+            flush=True,
+        )
+        prompt = ui_workflow_to_api_prompt(workflow, info)
+        via = "object_info"
     prompt = repair_converted_prompt(prompt, workflow, info)
     typed = [
         node.get("class_type")
@@ -623,11 +736,12 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
         json.dumps(
             {
                 "converted": True,
-                "node_count": result.get("node_count"),
-                "missing": result.get("missing"),
-                "loaded_types": result.get("loaded_types"),
-                "registered_types": result.get("registered_types"),
-                "defined_types": result.get("defined_types"),
+                "via": via,
+                "node_count": len(prompt),
+                "missing": result.get("missing") if isinstance(result, Mapping) else [],
+                "loaded_types": result.get("loaded_types") if isinstance(result, Mapping) else [],
+                "registered_types": result.get("registered_types") if isinstance(result, Mapping) else [],
+                "defined_types": result.get("defined_types") if isinstance(result, Mapping) else [],
                 "repaired": any(isinstance(name, str) and name for name in typed),
                 "unknown_input_nodes": unknown,
             }
@@ -641,6 +755,8 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
             "graphToPrompt left UNKNOWN widget names after repair: "
             + ",".join(unknown)
         )
+    if not _prompt_covers_ui(prompt, workflow):
+        raise RuntimeError("converted prompt is missing UI node types")
     return prompt
 
 

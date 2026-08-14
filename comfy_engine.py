@@ -82,8 +82,9 @@ WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
 # on the workspace Volume and point site-packages at them with a venv-local .pth.
 NODE_REQS_SITE_MARK = "node-reqs-site"
 NODE_REQS_PTH_NAME = "comfy_node_reqs.pth"
-# Host isolation library. A Volume copy shadows the Image package we patch
-# each boot (ready timeout / worker logs).
+# Host isolation library. requirements.txt says comfy-env==0.3.89; an unpinned
+# Volume install floated to 0.4.x which cannot see the 0.3 pixi workspace.
+# sam3d_runtime installs the pin and patches it. Do not let node-reqs overwrite.
 NODE_REQS_SKIP_PACKAGES = frozenset({"comfy-env"})
 
 

@@ -27,6 +27,12 @@ from typing import Any
 
 COMFY_ENV_SITE_MARK = "comfy-env"
 COMFY_ENV_ROOT_VAR = "COMFY_ENV_ROOT"
+# ComfyUI-SAM3DObjects requirements.txt pins 0.3.89. 0.4+ uses
+# ``<root>/envs/<name>/.pixi/envs/default`` and cannot see a 0.3 workspace
+# (``<root>/.pixi/envs/<name>``), so nodes import in-process and hit
+# ``No module named 'pytorch3d'`` on DepthEstimate.
+COMFY_ENV_VERSION = "0.3.89"
+COMFY_ENV_PIN = f"comfy-env=={COMFY_ENV_VERSION}"
 PIXI_VERSION = "0.76.2"
 PIXI_LINUX_X64_URL = (
     "https://github.com/prefix-dev/pixi/releases/download/"
@@ -191,21 +197,56 @@ def _comfy_env_packages(
     return sorted(found, key=lambda path: str(path))
 
 
-def _ensure_volume_comfy_env(workspace: str | Path, python: str) -> bool:
-    """``comfy-env`` must live on the Volume site because the Image may not have it.
+def _installed_comfy_env_version(site: str | Path) -> str | None:
+    """Read the Volume ``comfy-env`` dist-info version, if any."""
+    versions: list[str] = []
+    for meta in Path(site).glob("comfy_env-*.dist-info/METADATA"):
+        try:
+            for line in meta.read_text(encoding="utf-8").splitlines():
+                if line.startswith("Version:"):
+                    versions.append(line.split(":", 1)[1].strip())
+                    break
+        except OSError:
+            continue
+    if not versions:
+        return None
+    return sorted(versions, reverse=True)[0]
 
-    The parent process imports this copy via ``comfy_node_reqs.pth``. Patch it
-    after this returns; do not delete it.
+
+def _remove_volume_comfy_env(site: Path) -> None:
+    package = site / "comfy_env"
+    if package.is_dir():
+        shutil.rmtree(package)
+    for meta in site.glob("comfy_env-*.dist-info"):
+        shutil.rmtree(meta)
+
+
+def _ensure_volume_comfy_env(workspace: str | Path, python: str) -> bool:
+    """Keep the 0.3.x isolation library on the Volume site.
+
+    The Image may not ship ``comfy-env``. The parent imports this copy via
+    ``comfy_node_reqs.pth``. 0.4+ cannot see a 0.3 pixi workspace, so an
+    unpinned ``uv pip install comfy-env`` breaks SAM 3D. Patch after this
+    returns; do not delete a matching 0.3.x copy.
     """
     from uv_runtime import pip_install_cmd
 
     site = Path(workspace) / ".python" / "node-reqs"
     package = site / "comfy_env"
-    if package.is_dir() and (package / "isolation" / "workers" / "subprocess.py").is_file():
+    worker = package / "isolation" / "workers" / "subprocess.py"
+    version = _installed_comfy_env_version(site)
+    if worker.is_file() and version == COMFY_ENV_VERSION:
         return False
     site.mkdir(parents=True, exist_ok=True)
-    print(f"[SAM3D] installing comfy-env onto Volume site {site}", flush=True)
-    _ce()._run(pip_install_cmd(python, "comfy-env", site_dir=site))
+    if package.is_dir() or version:
+        print(
+            f"[SAM3D] replacing Volume comfy-env {version or 'unknown'} with {COMFY_ENV_PIN}",
+            flush=True,
+        )
+        _remove_volume_comfy_env(site)
+    else:
+        print(f"[SAM3D] installing {COMFY_ENV_PIN} onto Volume site {site}", flush=True)
+    _ce()._run(pip_install_cmd(python, COMFY_ENV_PIN, site_dir=site))
     return True
 
 
