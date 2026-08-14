@@ -78,8 +78,8 @@ node_commands = (
 runtime_image = (
     modal.Image.from_registry(IMAGE_TAG)
     .entrypoint([])
-    # cmake/ninja remain for Pixal3D CUDA extensions (flex_gemm / cumesh / o-voxel / drtk).
-    # natten and flash-attn use prebuilt wheels at GPU start, not source builds.
+    # cmake/ninja remain as fallback if sparse-3d wheels do not match the Image.
+    # natten, flash-attn, flex_gemm, cumesh, o-voxel use prebuilt wheels at GPU start.
     .apt_install(
         "git",
         "ca-certificates",

@@ -67,6 +67,27 @@ class NattenWheelSpecTests(unittest.TestCase):
             comfy_engine.natten_wheel_spec("2.11.0.dev0+cu128")
 
 
+class Sparse3dWheelUrlTests(unittest.TestCase):
+    def test_ashley_cp312_torch211_cu128_urls(self):
+        rows = comfy_engine.sparse_3d_wheel_urls("3.12.3", "2.11.0+cu128")
+        labels = [item[0] for item in rows]
+        self.assertEqual(labels, ["flex_gemm", "cumesh", "o_voxel"])
+        for _label, _imports, url in rows:
+            self.assertIn("PozzettiAndrea/cuda-wheels", url)
+            self.assertIn("cu128torch2.11", url)
+            self.assertIn("cp312", url)
+            self.assertIn("%2B", url)
+        with_drtk = comfy_engine.sparse_3d_wheel_urls(
+            "3.12.3", "2.11.0+cu128", include_drtk=True
+        )
+        self.assertEqual([item[0] for item in with_drtk], ["flex_gemm", "cumesh", "o_voxel", "drtk"])
+
+    def test_missing_for_other_python_or_cuda(self):
+        self.assertEqual(comfy_engine.sparse_3d_wheel_urls("3.13.0", "2.11.0+cu128"), ())
+        self.assertEqual(comfy_engine.sparse_3d_wheel_urls("3.12.3", "2.11.0+cu130"), ())
+        self.assertEqual(comfy_engine.sparse_3d_wheel_urls("3.12.3", "2.10.0+cu128"), ())
+
+
 class FlashAttnWheelTests(unittest.TestCase):
     def test_ashley_py312_torch211_url(self):
         url = comfy_engine.flash_attn_wheel_url("3.12.3", "2.11.0+cu128")
@@ -273,6 +294,7 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
                 patch.object(comfy_engine, "_ensure_cuda_build_tools"),
                 patch.object(comfy_engine, "ensure_pixal3d_prebuilt_wheels", return_value=False),
                 patch.object(comfy_engine, "_install_flash_attn_wheel", return_value=True),
+                patch.object(comfy_engine, "_install_sparse_3d_prebuilt_wheels", return_value=False),
             ):
                 changed = comfy_engine.ensure_pixal3d_runtime(comfy_root, custom_nodes)
         self.assertTrue(changed)
@@ -280,6 +302,44 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
         self.assertIn("FlexGEMM", joined)
         self.assertIn("CuMesh", joined)
         self.assertIn("TRELLIS.2.git", joined)
+        self.assertNotIn("DRTK", joined)
+
+    def test_uses_prebuilt_wheels_instead_of_compile(self):
+        calls: list[list[str]] = []
+        available: set[str] = set()
+
+        def fake_wheels(_python, *, include_drtk):
+            available.update(
+                {"flex_gemm_ap", "flex_gemm", "cumesh_vb", "cumesh", "o_voxel_vb_ap", "o_voxel"}
+            )
+            if include_drtk:
+                available.add("drtk")
+            return True
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            custom_nodes = root / "custom_nodes"
+            comfy_root.mkdir()
+            (custom_nodes / "ComfyUI-Trellis2").mkdir(parents=True)
+            with (
+                patch.object(comfy_engine, "_comfy_python", return_value="/usr/bin/python3"),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(comfy_engine, "_module_available", lambda name, _p: name in available),
+                patch.object(comfy_engine, "_ensure_cuda_build_tools"),
+                patch.object(comfy_engine, "ensure_pixal3d_prebuilt_wheels", return_value=False),
+                patch.object(comfy_engine, "_install_flash_attn_wheel", return_value=True),
+                patch.object(comfy_engine, "_install_sparse_3d_prebuilt_wheels", fake_wheels),
+            ):
+                changed = comfy_engine.ensure_pixal3d_runtime(comfy_root, custom_nodes)
+        self.assertTrue(changed)
+        joined = " ".join(" ".join(cmd) for cmd in calls)
+        self.assertNotIn("FlexGEMM", joined)
+        self.assertNotIn("CuMesh", joined)
+        self.assertNotIn("TRELLIS.2.git", joined)
         self.assertNotIn("DRTK", joined)
 
     def test_prepare_runtime_symlinks_microsoft_and_facebook(self):

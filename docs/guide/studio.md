@@ -53,7 +53,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | Cosmos3-Super-Image2Video-4Step | L40S | RTX-PRO-6000 | 上传图 + 提示词（蒸馏 4 步） |
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
 | Hunyuan3D 2.1 | L40S | RTX-PRO-6000 | 上传图 |
-| TRELLIS.2 | L40S | RTX-PRO-6000 | 上传图 |
+| TRELLIS.2 | RTX-PRO-6000 | RTX-PRO-6000 | 上传图 |
 | TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 
 换配方只会换表单和允许的卡，不会改引擎代码。
@@ -61,7 +61,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：默认用配方里的测试卡。除 FLUX.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
+4. **启动 GPU**：默认用配方里的测试卡。除 FLUX.2 / TRELLIS.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下。TRELLIS.2 效果依赖显卡，测试和正式都是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。

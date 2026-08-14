@@ -46,7 +46,7 @@ class CatalogTests(unittest.TestCase):
             self.assertIn(item["gpu"], item["gpu_choices"], item["id"])
             self.assertIn("RTX-PRO-6000", item["gpu_choices"], item["id"])
             self.assertNotIn("T4", item["gpu_choices"], item["id"])
-            if item["id"] != "flux2-dev":
+            if item["id"] not in {"flux2-dev", "trellis2"}:
                 self.assertEqual(item["gpu"], "L40S", item["id"])
 
     def test_bind_graph_fills_prompt_and_seed(self):
@@ -129,18 +129,21 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(any(spec["type"] == "image" for spec in public["params"]))
 
     def test_hunyuan3d_and_trellis2_are_workflow_mode_with_image_slot(self):
-        for recipe_id in ("hunyuan3d-2.1", "trellis2"):
-            catalog = load_catalog(recipe_id)
-            self.assertEqual(catalog["mode"], "workflow", recipe_id)
+        hunyuan = load_catalog("hunyuan3d-2.1")
+        trellis = load_catalog("trellis2")
+        for catalog in (hunyuan, trellis):
+            self.assertEqual(catalog["mode"], "workflow", catalog["id"])
             self.assertNotIn("graph", catalog)
-            self.assertEqual(catalog["gpu"], "L40S", recipe_id)
-            self.assertEqual(catalog["gpu_inference"], "RTX-PRO-6000", recipe_id)
+            self.assertEqual(catalog["gpu_inference"], "RTX-PRO-6000", catalog["id"])
             self.assertNotIn("T4", catalog["gpu_choices"])
-            self.assertEqual(catalog["kind"], "i23d", recipe_id)
-            self.assertEqual(catalog["io"]["images_required"], 1, recipe_id)
+            self.assertEqual(catalog["kind"], "i23d", catalog["id"])
+            self.assertEqual(catalog["io"]["images_required"], 1, catalog["id"])
             public = public_catalog(catalog)
-            self.assertFalse(public["has_graph"], recipe_id)
-            self.assertTrue(any(spec["type"] == "image" for spec in public["params"]), recipe_id)
+            self.assertFalse(public["has_graph"], catalog["id"])
+            self.assertTrue(any(spec["type"] == "image" for spec in public["params"]), catalog["id"])
+        self.assertEqual(hunyuan["gpu"], "L40S")
+        self.assertEqual(trellis["gpu"], "RTX-PRO-6000")
+        self.assertEqual(trellis["gpu_choices"], ["RTX-PRO-6000"])
 
     def test_workflow_mode_binds_loadimage_without_embedded_graph(self):
         api_prompt = {
@@ -179,6 +182,8 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(flux["gpu"], "RTX-PRO-6000")
         self.assertEqual(flux["gpu_inference"], "RTX-PRO-6000")
         self.assertEqual(flux["gpu_choices"], ["RTX-PRO-6000"])
+        self.assertEqual(load_catalog("trellis2")["gpu"], "RTX-PRO-6000")
+        self.assertEqual(load_catalog("trellis2")["gpu_choices"], ["RTX-PRO-6000"])
         self.assertEqual(qwen["gpu"], "L40S")
         self.assertEqual(qwen["gpu_inference"], "RTX-PRO-6000")
         self.assertEqual(qwen["gpu_choices"], ["L40S", "RTX-PRO-6000"])

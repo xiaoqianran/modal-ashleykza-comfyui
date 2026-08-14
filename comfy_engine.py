@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 from storage import (
@@ -45,6 +45,35 @@ FLASH_ATTN_TORCH211_WHEEL = (
     "https://github.com/lesj0610/flash-attention/releases/download/"
     "v2.8.3-cu12-torch2.11/"
     "flash_attn-2.8.3%2Bcu12torch2.11cxx11abiTRUE-cp{py}-cp{py}-linux_x86_64.whl"
+)
+CUDA_WHEEL_RELEASE = "https://github.com/PozzettiAndrea/cuda-wheels/releases/download"
+# Ashley 0.32.0: CPython 3.12 + torch 2.11.0+cu128. visualbruno Torch2110 Linux
+# wheels are cp313 only; these match cp312.
+SPARSE_3D_WHEEL_FILES: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
+    (
+        "flex_gemm",
+        ("flex_gemm_ap", "flex_gemm"),
+        "flex_gemm_ap-latest",
+        "flex_gemm_ap-1.0.0+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
+    ),
+    (
+        "cumesh",
+        ("cumesh_vb", "cumesh"),
+        "cumesh_vb-latest",
+        "cumesh_vb-1.0+cu128torch2.11-cp312-cp312-manylinux_2_35_x86_64.whl",
+    ),
+    (
+        "o_voxel",
+        ("o_voxel_vb_ap", "o_voxel"),
+        "o_voxel_vb_ap-latest",
+        "o_voxel_vb_ap-0.0.1+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
+    ),
+)
+DRTK_WHEEL_FILE: tuple[str, tuple[str, ...], str, str] = (
+    "drtk",
+    ("drtk",),
+    "drtk-latest",
+    "drtk-0.1.0+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
 )
 
 
@@ -1113,6 +1142,30 @@ def flash_attn_wheel_url(python_version: str, torch_version: str) -> str | None:
     return FLASH_ATTN_TORCH211_WHEEL.format(py=python_mm.replace(".", ""))
 
 
+def sparse_3d_wheel_urls(
+    python_version: str,
+    torch_version: str,
+    *,
+    include_drtk: bool = False,
+) -> tuple[tuple[str, tuple[str, ...], str], ...]:
+    """PozzettiAndrea CUDA wheels for Ashley's cp312 + torch 2.11 + cu128."""
+    python_mm = ".".join(python_version.split(".")[:2])
+    public = torch_version.split()[0]
+    if python_mm != "3.12" or not public.startswith("2.11.0") or "+cu128" not in public:
+        return ()
+    rows = list(SPARSE_3D_WHEEL_FILES)
+    if include_drtk:
+        rows.append(DRTK_WHEEL_FILE)
+    return tuple(
+        (
+            label,
+            imports,
+            f"{CUDA_WHEEL_RELEASE}/{tag}/{quote(filename, safe='.-_')}",
+        )
+        for label, imports, tag, filename in rows
+    )
+
+
 def requirements_without_packages(text: str, skip: frozenset[str]) -> str:
     kept: list[str] = []
     for line in text.splitlines(keepends=True):
@@ -1244,6 +1297,43 @@ def _install_flash_attn_wheel(python: str) -> bool:
     )
 
 
+def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bool:
+    """Install flex_gemm / cumesh / o-voxel (and optional DRTK) from CUDA wheels."""
+    try:
+        python_version = _python_text(python, "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        torch_version = _python_text(python, "import torch; print(torch.__version__)")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[PIXAL3D] cannot map python/torch to sparse-3d wheels ({exc})", flush=True)
+        return False
+    specs = sparse_3d_wheel_urls(
+        python_version,
+        torch_version,
+        include_drtk=include_drtk,
+    )
+    if not specs:
+        print(
+            f"[PIXAL3D] no sparse-3d wheels for python {python_version} torch {torch_version}",
+            flush=True,
+        )
+        return False
+    changed = False
+    for label, imports, url in specs:
+        if any(_module_available(name, python) for name in imports):
+            print(f"[PIXAL3D] {label} already importable", flush=True)
+            continue
+        print(f"[PIXAL3D] pip install {label} wheel {url}", flush=True)
+        try:
+            _run([python, "-m", "pip", "install", "--no-cache-dir", "--no-deps", url])
+        except subprocess.CalledProcessError:
+            print(f"[PIXAL3D] {label} wheel install failed; will fall back to source", flush=True)
+            continue
+        if any(_module_available(name, python) for name in imports):
+            changed = True
+        else:
+            print(f"[PIXAL3D] {label} wheel installed but still not importable", flush=True)
+    return changed
+
+
 def ensure_pixal3d_prebuilt_wheels(comfy_root: str | Path) -> bool:
     """Install official/community CUDA wheels before CNR can compile sdists."""
     python = _comfy_python(Path(comfy_root))
@@ -1264,9 +1354,10 @@ def ensure_pixal3d_runtime(
 ) -> bool:
     """Install sparse-3D Python deps and CUDA kernels (Pixal3D / TRELLIS.2).
 
-    natten / flash-attn use prebuilt wheels. Shared kernels (flex_gemm,
-    cumesh, o-voxel) still compile against the running Torch. DRTK and
-    Pixal3D ``requirements.txt`` only run when that node pack is present.
+    natten / flash-attn / flex_gemm / cumesh / o-voxel (and Pixal3D DRTK)
+    use prebuilt wheels on Ashley's cp312 + torch 2.11 + cu128 stack.
+    Source compile is only the fallback. Pixal3D ``requirements.txt`` only
+    runs when that node pack is present.
     Returns True if anything was installed (ComfyUI should restart).
     """
     comfy_root = Path(comfy_root)
@@ -1293,14 +1384,13 @@ def ensure_pixal3d_runtime(
             _ensure_cuda_build_tools()
             _run([python, "-m", "pip", "install", "--no-cache-dir", f"natten=={pin}"])
 
-    _ensure_cuda_build_tools()
-
     attention_ok = _module_available("flash_attn", python) or _module_available(
         "flash_attn_interface", python
     )
     if not attention_ok:
         if not _install_flash_attn_wheel(python):
             print("[PIXAL3D] pip install flash-attn from source", flush=True)
+            _ensure_cuda_build_tools()
             _run(
                 [
                     python,
@@ -1313,6 +1403,11 @@ def ensure_pixal3d_runtime(
                 ]
             )
         changed = True
+
+    changed = (
+        _install_sparse_3d_prebuilt_wheels(python, include_drtk=node_dir is not None)
+        or changed
+    )
 
     tmp = Path("/tmp/pixal3d_extensions")
     tmp.mkdir(parents=True, exist_ok=True)
@@ -1366,14 +1461,20 @@ def ensure_pixal3d_runtime(
                 None,
             )
         )
-    for label, imports, clone, subdir in sources:
-        if any(_module_available(name, python) for name in imports):
-            print(f"[PIXAL3D] {label} already importable", flush=True)
-            continue
+    missing = [
+        item
+        for item in sources
+        if not any(_module_available(name, python) for name in item[1])
+    ]
+    if not missing:
+        return changed
+
+    _ensure_cuda_build_tools()
+    for label, imports, clone, subdir in missing:
         dest = tmp / label
         if dest.exists():
             shutil.rmtree(dest)
-        print(f"[PIXAL3D] build {label}", flush=True)
+        print(f"[PIXAL3D] build {label} from source (no matching wheel)", flush=True)
         _run([*clone, str(dest)])
         install_path = str(dest / subdir) if subdir else str(dest)
         _run(
