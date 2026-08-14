@@ -39,7 +39,14 @@ async (workflow) => {
     if (!app) return { ok: false, error: 'comfyAPI.app.app missing' };
     const graphNodes = () => app.graph?.nodes || app.graph?._nodes || [];
     const expectedTypes = [...new Set((workflow?.nodes || []).map((node) => node.type).filter(Boolean))];
+    const registeredTable = () => window.LiteGraph?.registered_node_types || {};
     try {
+        let registered = [];
+        for (let i = 0; i < 40; i++) {
+            registered = expectedTypes.filter((type) => Boolean(registeredTable()[type]));
+            if (expectedTypes.length > 0 && registered.length === expectedTypes.length) break;
+            await new Promise((resolve) => setTimeout(resolve, 250));
+        }
         await app.loadGraphData(workflow);
         let loadedTypes = [];
         for (let i = 0; i < 40; i++) {
@@ -58,7 +65,7 @@ async (workflow) => {
             }
         }
         if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
-            return { ok: false, error: 'graphToPrompt failed', missing, loadedTypes, expectedTypes };
+            return { ok: false, error: 'graphToPrompt failed', missing, loadedTypes, expectedTypes, registered };
         }
         return {
             ok: true,
@@ -67,6 +74,7 @@ async (workflow) => {
             node_count: Object.keys(prompt).length,
             loaded_types: loadedTypes,
             expected_types: expectedTypes,
+            registered_types: registered,
         };
     } catch (error) {
         return { ok: false, error: String((error && error.stack) || error) };
@@ -318,6 +326,86 @@ def chrome_executable() -> str | None:
     return None
 
 
+_PRIMITIVE_WIDGET_TYPES = {"INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"}
+
+
+def _is_unknown_input_key(key: str) -> bool:
+    return key == "UNKNOWN" or key.startswith("UNKNOWN_")
+
+
+def widget_input_names(node_def: Mapping[str, Any] | None) -> list[str]:
+    """Widget names in ComfyUI INPUT_TYPES order (required then optional)."""
+    names: list[str] = []
+    inputs = (node_def or {}).get("input") if isinstance(node_def, Mapping) else None
+    if not isinstance(inputs, Mapping):
+        return names
+    for section in ("required", "optional"):
+        block = inputs.get(section)
+        if not isinstance(block, Mapping):
+            continue
+        for name, spec in block.items():
+            first = spec[0] if isinstance(spec, list | tuple) and spec else spec
+            if isinstance(first, list | tuple) or first in _PRIMITIVE_WIDGET_TYPES:
+                names.append(str(name))
+    return names
+
+
+def repair_converted_prompt(
+    prompt: dict[str, Any],
+    ui_workflow: Mapping[str, Any] | None = None,
+    object_info: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fill class_type / widget names when graphToPrompt emits UNKNOWN keys.
+
+    GitHub custom nodes can load on the graph (``node.type`` is set) while
+    ``constructor.nodeData`` is still empty, so the API prompt comes back with
+    ``class_type: null`` and ``UNKNOWN`` / ``UNKNOWN_1`` widgets.
+    """
+    ui_nodes = {
+        str(node.get("id")): node
+        for node in (ui_workflow or {}).get("nodes") or ()
+        if isinstance(node, dict)
+    }
+    for node_id, entry in prompt.items():
+        if not isinstance(entry, dict):
+            continue
+        ui_node = ui_nodes.get(str(node_id)) or {}
+        class_type = entry.get("class_type") or ui_node.get("type")
+        if class_type:
+            entry["class_type"] = class_type
+        title = ((entry.get("_meta") or {}) if isinstance(entry.get("_meta"), dict) else {}).get(
+            "title"
+        ) or ui_node.get("title")
+        if title:
+            entry.setdefault("_meta", {})
+            if isinstance(entry["_meta"], dict) and not entry["_meta"].get("title"):
+                entry["_meta"]["title"] = title
+        inputs = entry.setdefault("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        unknown_keys = [key for key in inputs if _is_unknown_input_key(str(key))]
+        if not unknown_keys or not class_type:
+            continue
+        named = {key: value for key, value in inputs.items() if key not in unknown_keys}
+        info = object_info.get(str(class_type)) if isinstance(object_info, Mapping) else None
+        for key, name in zip(unknown_keys, widget_input_names(info), strict=False):
+            if name not in named:
+                named[name] = inputs[key]
+        entry["inputs"] = named
+    return prompt
+
+
+def fetch_object_info(base: str) -> dict[str, Any]:
+    for path in ("/object_info", "/api/object_info"):
+        try:
+            payload = http_json(f"{base.rstrip('/')}{path}", timeout=120)
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, RuntimeError):
+            continue
+        if isinstance(payload, dict) and payload:
+            return payload
+    return {}
+
+
 def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
     """Flatten subgraphs the same way the ComfyUI Queue button does."""
     from playwright.sync_api import sync_playwright
@@ -351,6 +439,11 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
         browser.close()
     if not result.get("ok"):
         raise RuntimeError(f"browser convert failed: {result}")
+    prompt = result["prompt"]
+    if not isinstance(prompt, dict):
+        raise RuntimeError(f"graphToPrompt returned no prompt object: {result}")
+    info = fetch_object_info(base)
+    prompt = repair_converted_prompt(prompt, workflow, info)
     print(
         json.dumps(
             {
@@ -358,11 +451,17 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
                 "node_count": result.get("node_count"),
                 "missing": result.get("missing"),
                 "loaded_types": result.get("loaded_types"),
+                "registered_types": result.get("registered_types"),
+                "repaired": any(
+                    node.get("class_type")
+                    for node in prompt.values()
+                    if isinstance(node, dict)
+                ),
             }
         ),
         flush=True,
     )
-    return result["prompt"]
+    return prompt
 
 
 def to_api_prompt(base: str | None, workflow: dict[str, Any]) -> dict[str, Any]:

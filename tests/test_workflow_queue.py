@@ -115,6 +115,63 @@ class WorkflowBindTests(unittest.TestCase):
     def test_graph_to_prompt_waits_for_loaded_node_types(self):
         self.assertIn("expectedTypes.every", workflow_queue.GRAPH_TO_PROMPT_JS)
         self.assertIn("loaded_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("registered_node_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+
+    def test_repair_converted_prompt_fills_class_type_and_unknown_widgets(self):
+        prompt = {
+            "2": {
+                "class_type": None,
+                "inputs": {
+                    "UNKNOWN": "old prompt",
+                    "UNKNOWN_1": 832,
+                    "UNKNOWN_2": 480,
+                    "text_encoder": ["1", 1],
+                },
+                "_meta": {"title": None},
+            },
+            "4": {
+                "class_type": None,
+                "inputs": {
+                    "UNKNOWN": "",
+                    "UNKNOWN_1": 832,
+                    "UNKNOWN_2": 480,
+                    "text_encoder": ["1", 1],
+                    "prompt": ["3", 0],
+                },
+                "_meta": {"title": "Negative Prompt"},
+            },
+        }
+        ui = {
+            "nodes": [
+                {"id": 2, "type": "Cosmos3TextEncode", "title": "Positive Prompt"},
+                {"id": 4, "type": "Cosmos3TextEncode", "title": "Negative Prompt"},
+            ]
+        }
+        info = {
+            "Cosmos3TextEncode": {
+                "input": {
+                    "required": {
+                        "text_encoder": ["COSMOS3_TEXT_ENCODER"],
+                        "prompt": ["STRING", {}],
+                        "width": ["INT", {}],
+                        "height": ["INT", {}],
+                    }
+                }
+            }
+        }
+        repaired = workflow_queue.repair_converted_prompt(prompt, ui, info)
+        self.assertEqual(repaired["2"]["class_type"], "Cosmos3TextEncode")
+        self.assertEqual(repaired["2"]["_meta"]["title"], "Positive Prompt")
+        self.assertEqual(repaired["2"]["inputs"]["prompt"], "old prompt")
+        self.assertEqual(repaired["2"]["inputs"]["width"], 832)
+        self.assertEqual(repaired["2"]["inputs"]["height"], 480)
+        self.assertEqual(repaired["2"]["inputs"]["text_encoder"], ["1", 1])
+        self.assertEqual(repaired["4"]["inputs"]["prompt"], ["3", 0])
+        self.assertEqual(repaired["4"]["inputs"]["width"], 832)
+        self.assertNotIn("UNKNOWN", repaired["2"]["inputs"])
+        workflow_queue.bind_text_prompt(repaired, text="a celadon teapot")
+        self.assertEqual(repaired["2"]["inputs"]["prompt"], "a celadon teapot")
+        self.assertEqual(repaired["4"]["inputs"]["prompt"], ["3", 0])
 
     def test_bind_number_inputs_only_touches_existing_keys(self):
         prompt = {
