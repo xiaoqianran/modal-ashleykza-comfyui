@@ -20,7 +20,7 @@ python3 -m benchmarks --write
 | 计时 | 从 POST /prompt 到 /history 出现 success 的客户端墙钟。首张常含装进 VRAM 或同卡换模。 |
 | 空闲缩容 | **5 秒**（`modal serve` 会挡住） |
 
-测试默认 **L40S**（FLUX.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。
+测试默认 **L40S**（FLUX.2 / TRELLIS.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。
 
 ## 总览
 
@@ -35,11 +35,13 @@ python3 -m benchmarks --write
 | `cosmos3-super-text2image` | Cosmos3-Super-Text2Image | t2i | **L40S** | RTX-PRO-6000 | 35 | 1024² png | 46.8 GB | L40S 245.6s |
 | `cosmos3-super-text2image-4step` | Cosmos3-Super-Text2Image-4Step | t2i | **L40S** | RTX-PRO-6000 | 4 | 1024² png | 46.7 GB | L40S 66s |
 | `flux2-dev` | FLUX.2 [dev] | t2i | **RTX-PRO-6000** | RTX-PRO-6000 | — | 1024² png | 71 GB | RTX-PRO-6000 首张 144s / 热 15.4s |
+| `hunyuan3d-2.1` | Hunyuan3D 2.1 | i23d | **L40S** | RTX-PRO-6000 | 30 | GLB | 4.9 GB | L40S 43.9s |
 | `ideogram4` | Ideogram 4 | t2i | **L40S** | RTX-PRO-6000 | 20 | 1024² png | 38 GB | 已 hydrate，未记时 |
 | `krea2-turbo` | Krea-2 Turbo | t2i | **L40S** | RTX-PRO-6000 | 8 | 1024² png | 17 GB | RTX-PRO-6000 首张 39.2s / 热 8.9s |
 | `pixal3d` | Pixal3D | i23d | **L40S** | RTX-PRO-6000 | — | GLB | — | 待补测 |
 | `qwen-image-2512` | Qwen-Image-2512 | t2i | **L40S** | RTX-PRO-6000 | 50 | 1328² png | 32 GB | RTX-PRO-6000 首张 77.6s / 热 53.9s |
 | `qwen-image-2512-lightning` | Qwen-Image-2512 Lightning | t2i | **L40S** | RTX-PRO-6000 | 8 | 1328² png | 34 GB | 已 hydrate，未记时 |
+| `trellis2` | TRELLIS.2 | i23d | **RTX-PRO-6000** | RTX-PRO-6000 | — | GLB | 16 GB | RTX-PRO-6000 208.3s |
 | `triposplat` | TripoSplat | i23d | **L40S** | RTX-PRO-6000 | — | SPZ + GLB | — | L40S 首张 53.7s / 热 30.1s |
 | `z-image-turbo` | Z-Image-Turbo | t2i | **L40S** | RTX-PRO-6000 | 8 | 1024² png | — | 已 hydrate，未记时 |
 
@@ -318,6 +320,24 @@ NVIDIA Cosmos 3 64B 全能基座，文生视频（832×480 / 93 帧 / 24fps）�
 
 ## 图生 3D
 
+### Hunyuan3D 2.1 (`hunyuan3d-2.1`)
+
+腾讯 Hunyuan3D 2.1 图生 GLB（几何）。官方 ComfyUI 核心节点，约 4.9GB 一体 checkpoint。测试 L40S，正式 RTX-PRO-6000。不要用 T4。
+
+| 项 | 值 |
+|---|---|
+| 工作流 | `examples/hunyuan3d-2.1-image-to-3d.json` |
+| 锁 | `examples/hunyuan3d-2.1-image-to-3d.lock.json` |
+| 模式 | `workflow` |
+| 量化 | — |
+| 节点 | core |
+| 权重 | 4.9 GB；显存 — |
+| 共用 | — |
+| 实测状态 | `recorded` · PR #37 · 2026-08-14 |
+| 实测 GPU / 耗时 | L40S 43.9s |
+| 冒烟产物 | GLB |
+| 备注 | 合成物体图，导出 5.1MB GLB。 |
+
 ### Pixal3D (`pixal3d`)
 
 图生 GLB。测试默认 L40S（约 20–32GB），正式推理 RTX-PRO-6000。不要用 T4。
@@ -334,6 +354,24 @@ NVIDIA Cosmos 3 64B 全能基座，文生视频（832×480 / 93 帧 / 24fps）�
 | 实测状态 | `pending` · PR #14 · 2026-08-13 |
 | 实测 GPU / 耗时 | 待补测 |
 | 备注 | gecko.jpg 跑通并导出 GLB，尚未记录墙钟秒数。 |
+
+### TRELLIS.2 (`trellis2`)
+
+Microsoft TRELLIS.2-4B 图生 GLB（几何）。visualbruno ComfyUI-Trellis2。效果依赖显卡，测试和正式都是 RTX-PRO-6000。不要用 T4 / L40S。
+
+| 项 | 值 |
+|---|---|
+| 工作流 | `examples/trellis2-image-to-3d.json` |
+| 锁 | `examples/trellis2-image-to-3d.lock.json` |
+| 模式 | `workflow` |
+| 量化 | bf16 |
+| 节点 | ComfyUI-Trellis2 |
+| 权重 | 16 GB；显存 — |
+| 共用 | — |
+| 实测状态 | `recorded` · PR #37 · 2026-08-14 |
+| 实测 GPU / 耗时 | RTX-PRO-6000 208.3s |
+| 冒烟产物 | GLB |
+| 备注 | 合成物体图，导出 8.7MB GLB。attention sdpa，preprocess 开 rembg。 |
 
 ### TripoSplat (`triposplat`)
 

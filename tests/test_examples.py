@@ -73,6 +73,63 @@ class ExampleLockTests(unittest.TestCase):
         self.assertEqual(origin, "reused")
         self.assertEqual(len(reused["models"]), len(committed["models"]))
 
+    def test_hunyuan3d_lock_matches_resolve(self):
+        source = ROOT / "examples" / "hunyuan3d-2.1-image-to-3d.json"
+        lock_path = ROOT / "examples" / "hunyuan3d-2.1-image-to-3d.lock.json"
+        resolved = workflow_resolver.resolve_workflow(source)
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertEqual(resolved["unresolved"], [])
+        self.assertEqual(committed["custom_nodes"], [])
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertEqual(
+            {(m["category"], m["filename"]) for m in resolved["models"]},
+            names,
+        )
+        self.assertIn(("checkpoints", "hunyuan_3d_v2.1.safetensors"), names)
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("ImageOnlyCheckpointLoader", text)
+        self.assertIn("VAEDecodeHunyuan3D", text)
+        self.assertIn("SaveGLB", text)
+        self.assertIn("LoadImage", text)
+        self.assertIn("mesh/Hunyuan3D_studio", text)
+
+    def test_trellis2_lock_is_curated_and_matches_workflow_hash(self):
+        source = ROOT / "examples" / "trellis2-image-to-3d.json"
+        lock_path = ROOT / "examples" / "trellis2-image-to-3d.lock.json"
+        committed = workflow_resolver.load_workflow_lock(lock_path, require_resolved=True)
+        self.assertTrue(workflow_resolver.lock_matches_workflow(committed, source))
+        self.assertEqual(committed["unresolved"], [])
+        self.assertEqual(len(committed["custom_nodes"]), 1)
+        node = committed["custom_nodes"][0]
+        self.assertEqual(node["id"], "ComfyUI-Trellis2")
+        self.assertEqual(node["version"], "main")
+        self.assertEqual(node["url"], "https://github.com/visualbruno/ComfyUI-Trellis2.git")
+        names = {(m["category"], m["filename"]) for m in committed["models"]}
+        self.assertIn(("microsoft", "TRELLIS.2-4B/pipeline.json"), names)
+        self.assertIn(
+            ("microsoft", "TRELLIS-image-large/ckpts/ss_dec_conv3d_16l8_fp16.safetensors"),
+            names,
+        )
+        self.assertIn(
+            ("facebook", "dinov3-vitl16-pretrain-lvd1689m/model.safetensors"),
+            names,
+        )
+        self.assertIn("microsoft", recipes.MODEL_DIRS)
+        self.assertIn("facebook", recipes.MODEL_DIRS)
+        urls = {m["filename"]: m["url"] for m in committed["models"]}
+        self.assertIn("visualbruno/dinov3-vitl16-pretrain-lvd1689m", urls[
+            "dinov3-vitl16-pretrain-lvd1689m/model.safetensors"
+        ])
+        text = source.read_text(encoding="utf-8")
+        self.assertIn('"type": "LoadImage"', text)
+        self.assertNotIn("Trellis2LoadImageWithTransparency", text)
+        self.assertIn("Trellis2LoadModel", text)
+        self.assertIn("Trellis2ExportMesh", text)
+        reused, origin = workflow_resolver.select_workflow_lock(source, lock_path)
+        self.assertEqual(origin, "reused")
+        self.assertEqual(len(reused["models"]), len(committed["models"]))
+
     def test_flux2_lock_matches_resolve(self):
         source = ROOT / "examples" / "flux2-dev-t2i.json"
         lock_path = ROOT / "examples" / "flux2-dev-t2i.lock.json"

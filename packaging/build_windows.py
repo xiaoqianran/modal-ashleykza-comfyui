@@ -42,7 +42,7 @@ README = """Studio
 走代理：在系统或用户环境变量里设 HTTPS_PROXY / ALL_PROXY（Modal CLI 已带 api-proxy-support）。
 不想走代理：设 MODAL_DISABLE_API_PROXY=1。
 
-FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Cosmos3 / Pixal3D / TripoSplat 需要本机 Chrome 或 Edge。
+FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Cosmos3 / Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat 需要本机 Chrome 或 Edge。
 Z-Image / Z-Image-Turbo 不需要。生成结束默认停 GPU。
 """
 

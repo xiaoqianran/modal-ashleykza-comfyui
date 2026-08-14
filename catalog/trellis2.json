@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "trellis2",
+  "title": "TRELLIS.2",
+  "summary": "Microsoft TRELLIS.2-4B 图生 GLB（几何）。visualbruno ComfyUI-Trellis2。效果依赖显卡，测试和正式都是 RTX-PRO-6000。不要用 T4 / L40S。",
+  "kind": "i23d",
+  "mode": "workflow",
+  "workflow": "examples/trellis2-image-to-3d.json",
+  "lock": "examples/trellis2-image-to-3d.lock.json",
+  "gpu": "RTX-PRO-6000",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["RTX-PRO-6000"],
+  "client_id": "studio-trellis2",
+  "filename_prefix": "TRELLIS2_studio",
+  "io": {"images_in": 1},
+  "params": [
+    {
+      "id": "image",
+      "type": "image",
+      "bind": "image",
+      "title": "输入图",
+      "required": true,
+      "help": "一张物体图。可一次选多张，按张排队。"
+    }
+  ]
+}

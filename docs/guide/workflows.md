@@ -28,6 +28,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重 |
 | `scripts/queue_ltx25.py` 的 patch | Ashley 0.32.0 缺官方节点 |
 | Pixal3D 预构建 wheel | 否则会在 GPU 上编译 natten |
+| TRELLIS.2 CUDA 扩展 | 只装 PozzettiAndrea 预构建 wheel，不要在 GPU 上编 |
 | `catalog/*.json` | 只给 Studio 控制面填表单 |
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
@@ -155,17 +156,57 @@ python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
 | `examples/pixal3d-image-to-3d.json` | 官方 UI 工作流（[Saganaki22/Pixal3D-ComfyUI](https://github.com/Saganaki22/Pixal3D-ComfyUI)） |
 | `examples/pixal3d-image-to-3d.lock.json` | **手修**锁：Pixal3D / DINOv3 / RMBG-2.0 / MoGe + CNR 节点 |
 
-锁里是 Registry id `Pixal3D-ComfyUI@0.2.4` 与 `comfyui-custom-scripts@1.2.5`。GPU 启动时先装预构建 wheel：`natten==0.21.6+torch2110cu128`（[whl.natten.org](https://whl.natten.org/)）和 `flash-attn 2.8.3`（torch 2.11 + cu12）。不要用 PyPI 上的 `natten==0.21.6` sdist，那会在 GPU 上编 CUDA kernel。`cmake` / `ninja-build` 仍留在 Image 里，给 `flex_gemm` / `cumesh` / o-voxel / DRTK 用。Storage 增加了 `Pixal3D/` 与 `geometry_estimation/`。`briaai/RMBG-2.0` 在 Hugging Face 上 gated，hydrate 需要已授权的 `HF_TOKEN`。建议 **L40S**（工作流 `1024_cascade`，约 20–32GB 显存）。
+锁里是 Registry id `Pixal3D-ComfyUI@0.2.4` 与 `comfyui-custom-scripts@1.2.5`。GPU 启动时先装预构建 wheel：`natten==0.21.6+torch2110cu128`（[whl.natten.org](https://whl.natten.org/)）、`flash-attn 2.8.3`，以及 `flex_gemm` / `cumesh` / o-voxel / DRTK（[PozzettiAndrea/cuda-wheels](https://github.com/PozzettiAndrea/cuda-wheels) 的 cu128+torch2.11+cp312）。不要用 PyPI 上的 `natten==0.21.6` sdist，也不要在 GPU 上编 CUDA。Storage 增加了 `Pixal3D/` 与 `geometry_estimation/`。`briaai/RMBG-2.0` 在 Hugging Face 上 gated，hydrate 需要已授权的 `HF_TOKEN`。建议 **L40S**（工作流 `1024_cascade`，约 20–32GB 显存）。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/pixal3d-image-to-3d.json
-COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal serve comfyui_modal.py
 python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
   --workflow examples/pixal3d-image-to-3d.json \
   --images gecko.png
 ```
 
 空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。测试请用完即停，不要把 L40S 挂着。
+
+## 仓库示例：Hunyuan3D 2.1 图生 GLB
+
+| 文件 | 作用 |
+|---|---|
+| `examples/hunyuan3d-2.1-image-to-3d.json` | 官方模板 `3d_hunyuan3d-v2.1`（ComfyUI 核心节点） |
+| `examples/hunyuan3d-2.1-image-to-3d.lock.json` | 解析锁：`checkpoints/hunyuan_3d_v2.1.safetensors`（约 4.9GB） |
+| `catalog/hunyuan3d-2.1.json` | Studio 契约：图生几何 GLB，测试 **L40S** |
+
+锁内 `custom_nodes` 为空。不要用 Partner/API 的 `api_hunyuan3d_*`，也不要 visualbruno 的 PBR paint（要编 rasterizer）。无 UI 时用 `python3 -m workflow_queue`。建议 **L40S**。不要用 T4。
+
+```bash
+modal run hydrate_modal.py --workflow examples/hunyuan3d-2.1-image-to-3d.json
+MODAL_GPU=L40S modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/hunyuan3d-2.1-image-to-3d.json \
+  --images photo.png \
+  --out artifacts/hunyuan3d-2.1
+```
+
+## 仓库示例：TRELLIS.2 图生 GLB
+
+| 文件 | 作用 |
+|---|---|
+| `examples/trellis2-image-to-3d.json` | visualbruno `MeshOnly.json`，输入改成核心 `LoadImage` |
+| `examples/trellis2-image-to-3d.lock.json` | **手修**锁：`microsoft/TRELLIS.2-4B` + `TRELLIS-image-large` ss_dec + DINOv3（visualbruno 镜像） |
+| `catalog/trellis2.json` | Studio 契约：图生几何 GLB，测试和正式都是 **RTX-PRO-6000** |
+
+锁里是 GitHub 节点 `ComfyUI-Trellis2@main`（[visualbruno/ComfyUI-Trellis2](https://github.com/visualbruno/ComfyUI-Trellis2)）。`Trellis2LoadModel` 不走 `extra_model_paths`，GPU 启动时把 `/ComfyUI/models/microsoft` 与 `facebook` symlink 到 Volume。`flex_gemm` / `cumesh` / o-voxel 装 [PozzettiAndrea/cuda-wheels](https://github.com/PozzettiAndrea/cuda-wheels) 的 `cu128torch2.11-cp312` Linux wheel（Ashley 是 Python 3.12；visualbruno 仓库里 Torch2110 Linux 只有 cp313，对不上）。**DRTK / natten / Pixal3D requirements 只在当前锁是 Pixal3D 时才装**，Volume 上残留的 Pixal3D 目录不会拖进 TRELLIS.2。不要在 GPU 上编 CUDA。MeshOnly 关了 `use_reconviagen`，不要下 vggt。核心 `LoadImage` 是 RGB，所以 `Trellis2PreProcessImage` 打开 `remove_background`（rembg 需要 `onnxruntime`，GPU 启动时补装）。attention 用 **sdpa**（PRO-6000 / Blackwell 不要 flash_attn）。PBR 贴图（`MeshWithTexturing`）留作后续。效果依赖显卡，测试和正式都是 **RTX-PRO-6000**，不要用 T4 / L40S。
+
+```bash
+modal run hydrate_modal.py --workflow examples/trellis2-image-to-3d.json
+MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/trellis2-image-to-3d.json \
+  --images photo.png \
+  --out artifacts/trellis2
+```
+
+空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。测试请用完即停。
 
 ## 仓库示例：FLUX.2 [dev] 文生图
 

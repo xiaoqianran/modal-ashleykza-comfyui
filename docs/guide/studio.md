@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step 仍是提示词。不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -16,7 +16,7 @@
 
 - 本机联网、Modal 账号、Hugging Face token
 - 走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 Modal 带 `api-proxy-support`）；不要代理就设 `MODAL_DISABLE_API_PROXY=1`
-- FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Cosmos3 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image / Z-Image-Turbo 不需要）
+- FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Cosmos3 / Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat：本机已装 Chrome 或 Edge（Z-Image / Z-Image-Turbo 不需要）
 - 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
 
 密钥写在 `%LOCALAPPDATA%\ComfyStudio\runtime\app\.studio.env`，不会上传 Git。生成结束后默认停 GPU。
@@ -52,6 +52,8 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | Cosmos3-Super-Image2Video | L40S | RTX-PRO-6000 | 上传图 + 提示词 |
 | Cosmos3-Super-Image2Video-4Step | L40S | RTX-PRO-6000 | 上传图 + 提示词（蒸馏 4 步） |
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
+| Hunyuan3D 2.1 | L40S | RTX-PRO-6000 | 上传图 |
+| TRELLIS.2 | RTX-PRO-6000 | RTX-PRO-6000 | 上传图 |
 | TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 
 换配方只会换表单和允许的卡，不会改引擎代码。
@@ -59,7 +61,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：默认用配方里的测试卡。除 FLUX.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
+4. **启动 GPU**：默认用配方里的测试卡。除 FLUX.2 / TRELLIS.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下。TRELLIS.2 效果依赖显卡，测试和正式都是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。

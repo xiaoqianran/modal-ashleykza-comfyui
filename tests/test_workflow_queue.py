@@ -56,6 +56,8 @@ class WorkflowInspectTests(unittest.TestCase):
             "ltx-2.5-t2v-i2v-distilled.json",
             "triposplat-image-to-gaussian-splat.json",
             "pixal3d-image-to-3d.json",
+            "hunyuan3d-2.1-image-to-3d.json",
+            "trellis2-image-to-3d.json",
             "flux2-dev-t2i.json",
             "qwen-image-2512.json",
             "qwen-image-2512-lightning.json",

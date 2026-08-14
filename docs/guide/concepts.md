@@ -41,6 +41,8 @@ flowchart LR
   loras/
   cosmos3/
   Pixal3D/
+  microsoft/
+  facebook/
   .state/comfy.lock.json
   .state/launch.json
   .state/workflow.lock.json

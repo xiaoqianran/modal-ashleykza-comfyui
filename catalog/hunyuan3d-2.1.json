@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "id": "hunyuan3d-2.1",
+  "title": "Hunyuan3D 2.1",
+  "summary": "腾讯 Hunyuan3D 2.1 图生 GLB（几何）。官方 ComfyUI 核心节点，约 4.9GB 一体 checkpoint。测试 L40S，正式 RTX-PRO-6000。不要用 T4。",
+  "kind": "i23d",
+  "mode": "workflow",
+  "workflow": "examples/hunyuan3d-2.1-image-to-3d.json",
+  "lock": "examples/hunyuan3d-2.1-image-to-3d.lock.json",
+  "gpu": "L40S",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
+  "client_id": "studio-hunyuan3d-2.1",
+  "filename_prefix": "mesh/Hunyuan3D_studio",
+  "io": {"images_in": 1},
+  "params": [
+    {
+      "id": "image",
+      "type": "image",
+      "bind": "image",
+      "title": "输入图",
+      "required": true,
+      "help": "一张物体图，透明或干净背景更好。可一次选多张，按张排队。"
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每张图随机。绑 KSampler。"
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 30,
+      "minimum": 8,
+      "maximum": 80
+    },
+    {
+      "id": "cfg",
+      "type": "float",
+      "bind": "cfg",
+      "title": "CFG",
+      "default": 5.0,
+      "minimum": 1.0,
+      "maximum": 12.0,
+      "step": 0.5
+    }
+  ]
+}

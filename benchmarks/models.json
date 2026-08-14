@@ -280,6 +280,48 @@
       }
     },
     {
+      "id": "hunyuan3d-2.1",
+      "family": "hunyuan3d",
+      "quant": null,
+      "weights_gb": 4.9,
+      "vram_gb": null,
+      "weights_note": "官方 ComfyUI 核心节点。一体 checkpoint hunyuan_3d_v2.1.safetensors（Comfy-Org 重打包）。几何 GLB，无自定义 CUDA。",
+      "shared_weights_with": [],
+      "nodes": "core",
+      "output": "GLB",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #37",
+        "seconds": 43.85,
+        "output": "GLB",
+        "prompt_id": "6c8d8b75-fef1-4bc9-8d29-e9170dab5067",
+        "note": "合成物体图，导出 5.1MB GLB。"
+      }
+    },
+    {
+      "id": "trellis2",
+      "family": "trellis2",
+      "quant": "bf16",
+      "weights_gb": 16,
+      "vram_gb": null,
+      "weights_note": "Microsoft TRELLIS.2-4B 图生 GLB（MeshOnly）。手修锁：microsoft/ + facebook/dinov3（visualbruno 镜像，ungated）。flex_gemm / cumesh / o-voxel 装 PozzettiAndrea cu128+torch2.11+cp312 wheel，不要在 GPU 上编。测试和正式都是 RTX-PRO-6000。不要用 T4 / L40S。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-Trellis2",
+      "output": "GLB",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "RTX-PRO-6000",
+        "date": "2026-08-14",
+        "source": "PR #37",
+        "seconds": 208.3,
+        "output": "GLB",
+        "prompt_id": "a05b1a06-48da-4c8c-a4f6-1071adf3d66c",
+        "note": "合成物体图，导出 8.7MB GLB。attention sdpa，preprocess 开 rembg。"
+      }
+    },
+    {
       "id": "qwen-image-2512",
       "family": "qwen",
       "quant": "fp8",
