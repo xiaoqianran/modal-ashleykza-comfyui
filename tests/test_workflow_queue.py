@@ -116,6 +116,9 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertIn("expectedTypes.every", workflow_queue.GRAPH_TO_PROMPT_JS)
         self.assertIn("loaded_types", workflow_queue.GRAPH_TO_PROMPT_JS)
         self.assertIn("registered_node_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("nodeData", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("defined_types", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("entry.class_type = type", workflow_queue.GRAPH_TO_PROMPT_JS)
 
     def test_repair_converted_prompt_fills_class_type_and_unknown_widgets(self):
         prompt = {
@@ -172,6 +175,17 @@ class WorkflowBindTests(unittest.TestCase):
         workflow_queue.bind_text_prompt(repaired, text="a celadon teapot")
         self.assertEqual(repaired["2"]["inputs"]["prompt"], "a celadon teapot")
         self.assertEqual(repaired["4"]["inputs"]["prompt"], ["3", 0])
+
+    def test_cosmos3_text_bind_uses_prompt_even_without_named_widget(self):
+        prompt = {
+            "2": {
+                "class_type": "Cosmos3TextEncode",
+                "inputs": {"UNKNOWN": "old", "text_encoder": ["1", 1]},
+                "_meta": {"title": "Positive Prompt"},
+            }
+        }
+        workflow_queue.bind_text_prompt(prompt, text="a celadon teapot")
+        self.assertEqual(prompt["2"]["inputs"]["prompt"], "a celadon teapot")
 
     def test_bind_number_inputs_only_touches_existing_keys(self):
         prompt = {
@@ -263,6 +277,10 @@ class WorkflowBindTests(unittest.TestCase):
                 "inputs": {"width": 832, "height": 480, "length": 93},
             },
             "6": {"class_type": "CFGGuider", "inputs": {"cfg": 6.0, "model": ["1", 0]}},
+            "16": {
+                "class_type": "DualModelGuider",
+                "inputs": {"cfg": 3.5, "model": ["1", 0]},
+            },
             "7": {"class_type": "RandomNoise", "inputs": {"noise_seed": 1}},
             "9": {
                 "class_type": "Cosmos3Scheduler",
@@ -284,6 +302,7 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["9"]["inputs"]["steps"], 20)
         self.assertEqual(prompt["9"]["inputs"]["flow_shift"], 5.0)
         self.assertEqual(prompt["6"]["inputs"]["cfg"], 4.5)
+        self.assertEqual(prompt["16"]["inputs"]["cfg"], 4.5)
         self.assertEqual(prompt["5"]["inputs"]["width"], 1024)
         self.assertEqual(prompt["5"]["inputs"]["height"], 576)
         self.assertEqual(prompt["2"]["inputs"]["width"], 1024)

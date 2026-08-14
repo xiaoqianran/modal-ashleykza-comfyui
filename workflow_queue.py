@@ -40,20 +40,33 @@ async (workflow) => {
     const graphNodes = () => app.graph?.nodes || app.graph?._nodes || [];
     const expectedTypes = [...new Set((workflow?.nodes || []).map((node) => node.type).filter(Boolean))];
     const registeredTable = () => window.LiteGraph?.registered_node_types || {};
+    const isUnknownName = (name) => !name || name === 'UNKNOWN' || String(name).startsWith('UNKNOWN_');
+    const nodeDataReady = (type) => {
+        const ctor = registeredTable()[type];
+        const data = ctor?.nodeData || ctor?.prototype?.nodeData;
+        return Boolean(data?.input?.required);
+    };
+    const widgetsNamed = (node) => {
+        const widgets = node.widgets || [];
+        return widgets.every((widget) => widget && !isUnknownName(widget.name));
+    };
     try {
         let registered = [];
-        for (let i = 0; i < 40; i++) {
+        let defined = [];
+        for (let i = 0; i < 80; i++) {
             registered = expectedTypes.filter((type) => Boolean(registeredTable()[type]));
-            if (expectedTypes.length > 0 && registered.length === expectedTypes.length) break;
+            defined = expectedTypes.filter((type) => nodeDataReady(type));
+            if (expectedTypes.length > 0 && defined.length === expectedTypes.length) break;
             await new Promise((resolve) => setTimeout(resolve, 250));
         }
         await app.loadGraphData(workflow);
         let loadedTypes = [];
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < 80; i++) {
             await new Promise((resolve) => setTimeout(resolve, 250));
-            loadedTypes = graphNodes().map((node) => String(node.type || node.comfyClass || ''));
+            const nodes = graphNodes();
+            loadedTypes = nodes.map((node) => String(node.type || node.comfyClass || ''));
             const ready = expectedTypes.length > 0 && expectedTypes.every((type) => loadedTypes.includes(type));
-            if (ready) break;
+            if (ready && nodes.every(widgetsNamed)) break;
         }
         const converted = await app.graphToPrompt();
         const prompt = converted?.output || converted;
@@ -65,7 +78,30 @@ async (workflow) => {
             }
         }
         if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
-            return { ok: false, error: 'graphToPrompt failed', missing, loadedTypes, expectedTypes, registered };
+            return { ok: false, error: 'graphToPrompt failed', missing, loadedTypes, expectedTypes, registered, defined };
+        }
+        for (const node of graphNodes()) {
+            const entry = prompt[String(node.id)];
+            if (!entry || typeof entry !== 'object') continue;
+            const type = node.type || node.comfyClass;
+            if (type && !entry.class_type) entry.class_type = type;
+            if (node.title) {
+                entry._meta = entry._meta || {};
+                if (!entry._meta.title) entry._meta.title = node.title;
+            }
+            const inputs = entry.inputs || {};
+            const unknownKeys = Object.keys(inputs).filter((key) => isUnknownName(key));
+            const widgets = (node.widgets || []).filter((widget) => widget && !isUnknownName(widget.name));
+            if (!unknownKeys.length || !widgets.length) continue;
+            const named = {};
+            for (const [key, value] of Object.entries(inputs)) {
+                if (!isUnknownName(key)) named[key] = value;
+            }
+            unknownKeys.forEach((key, index) => {
+                const name = widgets[index]?.name;
+                if (name && named[name] === undefined) named[name] = inputs[key];
+            });
+            entry.inputs = named;
         }
         return {
             ok: true,
@@ -75,6 +111,7 @@ async (workflow) => {
             loaded_types: loadedTypes,
             expected_types: expectedTypes,
             registered_types: registered,
+            defined_types: defined,
         };
     } catch (error) {
         return { ok: false, error: String((error && error.stack) || error) };
@@ -444,6 +481,17 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(f"graphToPrompt returned no prompt object: {result}")
     info = fetch_object_info(base)
     prompt = repair_converted_prompt(prompt, workflow, info)
+    typed = [
+        node.get("class_type")
+        for node in prompt.values()
+        if isinstance(node, dict)
+    ]
+    unknown = [
+        node_id
+        for node_id, node in prompt.items()
+        if isinstance(node, dict)
+        and any(_is_unknown_input_key(str(key)) for key in (node.get("inputs") or {}))
+    ]
     print(
         json.dumps(
             {
@@ -452,15 +500,20 @@ def convert_ui_workflow(base: str, workflow: dict[str, Any]) -> dict[str, Any]:
                 "missing": result.get("missing"),
                 "loaded_types": result.get("loaded_types"),
                 "registered_types": result.get("registered_types"),
-                "repaired": any(
-                    node.get("class_type")
-                    for node in prompt.values()
-                    if isinstance(node, dict)
-                ),
+                "defined_types": result.get("defined_types"),
+                "repaired": any(isinstance(name, str) and name for name in typed),
+                "unknown_input_nodes": unknown,
             }
         ),
         flush=True,
     )
+    if not typed or not all(isinstance(name, str) and name for name in typed):
+        raise RuntimeError("graphToPrompt left class_type empty after repair")
+    if unknown:
+        raise RuntimeError(
+            "graphToPrompt left UNKNOWN widget names after repair: "
+            + ",".join(unknown)
+        )
     return prompt
 
 
@@ -511,7 +564,7 @@ def bind_load_image(prompt: dict[str, Any], image_name: str) -> dict[str, Any]:
 SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustomAdvanced"}
 SEED_TYPES = SAMPLER_TYPES | {"RandomNoise"}
 SCHEDULER_TYPES = {"Flux2Scheduler", "Ideogram4Scheduler", "Cosmos3Scheduler"}
-GUIDER_TYPES = {"CFGGuider"}
+GUIDER_TYPES = {"CFGGuider", "DualModelGuider"}
 SIZE_CLASS_TYPES = {
     "Cosmos3EmptyAVLatentVideo",
     "Cosmos3EmptyLatentVideo",
@@ -572,7 +625,7 @@ def _text_input_key(node: dict[str, Any]) -> str:
     class_type = str(node.get("class_type") or "")
     if "text" in inputs or class_type.startswith("CLIPText"):
         return "text"
-    if "prompt" in inputs:
+    if "prompt" in inputs or class_type == "Cosmos3TextEncode":
         return "prompt"
     return "value"
 
