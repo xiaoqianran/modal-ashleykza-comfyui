@@ -28,6 +28,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重 |
 | `scripts/queue_ltx25.py` 的 patch | Ashley 0.32.0 缺官方节点 |
 | Pixal3D 预构建 wheel | 否则会在 GPU 上编译 natten |
+| TRELLIS.2 CUDA 扩展 | 与 Pixal3D 共用 flex_gemm / cumesh / o-voxel |
 | `catalog/*.json` | 只给 Studio 控制面填表单 |
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
@@ -166,6 +167,46 @@ python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
 ```
 
 空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。测试请用完即停，不要把 L40S 挂着。
+
+## 仓库示例：Hunyuan3D 2.1 图生 GLB
+
+| 文件 | 作用 |
+|---|---|
+| `examples/hunyuan3d-2.1-image-to-3d.json` | 官方模板 `3d_hunyuan3d-v2.1`（ComfyUI 核心节点） |
+| `examples/hunyuan3d-2.1-image-to-3d.lock.json` | 解析锁：`checkpoints/hunyuan_3d_v2.1.safetensors`（约 4.9GB） |
+| `catalog/hunyuan3d-2.1.json` | Studio 契约：图生几何 GLB，测试 **L40S** |
+
+锁内 `custom_nodes` 为空。不要用 Partner/API 的 `api_hunyuan3d_*`，也不要 visualbruno 的 PBR paint（要编 rasterizer）。无 UI 时用 `python3 -m workflow_queue`。建议 **L40S**。不要用 T4。
+
+```bash
+modal run hydrate_modal.py --workflow examples/hunyuan3d-2.1-image-to-3d.json
+MODAL_GPU=L40S modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/hunyuan3d-2.1-image-to-3d.json \
+  --images photo.png \
+  --out artifacts/hunyuan3d-2.1
+```
+
+## 仓库示例：TRELLIS.2 图生 GLB
+
+| 文件 | 作用 |
+|---|---|
+| `examples/trellis2-image-to-3d.json` | visualbruno `MeshOnly.json`，输入改成核心 `LoadImage` |
+| `examples/trellis2-image-to-3d.lock.json` | **手修**锁：`microsoft/TRELLIS.2-4B` + `TRELLIS-image-large` ss_dec + DINOv3（visualbruno 镜像） |
+| `catalog/trellis2.json` | Studio 契约：图生几何 GLB，测试 **L40S** |
+
+锁里是 GitHub 节点 `ComfyUI-Trellis2@main`（[visualbruno/ComfyUI-Trellis2](https://github.com/visualbruno/ComfyUI-Trellis2)）。`Trellis2LoadModel` 不走 `extra_model_paths`，GPU 启动时把 `/ComfyUI/models/microsoft` 与 `facebook` symlink 到 Volume。与 Pixal3D 共用 `flex_gemm` / `cumesh` / o-voxel；**DRTK 只给 Pixal3D**。`flash_attn` 走预构建 wheel。MeshOnly 关了 `use_reconviagen`，不要下 vggt。PBR 贴图（`MeshWithTexturing`）留作后续。冷启动会编 CUDA：`COMFY_STARTUP_TIMEOUT_SECONDS=3600`。建议 **L40S**。不要用 T4。
+
+```bash
+modal run hydrate_modal.py --workflow examples/trellis2-image-to-3d.json
+COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/trellis2-image-to-3d.json \
+  --images photo.png \
+  --out artifacts/trellis2
+```
+
+空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。测试请用完即停。
 
 ## 仓库示例：FLUX.2 [dev] 文生图
 

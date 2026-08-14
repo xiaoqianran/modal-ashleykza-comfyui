@@ -1072,6 +1072,14 @@ def _lock_has_pixal3d(nodes: Iterable[Mapping[str, Any]]) -> bool:
     return any("pixal3d" in str(node.get("id") or "").lower() for node in nodes)
 
 
+def _lock_has_trellis2(nodes: Iterable[Mapping[str, Any]]) -> bool:
+    return any("trellis2" in str(node.get("id") or "").lower() for node in nodes)
+
+
+def _lock_needs_sparse_3d_runtime(nodes: Iterable[Mapping[str, Any]]) -> bool:
+    return _lock_has_pixal3d(nodes) or _lock_has_trellis2(nodes)
+
+
 def _find_pixal3d_node_dir(custom_nodes_dir: Path) -> Path | None:
     if not custom_nodes_dir.is_dir():
         return None
@@ -1254,21 +1262,20 @@ def ensure_pixal3d_runtime(
     comfy_root: str | Path,
     custom_nodes_dir: str | Path,
 ) -> bool:
-    """Install Pixal3D Python deps and CUDA kernels into the Image venv.
+    """Install sparse-3D Python deps and CUDA kernels (Pixal3D / TRELLIS.2).
 
-    natten / flash-attn use prebuilt wheels. Remaining kernels (flex_gemm,
-    cumesh, o-voxel, drtk) still compile against the running Torch.
+    natten / flash-attn use prebuilt wheels. Shared kernels (flex_gemm,
+    cumesh, o-voxel) still compile against the running Torch. DRTK and
+    Pixal3D ``requirements.txt`` only run when that node pack is present.
     Returns True if anything was installed (ComfyUI should restart).
     """
     comfy_root = Path(comfy_root)
     python = _comfy_python(comfy_root)
     changed = ensure_pixal3d_prebuilt_wheels(comfy_root)
     node_dir = _find_pixal3d_node_dir(Path(custom_nodes_dir))
-    if node_dir is None:
-        return changed
 
-    requirements = node_dir / "requirements.txt"
-    if requirements.is_file() and (
+    requirements = node_dir / "requirements.txt" if node_dir is not None else None
+    if requirements is not None and requirements.is_file() and (
         not _module_available("moge", python) or not _module_available("natten", python)
     ):
         filtered = Path("/tmp/pixal3d-requirements-no-natten.txt")
@@ -1309,7 +1316,7 @@ def ensure_pixal3d_runtime(
 
     tmp = Path("/tmp/pixal3d_extensions")
     tmp.mkdir(parents=True, exist_ok=True)
-    sources = (
+    sources: list[tuple[str, tuple[str, ...], list[str], str | None]] = [
         (
             "flex_gemm",
             ("flex_gemm_ap", "flex_gemm"),
@@ -1342,20 +1349,23 @@ def ensure_pixal3d_runtime(
             ["git", "clone", "--depth=1", "https://github.com/microsoft/TRELLIS.2.git"],
             "o-voxel",
         ),
-        (
-            "drtk",
-            ("drtk",),
-            [
-                "git",
-                "clone",
-                "--depth=1",
-                "--branch",
-                "stable",
-                "https://github.com/facebookresearch/DRTK.git",
-            ],
-            None,
-        ),
-    )
+    ]
+    if node_dir is not None:
+        sources.append(
+            (
+                "drtk",
+                ("drtk",),
+                [
+                    "git",
+                    "clone",
+                    "--depth=1",
+                    "--branch",
+                    "stable",
+                    "https://github.com/facebookresearch/DRTK.git",
+                ],
+                None,
+            )
+        )
     for label, imports, clone, subdir in sources:
         if any(_module_available(name, python) for name in imports):
             print(f"[PIXAL3D] {label} already importable", flush=True)
@@ -1438,6 +1448,12 @@ def prepare_runtime(
 
     for name in ("input", "output", "user"):
         _replace_with_symlink(comfy_root / name, workspace / name)
+    # Trellis2LoadModel joins folder_paths.models_dir / "microsoft/..." and
+    # "facebook/..." instead of extra_model_paths. Point those at the Volume.
+    models_dir = comfy_root / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("microsoft", "facebook"):
+        _replace_with_symlink(models_dir / name, storage_root / name)
 
     write_optional_node_configs(comfy_root, workspace)
 
@@ -1483,8 +1499,8 @@ def apply_volume_launch(
     nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
     installer = install_nodes or install_registry_nodes
     wheels_changed = False
-    if install_lock_nodes and _lock_has_pixal3d(nodes):
-        # Wheel first so CNR ``pip install -r requirements.txt`` does not compile natten.
+    if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
+        # Wheel first so CNR / TRELLIS.2 do not compile natten or flash-attn.
         wheels_changed = ensure_pixal3d_prebuilt_wheels(comfy_root)
     if install_lock_nodes and nodes:
         newly = installer(
@@ -1493,7 +1509,7 @@ def apply_volume_launch(
             custom_nodes_dir=workspace / "custom_nodes",
         )
     runtime_changed = False
-    if install_lock_nodes and _lock_has_pixal3d(nodes):
+    if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
         runtime_changed = ensure_pixal3d_runtime(
             comfy_root,
             workspace / "custom_nodes",

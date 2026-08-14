@@ -69,6 +69,10 @@ class WindowsBundleTests(unittest.TestCase):
             self.assertTrue((app / "examples" / "cosmos3-edge-t2v.json").is_file())
             self.assertTrue((app / "catalog" / "cosmos3-super-image2video-4step.json").is_file())
             self.assertTrue((app / "catalog" / "cosmos3-super-text2image-4step.json").is_file())
+            self.assertTrue((app / "catalog" / "hunyuan3d-2.1.json").is_file())
+            self.assertTrue((app / "examples" / "hunyuan3d-2.1-image-to-3d.json").is_file())
+            self.assertTrue((app / "catalog" / "trellis2.json").is_file())
+            self.assertTrue((app / "examples" / "trellis2-image-to-3d.json").is_file())
             self.assertTrue((app / "README.txt").is_file())
             self.assertNotIn(".env", {path.name for path in app.iterdir()})
 

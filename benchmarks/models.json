@@ -280,6 +280,38 @@
       }
     },
     {
+      "id": "hunyuan3d-2.1",
+      "family": "hunyuan3d",
+      "quant": null,
+      "weights_gb": 4.9,
+      "vram_gb": null,
+      "weights_note": "官方 ComfyUI 核心节点。一体 checkpoint hunyuan_3d_v2.1.safetensors（Comfy-Org 重打包）。几何 GLB，无自定义 CUDA。",
+      "shared_weights_with": [],
+      "nodes": "core",
+      "output": "GLB",
+      "smoke": {
+        "status": "pending",
+        "gpu": "L40S",
+        "note": "尚未 hydrate / 排队。"
+      }
+    },
+    {
+      "id": "trellis2",
+      "family": "trellis2",
+      "quant": "bf16",
+      "weights_gb": 16,
+      "vram_gb": null,
+      "weights_note": "Microsoft TRELLIS.2-4B 图生 GLB（MeshOnly）。手修锁：microsoft/ + facebook/dinov3（visualbruno 镜像，ungated）。GPU 启动时编 flex_gemm / cumesh / o-voxel；flash-attn 走预构建 wheel。不要用 T4。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-Trellis2",
+      "output": "GLB",
+      "smoke": {
+        "status": "pending",
+        "gpu": "L40S",
+        "note": "尚未 hydrate / 排队。冷启动会编 CUDA。"
+      }
+    },
+    {
       "id": "qwen-image-2512",
       "family": "qwen",
       "quant": "fp8",

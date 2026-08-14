@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "workflow": {
+    "name": "hunyuan3d-2.1-image-to-3d.json",
+    "sha256": "eab3a3a895413094a4931c769efc952d7dabb380afc146b8e4a9d3ca5b6342c9"
+  },
+  "models": [
+    {
+      "category": "checkpoints",
+      "filename": "hunyuan_3d_v2.1.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/hunyuan3D_2.1_repackaged/resolve/main/hunyuan_3d_v2.1.safetensors",
+      "sha256": null,
+      "source": "node:ImageOnlyCheckpointLoader"
+    }
+  ],
+  "custom_nodes": [],
+  "unresolved": [],
+  "warnings": []
+}

@@ -167,5 +167,135 @@ class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
         self.assertEqual(order, ["wheels", "cnr", "runtime"])
 
 
+class Trellis2LaunchOrderTests(unittest.TestCase):
+    def test_installs_wheels_before_cnr_then_runtime(self):
+        order: list[str] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            storage = root / "storage"
+            workspace = root / "workspace"
+            comfy_root = root / "ComfyUI"
+            comfy_root.mkdir()
+            (comfy_root / "main.py").write_text("#\n", encoding="utf-8")
+            target = storage / "microsoft" / "TRELLIS.2-4B" / "pipeline.json"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"model")
+            lock = {
+                "schema": 1,
+                "custom_nodes": [
+                    {
+                        "id": "ComfyUI-Trellis2",
+                        "version": "main",
+                        "url": "https://github.com/visualbruno/ComfyUI-Trellis2.git",
+                    }
+                ],
+                "unresolved": [],
+                "workflow": {"name": "trellis2.json", "sha256": "abc"},
+                "models": [
+                    {
+                        "category": "microsoft",
+                        "filename": "TRELLIS.2-4B/pipeline.json",
+                        "url": "https://example.com/pipeline.json",
+                        "sha256": None,
+                        "source": "test",
+                    }
+                ],
+            }
+            comfy_engine.persist_launch_state(
+                storage,
+                mode="workflow",
+                workflow="demo.json",
+                workflow_lock=lock,
+            )
+
+            def installer(*_args, **_kwargs):
+                order.append("cnr")
+                return ["ComfyUI-Trellis2"]
+
+            with (
+                patch.object(
+                    comfy_engine,
+                    "ensure_pixal3d_prebuilt_wheels",
+                    side_effect=lambda *_a, **_k: order.append("wheels") or True,
+                ),
+                patch.object(
+                    comfy_engine,
+                    "ensure_pixal3d_runtime",
+                    side_effect=lambda *_a, **_k: order.append("runtime") or False,
+                ),
+            ):
+                comfy_engine.apply_volume_launch(
+                    storage_root=storage,
+                    workspace=workspace,
+                    comfy_root=comfy_root,
+                    default_profile="base",
+                    default_install_lock_nodes=True,
+                    start_fn=lambda **_kwargs: DummyProcess(),
+                    wait_fn=lambda **_kwargs: None,
+                    install_nodes=installer,
+                )
+        self.assertEqual(order, ["wheels", "cnr", "runtime"])
+
+
+class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
+    def test_compiles_shared_cuda_and_skips_drtk(self):
+        calls: list[list[str]] = []
+        available: set[str] = set()
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+            if cmd and cmd[0] == "git":
+                Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
+            if "pip" in cmd:
+                dest = cmd[-1]
+                if dest.endswith("flex_gemm"):
+                    available.update({"flex_gemm_ap", "flex_gemm"})
+                elif dest.endswith("cumesh"):
+                    available.update({"cumesh_vb", "cumesh"})
+                elif dest.endswith("o-voxel") or dest.endswith("o_voxel"):
+                    available.update({"o_voxel_vb_ap", "o_voxel"})
+                elif dest.endswith("DRTK") or dest.endswith("drtk"):
+                    available.add("drtk")
+
+        def fake_available(name, _python):
+            return name in available
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            custom_nodes = root / "custom_nodes"
+            comfy_root.mkdir()
+            (custom_nodes / "ComfyUI-Trellis2").mkdir(parents=True)
+            with (
+                patch.object(comfy_engine, "_comfy_python", return_value="/usr/bin/python3"),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(comfy_engine, "_module_available", fake_available),
+                patch.object(comfy_engine, "_ensure_cuda_build_tools"),
+                patch.object(comfy_engine, "ensure_pixal3d_prebuilt_wheels", return_value=False),
+                patch.object(comfy_engine, "_install_flash_attn_wheel", return_value=True),
+            ):
+                changed = comfy_engine.ensure_pixal3d_runtime(comfy_root, custom_nodes)
+        self.assertTrue(changed)
+        joined = " ".join(" ".join(cmd) for cmd in calls)
+        self.assertIn("FlexGEMM", joined)
+        self.assertIn("CuMesh", joined)
+        self.assertIn("TRELLIS.2.git", joined)
+        self.assertNotIn("DRTK", joined)
+
+    def test_prepare_runtime_symlinks_microsoft_and_facebook(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            workspace = root / "workspace"
+            storage = root / "storage"
+            comfy_root.mkdir()
+            (comfy_root / "main.py").write_text("#\n", encoding="utf-8")
+            comfy_engine.prepare_runtime(comfy_root, workspace, storage)
+            for name in ("microsoft", "facebook"):
+                link = comfy_root / "models" / name
+                self.assertTrue(link.is_symlink(), name)
+                self.assertEqual(link.resolve(), (storage / name).resolve())
+
+
 if __name__ == "__main__":
     unittest.main()

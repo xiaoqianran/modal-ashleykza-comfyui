@@ -37,6 +37,8 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("cosmos3-edge", ids)
         self.assertIn("cosmos3-super-image2video-4step", ids)
         self.assertIn("cosmos3-super-text2image-4step", ids)
+        self.assertIn("hunyuan3d-2.1", ids)
+        self.assertIn("trellis2", ids)
         self.assertEqual(items[0]["kind"], "t2i")
         self.assertEqual(items[0]["io"]["images_in"], 0)
         for item in items:
@@ -125,6 +127,20 @@ class CatalogTests(unittest.TestCase):
         public = public_catalog(catalog)
         self.assertFalse(public["has_graph"])
         self.assertTrue(any(spec["type"] == "image" for spec in public["params"]))
+
+    def test_hunyuan3d_and_trellis2_are_workflow_mode_with_image_slot(self):
+        for recipe_id in ("hunyuan3d-2.1", "trellis2"):
+            catalog = load_catalog(recipe_id)
+            self.assertEqual(catalog["mode"], "workflow", recipe_id)
+            self.assertNotIn("graph", catalog)
+            self.assertEqual(catalog["gpu"], "L40S", recipe_id)
+            self.assertEqual(catalog["gpu_inference"], "RTX-PRO-6000", recipe_id)
+            self.assertNotIn("T4", catalog["gpu_choices"])
+            self.assertEqual(catalog["kind"], "i23d", recipe_id)
+            self.assertEqual(catalog["io"]["images_required"], 1, recipe_id)
+            public = public_catalog(catalog)
+            self.assertFalse(public["has_graph"], recipe_id)
+            self.assertTrue(any(spec["type"] == "image" for spec in public["params"]), recipe_id)
 
     def test_workflow_mode_binds_loadimage_without_embedded_graph(self):
         api_prompt = {
@@ -306,6 +322,16 @@ class CatalogJobPlanTests(unittest.TestCase):
             iter_generate_jobs(catalog, {"prompts": []})
         jobs = iter_generate_jobs(catalog, {"images": ["a.png", "b.png"]})
         self.assertEqual([item["image"] for item in jobs], ["a.png", "b.png"])
+
+    def test_hunyuan3d_and_trellis2_need_images_and_split_jobs(self):
+        from studio.server import iter_generate_jobs
+
+        for recipe_id in ("hunyuan3d-2.1", "trellis2"):
+            catalog = load_catalog(recipe_id)
+            with self.assertRaisesRegex(RuntimeError, "输入图"):
+                iter_generate_jobs(catalog, {"prompts": []})
+            jobs = iter_generate_jobs(catalog, {"images": ["a.png", "b.png"]})
+            self.assertEqual([item["image"] for item in jobs], ["a.png", "b.png"], recipe_id)
 
     def test_cosmos3_i2v_needs_image_and_prompt(self):
         from studio.server import iter_generate_jobs
