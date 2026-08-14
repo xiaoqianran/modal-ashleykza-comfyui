@@ -1,0 +1,8 @@
+# Keep the architecture graph on code + recipe contracts, not ComfyUI graphs.
+examples/**
+docs/gallery/**
+site/**
+artifacts/**
+*.lock.json
+*.spec
+packaging/*.spec

@@ -61,7 +61,7 @@ Studio
 
 默认 Image 对所有工作流相同，才能吃到 Modal 层缓存：
 
-1. 固定 Ashley 基础镜像
+1. 构建时解析最新 Ashley `cu128-py312-v*`（不钉 0.32 / 0.33；`COMFY_IMAGE` 可覆盖）
 2. apt + `typing_extensions` / `pydantic`
 3. 固定 `comfy-cli==1.16.0`（给运行时装 Volume 插件用）
 4. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点（默认关，会改 Image）

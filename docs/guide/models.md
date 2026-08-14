@@ -15,7 +15,7 @@ python3 -m benchmarks --write
 | 项 | 值 |
 |---|---|
 | Image | ashleykleynhans/comfyui cu128-py312 |
-| ComfyUI | **0.32.0** |
+| ComfyUI | **构建时解析最新 cu128-py312-v*** |
 | 平台 | Modal（profile `weiranzhiqian`） |
 | 计时 | 从 POST /prompt 到 /history 出现 success 的客户端墙钟。首张常含装进 VRAM 或同卡换模。 |
 | 空闲缩容 | **5 秒**（`modal serve` 会挡住） |

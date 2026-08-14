@@ -11,7 +11,7 @@
 | `MODAL_VOLUME_NAME` | `comfyui-ashleykza-workspace` | workspace Volume |
 | `MODAL_MODELS_VOLUME` | `comfyui-ashleykza-models` | 模型 Volume |
 | `COMFY_STORAGE_ROOT` | `/mnt/comfy-storage` | 模型 Volume 挂载点 |
-| `COMFY_IMAGE` | `ghcr.io/ashleykleynhans/comfyui:cu128-py312-v0.32.0` | 基础镜像。GPU Image 额外 apt：`cmake` `ninja-build` `build-essential` `python3-dev`（仅当 sparse-3d wheel 对不上才编译）。natten / flash-attn / flex_gemm / cumesh / o-voxel 走预构建 wheel |
+| `COMFY_IMAGE` | 空 = 构建时解析最新 `cu128-py312-v*` | 不钉 0.32 / 0.33。空值时读 [ashleykleynhans/comfyui-docker](https://github.com/ashleykleynhans/comfyui-docker) 的最高 `vX.Y.Z`，拼成 `ghcr.io/ashleykleynhans/comfyui:cu128-py312-vX.Y.Z`。显式设置则钉死。模型和锁内 CNR 不进 Image。GPU Image 额外 apt：`cmake` `ninja-build` `build-essential` `python3-dev`（仅当 sparse-3d wheel 对不上才编译） |
 
 ## GPU 与扩缩容
 
