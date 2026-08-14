@@ -17,10 +17,10 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ```bash
 modal run hydrate_modal.py --workflow examples/z-image-base.json
-MODAL_GPU=T4 modal serve comfyui_modal.py
+MODAL_GPU=L40S modal serve comfyui_modal.py
 ```
 
-默认 GPU 是 T4。测完 **Ctrl+C** 停掉 serve；只把页面开着会阻止 5 秒缩容。
+默认 GPU 是 L40S，不要用 T4。测完 **Ctrl+C** 停掉 serve；只把页面开着会阻止 5 秒缩容。
 
 ## 2b. Profile
 

@@ -30,7 +30,7 @@ modal serve comfyui_modal.py
 | Hydrate App | `comfyui-ashleykza-cu128-hydrate` |
 | 模型 Volume | `comfyui-ashleykza-models` → `/mnt/comfy-storage` |
 | Secret | `comfyui-creds` |
-| GPU | T4（L40S 等必须显式 `MODAL_GPU`） |
+| GPU | L40S（RTX-PRO-6000 必须显式 `MODAL_GPU`；不要用 T4） |
 | 空闲缩容 | 5 秒；`modal serve` / 开着的 UI 会阻止缩容 |
 
 ## 阅读顺序

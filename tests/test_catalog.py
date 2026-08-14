@@ -35,6 +35,9 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(item["gpu_inference"], "RTX-PRO-6000", item["id"])
             self.assertIn(item["gpu"], item["gpu_choices"], item["id"])
             self.assertIn("RTX-PRO-6000", item["gpu_choices"], item["id"])
+            self.assertNotIn("T4", item["gpu_choices"], item["id"])
+            if item["id"] != "flux2-dev":
+                self.assertEqual(item["gpu"], "L40S", item["id"])
 
     def test_bind_graph_fills_prompt_and_seed(self):
         catalog = load_catalog("z-image")
@@ -46,9 +49,9 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(graph["69"]["inputs"]["seed"], 42)
         self.assertEqual(graph["69"]["inputs"]["steps"], 20)
         self.assertEqual(values["width"], 1024)
-        self.assertEqual(catalog["gpu"], "T4")
+        self.assertEqual(catalog["gpu"], "L40S")
         self.assertEqual(catalog["gpu_inference"], "RTX-PRO-6000")
-        self.assertEqual(catalog["gpu_choices"][0], "T4")
+        self.assertEqual(catalog["gpu_choices"][0], "L40S")
         self.assertEqual(catalog["mode"], "graph")
         self.assertIsInstance(graph["68"]["inputs"]["width"], int)
 
@@ -86,7 +89,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(graph["69"]["class_type"], "KSampler")
         self.assertEqual(graph["71"]["class_type"], "ConditioningZeroOut")
         self.assertEqual(values["steps"], 8)
-        self.assertEqual(catalog["gpu"], "T4")
+        self.assertEqual(catalog["gpu"], "L40S")
         self.assertFalse(public_catalog(catalog)["io"]["negative"])
 
     def test_rejects_unknown_placeholder(self):
@@ -158,15 +161,16 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(krea["gpu"], "L40S")
         self.assertEqual(krea["gpu_inference"], "RTX-PRO-6000")
         self.assertEqual(krea["gpu_choices"], ["L40S", "RTX-PRO-6000"])
-        self.assertEqual(turbo["gpu"], "T4")
+        self.assertEqual(turbo["gpu"], "L40S")
         self.assertEqual(turbo["gpu_inference"], "RTX-PRO-6000")
-        self.assertEqual(turbo["gpu_choices"], ["T4", "RTX-PRO-6000"])
+        self.assertEqual(turbo["gpu_choices"], ["L40S", "RTX-PRO-6000"])
         self.assertEqual(ideogram["gpu"], "L40S")
         self.assertEqual(ideogram["gpu_inference"], "RTX-PRO-6000")
         self.assertEqual(ideogram["gpu_choices"], ["L40S", "RTX-PRO-6000"])
         self.assertNotIn("T4", flux["gpu_choices"])
         self.assertNotIn("T4", qwen["gpu_choices"])
         self.assertNotIn("T4", krea["gpu_choices"])
+        self.assertNotIn("T4", turbo["gpu_choices"])
         self.assertNotIn("T4", ideogram["gpu_choices"])
         self.assertTrue(public_catalog(flux)["io"]["prompt"])
         self.assertTrue(public_catalog(qwen)["io"]["prompt"])
@@ -187,7 +191,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_rejects_gpu_inference_outside_choices(self):
         catalog = dict(load_catalog("z-image"))
-        catalog["gpu_inference"] = "L40S"
+        catalog["gpu_inference"] = "T4"
         with self.assertRaisesRegex(ValueError, "gpu_inference"):
             validate_catalog(catalog)
 

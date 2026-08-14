@@ -37,8 +37,8 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 | 配方 | 测试默认 | 正式推理 | 输入 |
 |---|---|---|---|
-| Z-Image | T4 | RTX-PRO-6000 | 提示词 |
-| Z-Image-Turbo | T4 | RTX-PRO-6000 | 提示词 |
+| Z-Image | L40S | RTX-PRO-6000 | 提示词 |
+| Z-Image-Turbo | L40S | RTX-PRO-6000 | 提示词 |
 | FLUX.2 [dev] | RTX-PRO-6000 | RTX-PRO-6000 | 提示词 |
 | Qwen-Image-2512 | L40S | RTX-PRO-6000 | 提示词 |
 | Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
@@ -51,7 +51,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：默认用配方里的测试卡（能放下显存的便宜卡）。Z-Image / Z-Image-Turbo 是 **T4**。Krea / Qwen / Ideogram 4 / Pixal3D / TripoSplat 是 **L40S**。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
+4. **启动 GPU**：默认用配方里的测试卡。除 FLUX.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
@@ -93,9 +93,9 @@ Z-Image 与 Z-Image-Turbo 必须是 `graph`：Ashley 0.32.0 没有官方模板�
   "mode": "graph",
   "workflow": "examples/z-image-base.json",
   "lock": "examples/z-image-base.lock.json",
-  "gpu": "T4",
+  "gpu": "L40S",
   "gpu_inference": "RTX-PRO-6000",
-  "gpu_choices": ["T4", "RTX-PRO-6000"],
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
   "params": [
     {"id": "prompt", "type": "text", "bind": "prompt", "title": "提示词", "required": true},
     {"id": "seed", "type": "int", "bind": "seed", "title": "种子", "default": -1, "minimum": -1}
@@ -140,8 +140,8 @@ Z-Image 与 Z-Image-Turbo 必须是 `graph`：Ashley 0.32.0 没有官方模板�
 
 - 为每个 JSON 写 Python 适配器
 - 在 catalog 里编造 HuggingFace 地址（那是锁文件 / resolver 的事）
-- 给图生配方默认 T4
-- 测试默认用 RTX-PRO-6000（能放下显存就用便宜卡；正式推理才写 `gpu_inference`）
+- 给图生配方默认 T4（测试一律 L40S）
+- 测试默认用 RTX-PRO-6000（能放下显存就用 L40S；正式推理才写 `gpu_inference`）
 - 把 `graph` 抄到每个新配方上
 
 `workflow` / `lock` 必须是仓库内相对路径，不能 `..`。

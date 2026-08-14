@@ -4,14 +4,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-# Cheap-only default. Modal treats a GPU tuple as fallback: T4,L40S silently
-# upgrades to L40S when T4 is out of capacity. Expensive cards must be explicit.
-DEFAULT_GPU = ("T4",)
-CHEAP_GPUS = frozenset({"T4", "L4"})
+# Test default is L40S, never T4. Modal treats a GPU tuple as fallback:
+# L40S,RTX-PRO-6000 silently upgrades when L40S is out of capacity.
+# Inference cards must stay explicit and out of this default tuple.
+DEFAULT_GPU = ("L40S",)
+CHEAP_GPUS = frozenset({"L40S"})
 GPU_IDLE_REMINDER = (
     "任务已结束。scaledown_window=5s 只在没有 HTTP/WebSocket、也没有 modal serve "
     "保活时生效。测完请停掉 serve；浏览器开着 ComfyUI 或继续轮询 /system_stats "
-    "会一直占 GPU。默认 GPU 是 T4，L40S / RTX-PRO-6000 必须显式设置 MODAL_GPU。"
+    "会一直占 GPU。默认 GPU 是 L40S，RTX-PRO-6000 必须显式设置 MODAL_GPU。"
 )
 
 
@@ -63,7 +64,7 @@ def _argv_option(argv: Sequence[str] | None, name: str) -> str:
 
 
 def parse_gpu(raw: str) -> tuple[str, ...]:
-    """Parse ``MODAL_GPU``. Empty means T4 only — never a silent expensive fallback."""
+    """Parse ``MODAL_GPU``. Empty means L40S only — never a silent PRO-6000 fallback."""
     gpu = tuple(item.strip() for item in raw.split(",") if item.strip())
     return gpu or DEFAULT_GPU
 

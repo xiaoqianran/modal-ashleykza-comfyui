@@ -316,7 +316,7 @@ modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 
 # 2. GPU UI (same Image for every workflow; lock CNR on workspace Volume)
-MODAL_GPU=T4 modal serve comfyui_modal.py
-MODAL_GPU=T4 modal deploy comfyui_modal.py
+MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 """.strip()
     )

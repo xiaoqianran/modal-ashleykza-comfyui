@@ -9,7 +9,7 @@ GPU 启动前，工作流引用的权重必须已经在 Storage 里。锁文件�
 ```bash
 python3 -m workflow_queue --inspect --workflow examples/你的.json
 modal run hydrate_modal.py --workflow examples/你的.json
-MODAL_GPU=T4 modal serve comfyui_modal.py
+MODAL_GPU=L40S modal serve comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/你的.json \
   --images photo.png \
@@ -134,7 +134,7 @@ python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow ex
 
 Ashley 0.32.0 已有核心节点（`TripoSplatConditioning`、`SplatToFile3D`、`SaveGLB` 等），锁里 `custom_nodes` 为空。`background_removal/` 已加入 Storage 目录。官方模板把 `SplatToMesh` / 第二路 `SaveGLB` 设成 bypass；原生输出仍是 `spz` + 已启用的 `SaveGLB`。
 
-`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `scripts/queue_triposplat.py`：展平 subgraph、可选打开 mesh/GLB、排队、把模型拉到 `artifacts/triposplat`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（默认是 T4，不会再静默升到贵卡）。跑完立刻停掉 `modal serve`，不要把 L40S 挂着。
+`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `scripts/queue_triposplat.py`：展平 subgraph、可选打开 mesh/GLB、排队、把模型拉到 `artifacts/triposplat`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（不要用 T4）。跑完立刻停掉 `modal serve`，不要把 L40S 挂着。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/triposplat-image-to-gaussian-splat.json
@@ -240,13 +240,13 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 |---|---|
 | `examples/z-image-turbo-t2i.json` | 官方 UI 工作流 `image_z_image_turbo`（subgraph） |
 | `examples/z-image-turbo-t2i.lock.json` | 解析锁：Turbo DiT + Qwen3-4B TE + `ae` VAE |
-| `catalog/z-image-turbo.json` | Studio 契约：蒸馏 **8 步**、CFG 固定 1，测试 **T4**，正式 **RTX-PRO-6000** |
+| `catalog/z-image-turbo.json` | Studio 契约：蒸馏 **8 步**、CFG 固定 1，测试 **L40S**，正式 **RTX-PRO-6000** |
 
 和 Z-Image 一样，Ashley 0.32.0 打不开官方 subgraph 外壳，Studio 用 `mode=graph`。锁内 `custom_nodes` 为空。官方说能进 16GB；负向走 `ConditioningZeroOut`，表单没有 negative。不要再写 `queue_z_image_turbo.py`。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/z-image-turbo-t2i.json
-MODAL_GPU=T4 modal serve comfyui_modal.py
+MODAL_GPU=L40S modal serve comfyui_modal.py
 ```
 
 无 UI 时走 Studio 的 graph，或对照 `catalog/z-image-turbo.json` 直接 `POST /prompt`。

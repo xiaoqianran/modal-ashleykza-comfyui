@@ -12,6 +12,6 @@ modal deploy comfyui_modal.py
 | `modal serve` | 不保存 |
 | `modal deploy` | 保存，后续冷启动复用 |
 
-换 GPU：默认 **T4**。不要写一长串 fallback。需要 L4 / L40S / RTX-PRO-6000 时显式 `MODAL_GPU=L40S`。测试请用 T4，跑完停掉 `modal serve`，不要把贵卡挂着。
+换 GPU：默认 **L40S**。不要写一长串 fallback。不要用 T4。需要 RTX-PRO-6000 时显式 `MODAL_GPU=RTX-PRO-6000`。测试请用 L40S，跑完停掉 `modal serve`，不要把贵卡挂着。
 
 锁内 CNR 默认在 GPU 启动时装到 Volume。关掉：hydrate 时 `--skip-lock-nodes`。配方额外节点：`COMFY_INSTALL_NODES=1`（改 Image）。130 个上游基础节点：`COMFY_BASE_NODES=1`（改 Image）。

@@ -213,7 +213,7 @@ def stop_gpu_containers(log: Any | None = None) -> list[str]:
 def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, Any]:
     global _SERVE_PROC
     catalog = load_catalog(recipe_id)
-    chosen = gpu or str(catalog.get("gpu") or "T4")
+    chosen = gpu or str(catalog.get("gpu") or "L40S")
     allowed = set(catalog.get("gpu_choices") or (chosen,))
     if chosen not in allowed:
         raise ValueError(f"gpu {chosen!r} not in {sorted(allowed)}")

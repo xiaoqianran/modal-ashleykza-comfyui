@@ -17,7 +17,7 @@
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `MODAL_GPU` | `T4` | 只接受你写明的 GPU。**没有** `T4,L4,L40S,RTX-PRO-6000` 这种静默升级。T4 没货时任务会失败，而不是改去开 L40S。贵卡必须显式：`MODAL_GPU=L40S` |
+| `MODAL_GPU` | `L40S` | 只接受你写明的 GPU。**没有** `L40S,RTX-PRO-6000` 这种静默升级。L40S 没货时任务会失败，而不是改去开 PRO-6000。不要用 T4。正式推理必须显式：`MODAL_GPU=RTX-PRO-6000` |
 | `COMFY_SCALEDOWN_SECONDS` | `5` | 空闲后缩容秒数，范围 2–1200 |
 | `COMFY_TIMEOUT_SECONDS` | `86400` | 单次输入最长秒数（最长 24h） |
 | `COMFY_STARTUP_TIMEOUT_SECONDS` | `900` | 启动探测超时 |
