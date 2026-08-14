@@ -13,6 +13,7 @@ from catalog import (
     catalog_hydrate_rows,
     list_catalogs,
     load_catalog,
+    lock_path,
     public_catalog,
     validate_catalog,
     workflow_path,
@@ -137,7 +138,10 @@ class CatalogTests(unittest.TestCase):
             apply_catalog_hydrate("not-a-recipe")
 
     def test_workflow_file_exists(self):
-        self.assertTrue(workflow_path(load_catalog("z-image")).is_file())
+        catalog = load_catalog("z-image")
+        self.assertTrue(workflow_path(catalog).is_file())
+        self.assertTrue(lock_path(catalog).is_file())
+        self.assertEqual(lock_path(catalog).name, Path(catalog["lock"]).name)
         html = Path(__file__).resolve().parents[1] / "studio" / "static" / "index.html"
         self.assertTrue(html.is_file())
         text = html.read_text(encoding="utf-8")

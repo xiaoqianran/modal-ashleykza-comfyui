@@ -8,7 +8,8 @@
   hydrate_modal.py      CPU App：hydrate / resolve / profiles / outputs / repair
   modal_config.py       常量、路径、环境变量
   storage.py            Volume 路径与 extra_model_paths.yaml
-  comfy_engine.py       下载、校验、启动 ComfyUI（含 Pixal3D / TRELLIS CUDA）
+  comfy_engine.py       下载、校验、启动 ComfyUI
+  sparse_3d_runtime.py  Pixal3D / TRELLIS CUDA wheels（装到 workspace Volume）
   workflow_resolver.py  工作流 → 锁文件（只绑定 JSON 里已有的 URL / CNR）
   recipes.py            MODEL_DIRS + 旧 profile / model pack / node pack
 
@@ -24,7 +25,7 @@ Studio
 
 其它
   base_nodes.py         基础自定义节点安装（默认关，会改 Image）
-  scripts/queue_ltx25.py  Ashley 0.32.0 缺官方节点时的补丁排队
+  scripts/queue_ltx25.py  Ashley 0.32.0 缺官方节点时的补丁；HTTP 走 workflow_queue
   examples/             示例 workflow / lock
   docs/                 本站点 Markdown
   mkdocs.yml            MkDocs Material 配置
@@ -72,7 +73,9 @@ Studio
 
 ## Volume 提交
 
-CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。
+CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes`、或把 CUDA wheels 写入 `/workspace/.python/sparse-3d` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。
+
+CUDA wheels 不进 Image、也不进 models Volume。冷启动时 `sparse_3d_runtime` 用 `pip install --target /workspace/.python/sparse-3d`，wheel 文件缓存在 `/workspace/.python/wheels`，再往容器 venv 的 site-packages 写一个 `comfy_sparse_3d.pth`。`.pth` 随 Image venv 一起消失，Volume 上的 site 还在；下次只要重新写 `.pth` 就能 import。Blackwell 的 boot `.pth` 仍写在 venv 里（几行 Python）。OpenGL 的 `apt-get` 仍是每次冷启动。CNR 的 `requirements.txt` pip 仍进 venv，不在这一层持久化。
 
 ## Volume 路径
 

@@ -358,6 +358,8 @@ def apply_catalog_hydrate(
     they match ``examples/*.lock.json`` naming.
     """
     item = load_catalog(recipe_id.strip())
+    workflow_path(item)
+    lock_path(item)
     return (
         workflow.strip() or str(item["workflow"]),
         lock_out.strip() or str(item["lock"]),

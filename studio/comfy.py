@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import workflow_queue
@@ -27,8 +26,3 @@ def wait_history(base: str, prompt_id: str, timeout: int = 900) -> dict[str, Any
 
 def queue_prompt(base: str, graph: dict[str, Any], client_id: str) -> str:
     return workflow_queue.queue_prompt(base, graph, client_id)
-
-
-def download_images(base: str, history: dict[str, Any], dest: Path) -> list[Path]:
-    """Backward-compatible alias. Prefer ``workflow_queue.download_outputs``."""
-    return workflow_queue.download_outputs(base, history, dest)

@@ -8,65 +8,28 @@ import json
 import struct
 import sys
 import time
-import urllib.parse
 import urllib.request
 import uuid
 import zlib
 from pathlib import Path
-from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from workflow_queue import (  # noqa: E402,I001
-    convert_ui_workflow as convert_with_browser,
+from workflow_queue import (  # noqa: E402
+    IDLE_REMINDER,
+    download_outputs,
+    iter_node_lists,
+    queue_prompt,
     wait_history,
+    wait_ready,
 )
+from workflow_queue import convert_ui_workflow as convert_with_browser  # noqa: E402
 
 CLIENT_ID = "ltx25-agent"
 MISSING_API_TYPES = {"GemmaAPITextEncode"}
 FLOAT_TO_INT_TYPE = "LTXFloatToInt"
-
-
-def _http_json(url: str, payload: dict | None = None, timeout: int = 120) -> dict:
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"} if data else {},
-        method="GET" if data is None else "POST",
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        body = response.read()
-    return json.loads(body.decode("utf-8") or "{}")
-
-
-def wait_ready(base: str, timeout: int = 300) -> None:
-    deadline = time.time() + timeout
-    last_error = None
-    while time.time() < deadline:
-        try:
-            stats = _http_json(f"{base}/system_stats", timeout=30)
-            devices = stats.get("devices") or []
-            print(json.dumps({"ready": True, "devices": [d.get("name") for d in devices]}), flush=True)
-            return
-        except Exception as exc:  # noqa: BLE001
-            last_error = exc
-            time.sleep(2)
-    raise RuntimeError(f"ComfyUI not ready: {last_error}")
-
-
-def iter_node_lists(obj: Any):
-    if isinstance(obj, dict):
-        nodes = obj.get("nodes")
-        if isinstance(nodes, list) and nodes and isinstance(nodes[0], dict) and "type" in nodes[0]:
-            yield obj, nodes
-        for value in obj.values():
-            yield from iter_node_lists(value)
-    elif isinstance(obj, list):
-        for item in obj:
-            yield from iter_node_lists(item)
 
 
 def patch_workflow(workflow: dict) -> dict:
@@ -227,42 +190,6 @@ def fix_converted_prompt(prompt: dict, dummy_image: str) -> dict:
     return prompt
 
 
-def _safe_dest(dest: Path, filename: str) -> Path:
-    dest = dest.resolve()
-    name = Path(str(filename).replace("\\", "/")).name
-    if not name or name in {".", ".."}:
-        raise ValueError(f"unsafe output filename: {filename!r}")
-    path = (dest / name).resolve()
-    if path != dest and dest not in path.parents:
-        raise ValueError(f"output path escapes destination: {filename!r}")
-    return path
-
-
-def download_outputs(base: str, history: dict, dest: Path) -> list[Path]:
-    saved: list[Path] = []
-    dest.mkdir(parents=True, exist_ok=True)
-    for node_output in (history.get("outputs") or {}).values():
-        if not isinstance(node_output, dict):
-            continue
-        for key in ("images", "gifs", "videos", "audio"):
-            for item in node_output.get(key) or []:
-                if not isinstance(item, dict) or not item.get("filename"):
-                    continue
-                query = urllib.parse.urlencode(
-                    {
-                        "filename": item["filename"],
-                        "subfolder": item.get("subfolder") or "",
-                        "type": item.get("type") or "output",
-                    }
-                )
-                path = _safe_dest(dest, str(item["filename"]))
-                with urllib.request.urlopen(f"{base}/view?{query}", timeout=300) as response:
-                    path.write_bytes(response.read())
-                saved.append(path)
-                print(json.dumps({"saved": str(path), "bytes": path.stat().st_size}), flush=True)
-    return saved
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
@@ -282,7 +209,7 @@ def main() -> None:
     patched_path = Path(args.patched_out) if args.patched_out else out / "ltx25.compat.json"
     patched_path.write_text(json.dumps(patched, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(json.dumps({"patched": str(patched_path)}), flush=True)
-    wait_ready(base)
+    wait_ready(base, workflow=patched)
     prompt = convert_with_browser(base, patched)
     dummy = upload_dummy_image(base)
     prompt = fix_converted_prompt(prompt, dummy)
@@ -290,14 +217,7 @@ def main() -> None:
     api_path.write_text(json.dumps(prompt, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     started = time.time()
-    queued = _http_json(
-        f"{base}/prompt",
-        {"prompt": prompt, "client_id": CLIENT_ID},
-        timeout=120,
-    )
-    if queued.get("error") or queued.get("node_errors"):
-        raise RuntimeError(json.dumps(queued, ensure_ascii=False)[:4000])
-    prompt_id = queued["prompt_id"]
+    prompt_id = queue_prompt(base, prompt, CLIENT_ID)
     print(json.dumps({"queued": prompt_id}), flush=True)
     history = wait_history(base, prompt_id)
     status = history.get("status") or {}
@@ -315,11 +235,7 @@ def main() -> None:
         encoding="utf-8",
     )
     print(json.dumps(record, ensure_ascii=False), flush=True)
-    print(
-        "任务已结束。scaledown 5s 挡不住 leftover modal serve / 开着的 ComfyUI。"
-        "请立刻停掉 serve，不要把贵卡挂着。",
-        flush=True,
-    )
+    print(IDLE_REMINDER, flush=True)
 
 
 if __name__ == "__main__":
