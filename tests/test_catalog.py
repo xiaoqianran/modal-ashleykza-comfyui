@@ -34,6 +34,9 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("cosmos3-super", ids)
         self.assertIn("cosmos3-super-text2image", ids)
         self.assertIn("cosmos3-super-image2video", ids)
+        self.assertIn("cosmos3-edge", ids)
+        self.assertIn("cosmos3-super-image2video-4step", ids)
+        self.assertIn("cosmos3-super-text2image-4step", ids)
         self.assertEqual(items[0]["kind"], "t2i")
         self.assertEqual(items[0]["io"]["images_in"], 0)
         for item in items:
@@ -215,13 +218,22 @@ class CatalogTests(unittest.TestCase):
         super_omni = load_catalog("cosmos3-super")
         t2i = load_catalog("cosmos3-super-text2image")
         i2v = load_catalog("cosmos3-super-image2video")
+        edge = load_catalog("cosmos3-edge")
+        i2v4 = load_catalog("cosmos3-super-image2video-4step")
+        t2i4 = load_catalog("cosmos3-super-text2image-4step")
         self.assertEqual(nano["kind"], "t2v")
         self.assertEqual(super_omni["kind"], "t2v")
         self.assertEqual(t2i["kind"], "t2i")
         self.assertEqual(i2v["kind"], "i2v")
+        self.assertEqual(edge["kind"], "t2v")
+        self.assertEqual(i2v4["kind"], "i2v")
+        self.assertEqual(t2i4["kind"], "t2i")
         self.assertEqual(i2v["io"]["images_in"], 1)
+        self.assertEqual(i2v4["io"]["images_in"], 1)
         self.assertEqual(nano["io"]["images_in"], 0)
-        for catalog in (nano, super_omni, t2i, i2v):
+        self.assertEqual(edge["io"]["images_in"], 0)
+        self.assertEqual(t2i4["io"]["images_in"], 0)
+        for catalog in (nano, super_omni, t2i, i2v, edge, i2v4, t2i4):
             self.assertEqual(catalog["mode"], "workflow", catalog["id"])
             self.assertNotIn("graph", catalog)
             self.assertEqual(catalog["gpu"], "L40S", catalog["id"])
@@ -242,6 +254,24 @@ class CatalogTests(unittest.TestCase):
             {(m["category"], m["filename"]) for m in t2i_lock["models"]},
             {(m["category"], m["filename"]) for m in super_lock["models"]},
         )
+        i2v4_lock = workflow_resolver.load_workflow_lock(ROOT / i2v4["lock"], require_resolved=True)
+        t2i4_lock = workflow_resolver.load_workflow_lock(ROOT / t2i4["lock"], require_resolved=True)
+        self.assertEqual(
+            {(m["category"], m["filename"]) for m in t2i4_lock["models"]},
+            {(m["category"], m["filename"]) for m in i2v4_lock["models"]},
+        )
+        self.assertEqual(i2v4["params"][3]["default"], 4)
+        self.assertEqual(t2i4["params"][2]["default"], 4)
+        self.assertEqual(i2v4["params"][3]["minimum"], 4)
+        self.assertEqual(i2v4["params"][3]["maximum"], 4)
+        self.assertEqual(t2i4["params"][2]["minimum"], 4)
+        self.assertEqual(t2i4["params"][2]["maximum"], 4)
+        self.assertEqual(i2v4["params"][4]["default"], 1.0)
+        self.assertEqual(t2i4["params"][3]["default"], 1.0)
+        self.assertEqual(i2v4["params"][4]["minimum"], 1.0)
+        self.assertEqual(i2v4["params"][4]["maximum"], 1.0)
+        self.assertEqual(t2i4["params"][3]["minimum"], 1.0)
+        self.assertEqual(t2i4["params"][3]["maximum"], 1.0)
 
     def test_rejects_path_escape_in_workflow_field(self):
         catalog = dict(load_catalog("z-image"))
@@ -290,6 +320,19 @@ class CatalogJobPlanTests(unittest.TestCase):
             {"prompts": ["move"], "images": ["a.png", "b.png"]},
         )
         self.assertEqual([item["image"] for item in jobs], ["a.png", "b.png"])
+        self.assertEqual(jobs[0]["prompt"], "move")
+
+    def test_cosmos3_i2v_4step_needs_image_and_prompt(self):
+        from studio.server import iter_generate_jobs
+
+        catalog = load_catalog("cosmos3-super-image2video-4step")
+        with self.assertRaisesRegex(RuntimeError, "输入图"):
+            iter_generate_jobs(catalog, {"prompts": ["move"]})
+        jobs = iter_generate_jobs(
+            catalog,
+            {"prompts": ["move"], "images": ["a.png"]},
+        )
+        self.assertEqual(jobs[0]["image"], "a.png")
         self.assertEqual(jobs[0]["prompt"], "move")
 
 

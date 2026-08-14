@@ -208,6 +208,27 @@ class ExampleLockTests(unittest.TestCase):
                 "Cosmos3-Super-Image2Video-int4-convrot.safetensors",
                 True,
             ),
+            (
+                "cosmos3-edge-t2v.json",
+                "cosmos3-edge-t2v.lock.json",
+                "Cosmos3-Edge/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Edge-int4-convrot.safetensors",
+                False,
+            ),
+            (
+                "cosmos3-super-image2video-4step.json",
+                "cosmos3-super-image2video-4step.lock.json",
+                "Cosmos3-Super-Image2Video-4Step/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Super-Image2Video-4Step-int4-convrot.safetensors",
+                True,
+            ),
+            (
+                "cosmos3-super-text2image-4step.json",
+                "cosmos3-super-text2image-4step.lock.json",
+                "Cosmos3-Super-Image2Video-4Step/transformer/diffusion_pytorch_model.safetensors",
+                "Cosmos3-Super-Image2Video-4Step-int4-convrot.safetensors",
+                True,
+            ),
         )
         self.assertIn("cosmos3", recipes.MODEL_DIRS)
         for workflow_name, lock_name, filename, convrot, split in cases:
@@ -235,6 +256,9 @@ class ExampleLockTests(unittest.TestCase):
             self.assertIn('"cnr_id": "ComfyUI-Cosmos3"', text)
             if split:
                 self.assertIn("Cosmos3UndTowerLoader", text)
+            if "4step" in workflow_name:
+                self.assertIn("distilled_4step", text, workflow_name)
+                self.assertIn('"euler"', text, workflow_name)
             reused, origin = workflow_resolver.select_workflow_lock(source, lock_path)
             self.assertEqual(origin, "reused", workflow_name)
             self.assertEqual(len(reused["models"]), len(committed["models"]))
