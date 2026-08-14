@@ -63,7 +63,11 @@ def _volume_comfy_env(workspace: Path, version: str = sam3d_runtime.COMFY_ENV_VE
     worker = site / "comfy_env" / "isolation" / "workers" / "subprocess.py"
     worker.parent.mkdir(parents=True, exist_ok=True)
     if not worker.is_file():
-        worker.write_text("stdout=subprocess.DEVNULL,\n", encoding="utf-8")
+        worker.write_text(
+            "                msg = self._transport.recv(timeout=60)\n"
+            "        stdout=subprocess.DEVNULL,\n",
+            encoding="utf-8",
+        )
     meta = site / f"comfy_env-{version}.dist-info" / "METADATA"
     meta.parent.mkdir(parents=True, exist_ok=True)
     meta.write_text(f"Name: comfy-env\nVersion: {version}\n", encoding="utf-8")
@@ -71,6 +75,22 @@ def _volume_comfy_env(workspace: Path, version: str = sam3d_runtime.COMFY_ENV_VE
 
 
 def _ready_pixi_python(workspace: Path) -> Path:
+    env_python = (
+        workspace
+        / ".python"
+        / "comfy-env"
+        / ".pixi"
+        / "envs"
+        / "sam3dobjects-nodes"
+        / "bin"
+        / "python"
+    )
+    env_python.parent.mkdir(parents=True, exist_ok=True)
+    env_python.write_text("", encoding="utf-8")
+    return env_python
+
+
+def _ready_pixi_python_v04(workspace: Path) -> Path:
     env_python = (
         workspace
         / ".python"
@@ -196,7 +216,17 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 )
             self.assertFalse(changed)
             self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][0], str(sam3d_runtime.comfy_env_root(workspace) / "envs" / "sam3dobjects-nodes" / ".pixi" / "envs" / "default" / "bin" / "python"))
+            self.assertEqual(
+                calls[0][0],
+                str(
+                    sam3d_runtime.comfy_env_root(workspace)
+                    / ".pixi"
+                    / "envs"
+                    / "sam3dobjects-nodes"
+                    / "bin"
+                    / "python"
+                ),
+            )
             download.assert_not_called()
             self.assertTrue(home_bin.is_symlink())
 
@@ -286,6 +316,66 @@ class Sam3dRuntimeTests(unittest.TestCase):
             self.assertFalse(
                 sam3d_runtime._ensure_volume_comfy_env(workspace, "python3")
             )
+
+    def test_patch_comfy_env_isolation_raises_when_source_is_not_the_pin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            comfy = Path(directory) / "ComfyUI"
+            site = (
+                comfy
+                / "venv"
+                / "lib"
+                / "python3.12"
+                / "site-packages"
+                / "comfy_env"
+                / "isolation"
+                / "workers"
+            )
+            site.mkdir(parents=True)
+            (site / "subprocess.py").write_text(
+                "# comfy-env 0.4 worker — no 0.3.89 ready recv\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(sam3d_runtime._ce_contract.ComfyEnvContractError):
+                sam3d_runtime.patch_comfy_env_isolation(comfy)
+
+    def test_bridges_v04_layout_so_v03_wrap_can_see_env(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            custom = root / "custom_nodes" / "ComfyUI-SAM3DObjects"
+            custom.mkdir(parents=True)
+            (custom / "install.py").write_text("raise SystemExit('nope')\n", encoding="utf-8")
+            _ready_pixi_python_v04(workspace)
+            _volume_comfy_env(workspace)
+            _fake_pixi(sam3d_runtime.volume_pixi_bin(workspace))
+            home_bin = root / "home" / ".pixi" / "bin" / "pixi"
+            calls: list[list[str]] = []
+
+            def fake_run(cmd, **_kwargs):
+                calls.append(cmd)
+
+            with (
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(sam3d_runtime, "home_pixi_bin", return_value=home_bin),
+                patch.object(sam3d_runtime, "_download_pixi") as download,
+            ):
+                changed = sam3d_runtime.ensure_sam3d_runtime(
+                    root / "ComfyUI",
+                    root / "custom_nodes",
+                    workspace=workspace,
+                )
+            self.assertTrue(changed)
+            bridged = (
+                sam3d_runtime.comfy_env_root(workspace)
+                / ".pixi"
+                / "envs"
+                / "sam3dobjects-nodes"
+                / "bin"
+                / "python"
+            )
+            self.assertTrue(bridged.is_file())
+            self.assertEqual(calls[0][0], str(bridged))
+            download.assert_not_called()
 
     def test_ensure_volume_comfy_env_reinstalls_unpinned_or_04(self):
         with tempfile.TemporaryDirectory() as directory:

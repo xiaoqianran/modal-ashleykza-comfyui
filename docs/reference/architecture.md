@@ -10,7 +10,8 @@
   storage.py            Volume 路径与 extra_model_paths.yaml
   comfy_engine.py       下载、校验、启动 ComfyUI
   sparse_3d_runtime.py  Pixal3D / TRELLIS CUDA wheels（装到 workspace Volume）
-  sam3d_runtime.py      SAM 3D comfy-env / pixi（装到 workspace Volume）
+  comfy_env_contract.py comfy-env 隔离协议：钉版本、0.3 布局、启动断言
+  sam3d_runtime.py      SAM 3D pixi 安装 / Modal 补丁（只执行契约）
   workflow_resolver.py  工作流 → 锁文件（只绑定 JSON 里已有的 URL / CNR）
   recipes.py            MODEL_DIRS + 旧 profile / model pack / node pack
 
@@ -98,7 +99,7 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
               │     ├─ skip clone when Volume marker matches
               │     └─ _install_node_requirements  → uv pip --target node-reqs
               ├─ ensure_pixal3d_runtime
-              └─ ensure_sam3d_runtime           → Volume pixi + patch ready timeout
+              └─ ensure_sam3d_runtime           → 契约断言 + Volume pixi + 0.3.89 补丁
 ```
 
 | 层 | 第一次冷启动 | 缩容后再来 | 不能复用的原因 |
@@ -112,7 +113,7 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
 | Isolation worker 进程 | 容器内拉起 | 必须再拉一次 | 进程跟容器一起死 |
 | OpenGL `apt-get`、Blackwell boot `.pth` | 每次写进当前容器 | 每次都做（便宜） | 不在 Volume 上 |
 
-`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存。serve 还在，下一次 HTTP 会再起一个 GPU 容器；空闲的 `modal deploy`（0 tasks）不计 GPU。comfy-env 必须钉 `0.3.89`：0.4+ 看不见 0.3 的 pixi 布局，节点会在宿主机执行。0.3.x 连上 socket 之后 ready 等待写死 60s；SAM 3D 首次 `import torch` 经常超过这个时间，所以启动时把 ready 超时改成 600s，并把 worker stdout 落到 Volume 日志。
+`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存。serve 还在，下一次 HTTP 会再起一个 GPU 容器；空闲的 `modal deploy`（0 tasks）不计 GPU。comfy-env 的版本、布局、失败方式只改 `comfy_env_contract.py`。
 
 ## Volume 路径
 

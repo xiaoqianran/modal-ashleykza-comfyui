@@ -23,6 +23,7 @@ known-first-party = [
     "base_nodes",
     "catalog",
     "comfy_engine",
+    "comfy_env_contract",
     "comfyui_modal",
     "gallery_hub",
     "modal_config",

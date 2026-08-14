@@ -28,7 +28,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重，或不猜 URL | 脚手架打印 `unresolved` |
 | `scripts/queue_ltx25.py` 的 patch | Image 缺官方节点 | `ALLOWED_QUEUE_SCRIPTS` |
 | Pixal3D / TRELLIS CUDA wheels | 锁里出现对应 CNR 才装到 Volume | `sparse_3d_runtime`（按 lock node id） |
-| SAM 3D comfy-env / pixi | 锁里出现 `ComfyUI-SAM3DObjects` 才装到 Volume | `sam3d_runtime`（按 lock node id） |
+| SAM 3D comfy-env / pixi | 锁里出现 `ComfyUI-SAM3DObjects` 才装到 Volume | `comfy_env_contract`（钉版本 + 布局）+ `sam3d_runtime` |
 | `catalog/*.json` | 只给 Studio 控制面填表单 | 新配方 `mode=workflow` |
 | `mode=graph` 内嵌 prompt | 只有 Z-Image / Z-Image-Turbo | `GRAPH_MODE_IDS` |
 
@@ -228,7 +228,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | `examples/sam3d-image-to-3d.lock.json` | **手修**锁：`apozz/sam-3d-objects-safetensors` → `sam3dobjects/` |
 | `catalog/sam3d.json` | Studio 契约：图生带贴图 GLB，测试 **L40S** |
 
-锁里是 GitHub 节点 `ComfyUI-SAM3DObjects@main`。`LoadSAM3DModel` 读 `folder_paths.models_dir / sam3dobjects`，GPU 启动时把 `/ComfyUI/models/sam3dobjects` symlink 到 Volume。节点用 `comfy-env==0.3.89` + pixi 隔离 CUDA（pytorch3d / gsplat / nvdiffrast / flash-attn）；缓存必须落在 workspace Volume 的 `/workspace/.python/comfy-env`（`COMFY_ENV_ROOT`），不要用默认的 `~/.ce`。**不要装 0.4+**：0.4 换了 `envs/<name>/.pixi/envs/default` 布局，看不见 0.3 的 `/.pixi/envs/<name>`，节点会在宿主机 import，`SAM3D_DepthEstimate` 报 `No module named 'pytorch3d'`。官方 `comfy-env-root.toml` 里的 GeometryPack / Multiband **不装**（物体图工作流用不到，会拖进 CGAL）。不要写 `queue_*.py`。官方模板用 LoadImage 的 MASK 再 InvertMask，所以**透明底 PNG** 更好。第一次 GPU 冷启动要跑 pixi，把 `COMFY_STARTUP_TIMEOUT_SECONDS` 提到 3600。comfy-env 0.3.x 连上 worker 之后 ready 等待写死 60s，冷 Volume 上首次 `import torch` 经常超过；启动时改成 600s，stdout 落到 `/workspace/logs/sam3d-isolation-worker.log`。`graphToPrompt` 若没换掉默认图，本地用 `/object_info` 转 API。建议 **L40S**。不要用 T4。
+锁里是 GitHub 节点 `ComfyUI-SAM3DObjects@main`。`LoadSAM3DModel` 读 `sam3dobjects/`。隔离协议钉在 `comfy_env_contract.py`：只认 `comfy-env==0.3.89` 和 `/.pixi/envs/<name>` 布局，版本或源码对不上就启动失败，不准追 PyPI latest。官方 `comfy-env-root.toml` 里的 GeometryPack / Multiband **不装**。不要写 `queue_*.py`。官方模板走 InvertMask，**透明底 PNG** 更好。冷启动把 `COMFY_STARTUP_TIMEOUT_SECONDS` 提到 3600。`graphToPrompt` 若没换掉默认图，本地用 `/object_info` 转 API。建议 **L40S**。不要用 T4。
 
 ```bash
 modal run hydrate_modal.py --catalog sam3d

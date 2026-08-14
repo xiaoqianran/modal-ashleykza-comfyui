@@ -1,13 +1,10 @@
-"""SAM 3D Objects pixi / comfy-env runtime on the workspace Volume.
+"""SAM 3D Objects pixi runtime on the workspace Volume.
 
 PozzettiAndrea/ComfyUI-SAM3DObjects runs inference in an isolated pixi env.
-The default Unix cache is ``~/.ce`` (ephemeral on Modal). Point
-``COMFY_ENV_ROOT`` at ``/workspace/.python/comfy-env`` and run ``install.py``
-only when the *current lock* asks for this node.
-
-``comfy-env`` 0.3.x isolation workers ``Popen`` ``~/.pixi/bin/pixi`` as a
-constant — they do not call ``ensure_pixi()``. That CLI is ephemeral on
-Modal unless it is copied onto the workspace Volume and re-linked each boot.
+The isolation *protocol* (pin, layout, fail-loud checks) lives in
+``comfy_env_contract``. This module only: persist pixi on the Volume, run
+``install.py`` when the lock asks for the node, and apply the known 0.3.89
+Modal patches.
 
 ``comfy-env-root.toml`` also lists GeometryPack / Multiband. The official
 object-generation graph does not use those nodes, so they are stripped
@@ -17,7 +14,6 @@ before ``install.py`` — otherwise pixi would clone and build CGAL.
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import stat
 import urllib.request
@@ -25,42 +21,48 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-COMFY_ENV_SITE_MARK = "comfy-env"
-COMFY_ENV_ROOT_VAR = "COMFY_ENV_ROOT"
-# ComfyUI-SAM3DObjects requirements.txt pins 0.3.89. 0.4+ uses
-# ``<root>/envs/<name>/.pixi/envs/default`` and cannot see a 0.3 workspace
-# (``<root>/.pixi/envs/<name>``), so nodes import in-process and hit
-# ``No module named 'pytorch3d'`` on DepthEstimate.
-COMFY_ENV_VERSION = "0.3.89"
-COMFY_ENV_PIN = f"comfy-env=={COMFY_ENV_VERSION}"
+import comfy_env_contract as _ce_contract
+from comfy_env_contract import (
+    IS_PIXI_OURS,
+    IS_PIXI_STOCK_RE,
+    PIXI_RUN_OURS,
+    PIXI_RUN_STOCK,
+    READY_RECV_OURS,
+    READY_RECV_STOCK,
+    SOCKET_TIMEOUT_RE,
+    STDOUT_OURS,
+    STDOUT_STOCK,
+    WORKER_LOG,
+    WRAP_SP_OURS,
+    WRAP_SP_STOCK,
+    assert_boot,
+    assert_patchable,
+    assert_pinned,
+    ensure_v03_layout,
+    env_materialized,
+    isolation_python_bins,
+    node_reqs_site,
+    pin_satisfied,
+    remove_site_install,
+    volume_root,
+)
+from comfy_env_contract import (
+    PIN as COMFY_ENV_PIN,
+)
+from comfy_env_contract import (
+    READY_TIMEOUT_SECONDS as WORKER_SOCKET_TIMEOUT_SECONDS,
+)
+from comfy_env_contract import (
+    ROOT_VAR as COMFY_ENV_ROOT_VAR,
+)
+
+COMFY_ENV_SITE_MARK = _ce_contract.SITE_MARK
+COMFY_ENV_VERSION = _ce_contract.VERSION
+
 PIXI_VERSION = "0.76.2"
 PIXI_LINUX_X64_URL = (
     "https://github.com/prefix-dev/pixi/releases/download/"
     f"v{PIXI_VERSION}/pixi-x86_64-unknown-linux-musl"
-)
-# comfy-env 0.3.x accepts the worker socket, then waits a hardcoded 60s for
-# ``{"status": "ready"}``. First ``import torch`` in the pixi env is slower
-# than that on a cold Volume, which surfaces as "failed to send ready signal".
-WORKER_SOCKET_TIMEOUT_SECONDS = 600
-WORKER_LOG = "/workspace/logs/sam3d-isolation-worker.log"
-_TIMEOUT_ASSIGN_RE = re.compile(r"^(SOCKET_ACCEPT_TIMEOUT\s*=\s*)\d+", re.M)
-_READY_RECV = "msg = self._transport.recv(timeout=60)"
-_READY_RECV_FIXED = f"msg = self._transport.recv(timeout={WORKER_SOCKET_TIMEOUT_SECONDS})"
-_STDOUT_DEVNULL = "stdout=subprocess.DEVNULL,"
-_STDOUT_LOG = f"stdout=open({WORKER_LOG!r}, \"ab\"),"
-_PIXI_RUN_AS_IS = 'PIXI, "run", "--as-is",'
-_PIXI_RUN_FROZEN = 'PIXI, "run", "--as-is", "--frozen",'
-_IS_PIXI_RE = re.compile(r"is_pixi = ['\"]\.pixi['\"] in str\(self\.python\)")
-_WRAP_SP_GLOB = (
-    '        matches = glob.glob(str(env_dir / "lib/python*/site-packages"))\n'
-    "        sp = Path(matches[0]) if matches else None"
-)
-_WRAP_SP_FIXED = (
-    '        matches = glob.glob(str(env_dir / "lib/python*/site-packages"))\n'
-    "        matches.sort(key=lambda p: tuple("
-    "int(x) if str(x).isdigit() else 0 "
-    "for x in Path(p).parent.name.replace('python', '', 1).split('.')), reverse=True)\n"
-    "        sp = Path(matches[0]) if matches else None"
 )
 _STRIPPED_NODE_REQS = """\
 # GeometryPack / Multiband are not in the object-generation graph.
@@ -76,7 +78,7 @@ def _ce():
 
 
 def comfy_env_root(workspace: str | Path) -> Path:
-    return Path(workspace) / ".python" / "comfy-env"
+    return volume_root(workspace)
 
 
 def volume_pixi_bin(workspace: str | Path) -> Path:
@@ -114,13 +116,7 @@ def _find_sam3d_node_dir(custom_nodes_dir: Path) -> Path | None:
 
 
 def _pixi_env_ready(root: Path) -> bool:
-    for pattern in (
-        "envs/*/.pixi/envs/default/bin/python",
-        ".pixi/envs/*/bin/python",
-    ):
-        if any(path.is_file() for path in root.glob(pattern)):
-            return True
-    return False
+    return env_materialized(root)
 
 
 def _chmod_exec(path: Path) -> None:
@@ -198,73 +194,76 @@ def _comfy_env_packages(
 
 
 def _installed_comfy_env_version(site: str | Path) -> str | None:
-    """Read the Volume ``comfy-env`` dist-info version, if any."""
-    versions: list[str] = []
-    for meta in Path(site).glob("comfy_env-*.dist-info/METADATA"):
-        try:
-            for line in meta.read_text(encoding="utf-8").splitlines():
-                if line.startswith("Version:"):
-                    versions.append(line.split(":", 1)[1].strip())
-                    break
-        except OSError:
-            continue
-    if not versions:
-        return None
-    return sorted(versions, reverse=True)[0]
+    return _ce_contract.installed_version(site)
 
 
 def _remove_volume_comfy_env(site: Path) -> None:
-    package = site / "comfy_env"
-    if package.is_dir():
-        shutil.rmtree(package)
-    for meta in site.glob("comfy_env-*.dist-info"):
-        shutil.rmtree(meta)
+    remove_site_install(site)
 
 
 def _ensure_volume_comfy_env(workspace: str | Path, python: str) -> bool:
-    """Keep the 0.3.x isolation library on the Volume site.
+    """Keep the pinned isolation library on the Volume site.
 
     The Image may not ship ``comfy-env``. The parent imports this copy via
-    ``comfy_node_reqs.pth``. 0.4+ cannot see a 0.3 pixi workspace, so an
-    unpinned ``uv pip install comfy-env`` breaks SAM 3D. Patch after this
-    returns; do not delete a matching 0.3.x copy.
+    ``comfy_node_reqs.pth``. Pin, layout, and fail-loud checks are in
+    ``comfy_env_contract`` — this only runs ``uv pip``.
     """
     from uv_runtime import pip_install_cmd
 
-    site = Path(workspace) / ".python" / "node-reqs"
-    package = site / "comfy_env"
-    worker = package / "isolation" / "workers" / "subprocess.py"
-    version = _installed_comfy_env_version(site)
-    if worker.is_file() and version == COMFY_ENV_VERSION:
+    site = node_reqs_site(workspace)
+    if pin_satisfied(site):
+        assert_patchable(site)
         return False
+    version = _ce_contract.installed_version(site)
     site.mkdir(parents=True, exist_ok=True)
-    if package.is_dir() or version:
+    if (site / "comfy_env").is_dir() or version:
         print(
             f"[SAM3D] replacing Volume comfy-env {version or 'unknown'} with {COMFY_ENV_PIN}",
             flush=True,
         )
-        _remove_volume_comfy_env(site)
+        remove_site_install(site)
     else:
         print(f"[SAM3D] installing {COMFY_ENV_PIN} onto Volume site {site}", flush=True)
     _ce()._run(pip_install_cmd(python, COMFY_ENV_PIN, site_dir=site))
+    assert_pinned(site)
     return True
+
+
+def _require_anchor(path: Path, text: str, present: bool, name: str) -> None:
+    if not present:
+        raise _ce_contract.ComfyEnvContractError(
+            f"{path} is not {COMFY_ENV_PIN} isolation source ({name} missing). "
+            "Refusing to no-op. Update comfy_env_contract after a new L40S smoke."
+        )
 
 
 def patch_comfy_env_isolation(
     comfy_root: str | Path,
     workspace: str | Path | None = None,
 ) -> bool:
-    """Make Image-local comfy-env 0.3.x isolation usable on a cold GPU boot.
+    """Make pinned 0.3.89 isolation usable on a cold GPU boot.
 
-    The Image venv is ephemeral; this rewrite is lock-gated and per container.
+    Rewrites are lock-gated and per container. Missing 0.3.89 source strings
+    raise — they must not silently skip.
     """
     changed = False
-    for site in _comfy_env_packages(Path(comfy_root), workspace):
+    sites = _comfy_env_packages(Path(comfy_root), workspace)
+    if not sites:
+        raise _ce_contract.ComfyEnvContractError(
+            f"{COMFY_ENV_PIN} package missing under {comfy_root} / {workspace}"
+        )
+    for site in sites:
         print(f"[SAM3D] patching isolation at {site}", flush=True)
         ipc = site / "isolation" / "workers" / "_ipc_shared.py"
         if ipc.is_file():
             text = ipc.read_text(encoding="utf-8")
-            updated, count = _TIMEOUT_ASSIGN_RE.subn(
+            _require_anchor(
+                ipc,
+                text,
+                bool(SOCKET_TIMEOUT_RE.search(text)),
+                "SOCKET_ACCEPT_TIMEOUT",
+            )
+            updated, count = SOCKET_TIMEOUT_RE.subn(
                 rf"\g<1>{WORKER_SOCKET_TIMEOUT_SECONDS}",
                 text,
                 count=1,
@@ -279,21 +278,33 @@ def patch_comfy_env_isolation(
         worker = site / "isolation" / "workers" / "subprocess.py"
         if worker.is_file():
             text = worker.read_text(encoding="utf-8")
+            _require_anchor(
+                worker,
+                text,
+                READY_RECV_STOCK in text or READY_RECV_OURS in text,
+                "ready recv",
+            )
+            _require_anchor(
+                worker,
+                text,
+                STDOUT_STOCK in text or STDOUT_OURS in text or WORKER_LOG in text,
+                "stdout",
+            )
             updated = text
-            if _PIXI_RUN_AS_IS in updated and _PIXI_RUN_FROZEN not in updated:
-                updated = updated.replace(_PIXI_RUN_AS_IS, _PIXI_RUN_FROZEN, 1)
-            patched_pixi, n_pixi = _IS_PIXI_RE.subn("is_pixi = False", updated, count=1)
+            if PIXI_RUN_STOCK in updated and PIXI_RUN_OURS not in updated:
+                updated = updated.replace(PIXI_RUN_STOCK, PIXI_RUN_OURS, 1)
+            patched_pixi, n_pixi = IS_PIXI_STOCK_RE.subn(IS_PIXI_OURS, updated, count=1)
             if n_pixi:
                 updated = patched_pixi
                 print("[SAM3D] isolation worker uses env python (skip pixi run)", flush=True)
-            if _READY_RECV in updated:
-                updated = updated.replace(_READY_RECV, _READY_RECV_FIXED)
+            if READY_RECV_STOCK in updated:
+                updated = updated.replace(READY_RECV_STOCK, READY_RECV_OURS)
                 print(
                     f"[SAM3D] ready recv timeout -> {WORKER_SOCKET_TIMEOUT_SECONDS}s",
                     flush=True,
                 )
-            if _STDOUT_DEVNULL in updated:
-                updated = updated.replace(_STDOUT_DEVNULL, _STDOUT_LOG, 1)
+            if STDOUT_STOCK in updated:
+                updated = updated.replace(STDOUT_STOCK, STDOUT_OURS, 1)
                 print(f"[SAM3D] isolation worker stdout -> {WORKER_LOG}", flush=True)
             if updated != text:
                 worker.write_text(updated, encoding="utf-8")
@@ -301,20 +312,26 @@ def patch_comfy_env_isolation(
         wrap = site / "isolation" / "wrap.py"
         if wrap.is_file():
             text = wrap.read_text(encoding="utf-8")
-            if _WRAP_SP_GLOB in text:
-                wrap.write_text(text.replace(_WRAP_SP_GLOB, _WRAP_SP_FIXED, 1), encoding="utf-8")
+            if "lib/python*/site-packages" in text:
+                _require_anchor(
+                    wrap,
+                    text,
+                    WRAP_SP_STOCK in text or WRAP_SP_OURS in text or "matches.sort" in text,
+                    "site-packages glob",
+                )
+            if WRAP_SP_STOCK in text:
+                wrap.write_text(text.replace(WRAP_SP_STOCK, WRAP_SP_OURS, 1), encoding="utf-8")
                 changed = True
                 print(
                     "[SAM3D] prefer python3.12 site-packages over python3.1 glob",
                     flush=True,
                 )
+        assert_patchable(site)
     return changed
 
 
 def _isolated_python_bins(root: Path) -> list[Path]:
-    return sorted(root.glob(".pixi/envs/*/bin/python")) + sorted(
-        root.glob("envs/*/.pixi/envs/default/bin/python")
-    )
+    return isolation_python_bins(root)
 
 
 def apply_isolated_env(workspace: str | Path) -> Path | None:
@@ -403,11 +420,13 @@ def ensure_sam3d_runtime(
         _ce()._run([python, str(install)], env=env, cwd=str(node_dir))
         ensure_pixi_cli(workspace)
         if not _pixi_env_ready(root):
-            print(
-                f"[SAM3D] warning: install.py finished but no pixi python under {root}",
-                flush=True,
+            raise _ce_contract.ComfyEnvContractError(
+                f"install.py finished but no pixi python under {root} "
+                f"({_ce_contract.V03_PYTHON_GLOB} or {_ce_contract.V04_PYTHON_GLOB})"
             )
         installed = True
+    bridged = ensure_v03_layout(root)
     patch_comfy_env_isolation(comfy_root, workspace=workspace)
+    assert_boot(workspace, require_env=True)
     warm_pixi_env(workspace)
-    return pixi_changed or installed or volume_comfy_env
+    return pixi_changed or installed or volume_comfy_env or bridged

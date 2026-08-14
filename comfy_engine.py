@@ -18,9 +18,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
+from comfy_env_contract import (
+    SITE_MARK as COMFY_ENV_SITE_MARK,
+)
+from comfy_env_contract import (
+    SKIP_PACKAGES as NODE_REQS_SKIP_PACKAGES,
+)
 from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
 from sam3d_runtime import (
-    COMFY_ENV_SITE_MARK,
     _lock_has_sam3d,
     apply_comfy_env_root,
     ensure_sam3d_runtime,
@@ -82,10 +87,8 @@ WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
 # on the workspace Volume and point site-packages at them with a venv-local .pth.
 NODE_REQS_SITE_MARK = "node-reqs-site"
 NODE_REQS_PTH_NAME = "comfy_node_reqs.pth"
-# Host isolation library. requirements.txt says comfy-env==0.3.89; an unpinned
-# Volume install floated to 0.4.x which cannot see the 0.3 pixi workspace.
-# sam3d_runtime installs the pin and patches it. Do not let node-reqs overwrite.
-NODE_REQS_SKIP_PACKAGES = frozenset({"comfy-env"})
+# Host isolation library. Pin and layout live in comfy_env_contract.
+# Do not let node-reqs overwrite the pin with an unpinned comfy-env.
 
 
 def _quote(value: str | Path) -> str:
