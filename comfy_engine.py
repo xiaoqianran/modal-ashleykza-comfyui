@@ -1084,17 +1084,24 @@ def _comfy_python(comfy_root: Path) -> str:
     return "python3"
 
 
-def _module_available(name: str, python: str) -> bool:
+def _module_import_error(name: str, python: str) -> str | None:
     try:
-        subprocess.run(
+        result = subprocess.run(
             [python, "-c", f"import {name}"],
-            check=True,
             capture_output=True,
+            text=True,
             timeout=60,
         )
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-        return False
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return str(exc)
+    if result.returncode == 0:
+        return None
+    text = (result.stderr or result.stdout or "").strip()
+    return text[-2000:] if text else f"exit {result.returncode}"
+
+
+def _module_available(name: str, python: str) -> bool:
+    return _module_import_error(name, python) is None
 
 
 def _lock_has_pixal3d(nodes: Iterable[Mapping[str, Any]]) -> bool:
@@ -1325,45 +1332,77 @@ def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bo
         try:
             _run([python, "-m", "pip", "install", "--no-cache-dir", "--no-deps", url])
         except subprocess.CalledProcessError:
-            print(f"[PIXAL3D] {label} wheel install failed; will fall back to source", flush=True)
+            print(f"[PIXAL3D] {label} wheel install failed", flush=True)
             continue
         if any(_module_available(name, python) for name in imports):
             changed = True
-        else:
-            print(f"[PIXAL3D] {label} wheel installed but still not importable", flush=True)
+            continue
+        errors = [
+            f"{name}: {_module_import_error(name, python)}"
+            for name in imports
+            if _module_import_error(name, python)
+        ]
+        print(
+            f"[PIXAL3D] {label} wheel installed but still not importable ({'; '.join(errors)})",
+            flush=True,
+        )
     return changed
 
 
-def ensure_pixal3d_prebuilt_wheels(comfy_root: str | Path) -> bool:
+def ensure_pixal3d_prebuilt_wheels(
+    comfy_root: str | Path,
+    *,
+    include_attention: bool = True,
+    include_sparse: bool = True,
+    include_drtk: bool = False,
+) -> bool:
     """Install official/community CUDA wheels before CNR can compile sdists."""
     python = _comfy_python(Path(comfy_root))
     changed = False
-    if not _module_available("natten", python):
-        changed = _install_natten_wheel(python) or changed
-    attention_ok = _module_available("flash_attn", python) or _module_available(
-        "flash_attn_interface", python
-    )
-    if not attention_ok:
-        changed = _install_flash_attn_wheel(python) or changed
+    if include_attention:
+        if not _module_available("natten", python):
+            changed = _install_natten_wheel(python) or changed
+        attention_ok = _module_available("flash_attn", python) or _module_available(
+            "flash_attn_interface", python
+        )
+        if not attention_ok:
+            changed = _install_flash_attn_wheel(python) or changed
+    if include_sparse:
+        changed = (
+            _install_sparse_3d_prebuilt_wheels(python, include_drtk=include_drtk)
+            or changed
+        )
     return changed
 
 
 def ensure_pixal3d_runtime(
     comfy_root: str | Path,
     custom_nodes_dir: str | Path,
+    *,
+    include_pixal3d: bool = False,
+    allow_source_compile: bool = False,
 ) -> bool:
     """Install sparse-3D Python deps and CUDA kernels (Pixal3D / TRELLIS.2).
 
     natten / flash-attn / flex_gemm / cumesh / o-voxel (and Pixal3D DRTK)
     use prebuilt wheels on Ashley's cp312 + torch 2.11 + cu128 stack.
-    Source compile is only the fallback. Pixal3D ``requirements.txt`` only
-    runs when that node pack is present.
+    Pixal3D ``requirements.txt`` / DRTK only run when the *current lock*
+    asks for Pixal3D — leftover node dirs on the Volume are ignored.
+    Source compile is opt-in; default is wheel-only so GPU start does not
+    compile CUDA.
     Returns True if anything was installed (ComfyUI should restart).
     """
     comfy_root = Path(comfy_root)
     python = _comfy_python(comfy_root)
-    changed = ensure_pixal3d_prebuilt_wheels(comfy_root)
-    node_dir = _find_pixal3d_node_dir(Path(custom_nodes_dir))
+    changed = ensure_pixal3d_prebuilt_wheels(
+        comfy_root,
+        include_attention=include_pixal3d,
+        include_sparse=True,
+        include_drtk=include_pixal3d,
+    )
+    node_dir = (
+        _find_pixal3d_node_dir(Path(custom_nodes_dir)) if include_pixal3d else None
+    )
 
     requirements = node_dir / "requirements.txt" if node_dir is not None else None
     if requirements is not None and requirements.is_file() and (
@@ -1379,33 +1418,43 @@ def ensure_pixal3d_runtime(
         _run([python, "-m", "pip", "install", "--no-cache-dir", "-r", str(filtered)])
         changed = True
         if not _module_available("natten", python):
+            if not allow_source_compile:
+                raise RuntimeError(
+                    "natten wheel missing or not importable; GPU source compile is disabled"
+                )
             pin = natten_requirement_version(source)
             print(f"[PIXAL3D] compiling natten=={pin} from source", flush=True)
             _ensure_cuda_build_tools()
             _run([python, "-m", "pip", "install", "--no-cache-dir", f"natten=={pin}"])
 
-    attention_ok = _module_available("flash_attn", python) or _module_available(
-        "flash_attn_interface", python
-    )
-    if not attention_ok:
-        if not _install_flash_attn_wheel(python):
-            print("[PIXAL3D] pip install flash-attn from source", flush=True)
-            _ensure_cuda_build_tools()
-            _run(
-                [
-                    python,
-                    "-m",
-                    "pip",
-                    "install",
-                    "--no-cache-dir",
-                    "--no-build-isolation",
-                    "flash-attn",
-                ]
-            )
-        changed = True
+    if include_pixal3d:
+        attention_ok = _module_available("flash_attn", python) or _module_available(
+            "flash_attn_interface", python
+        )
+        if not attention_ok:
+            if not _install_flash_attn_wheel(python):
+                if not allow_source_compile:
+                    raise RuntimeError(
+                        "flash-attn wheel missing or not importable; "
+                        "GPU source compile is disabled"
+                    )
+                print("[PIXAL3D] pip install flash-attn from source", flush=True)
+                _ensure_cuda_build_tools()
+                _run(
+                    [
+                        python,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--no-cache-dir",
+                        "--no-build-isolation",
+                        "flash-attn",
+                    ]
+                )
+            changed = True
 
     changed = (
-        _install_sparse_3d_prebuilt_wheels(python, include_drtk=node_dir is not None)
+        _install_sparse_3d_prebuilt_wheels(python, include_drtk=include_pixal3d)
         or changed
     )
 
@@ -1445,7 +1494,7 @@ def ensure_pixal3d_runtime(
             "o-voxel",
         ),
     ]
-    if node_dir is not None:
+    if include_pixal3d:
         sources.append(
             (
                 "drtk",
@@ -1468,6 +1517,21 @@ def ensure_pixal3d_runtime(
     ]
     if not missing:
         return changed
+
+    if not allow_source_compile:
+        details: list[str] = []
+        for label, imports, _clone, _subdir in missing:
+            for name in imports:
+                error = _module_import_error(name, python)
+                if error:
+                    details.append(f"{label}/{name}: {error}")
+                    break
+        raise RuntimeError(
+            "sparse-3D CUDA wheels missing or not importable: "
+            + ", ".join(item[0] for item in missing)
+            + ". GPU source compile is disabled. "
+            + " ".join(details)
+        )
 
     _ensure_cuda_build_tools()
     for label, imports, clone, subdir in missing:
@@ -1599,10 +1663,16 @@ def apply_volume_launch(
     newly: list[str] = []
     nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
     installer = install_nodes or install_registry_nodes
+    include_pixal3d = _lock_has_pixal3d(nodes)
     wheels_changed = False
     if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
-        # Wheel first so CNR / TRELLIS.2 do not compile natten or flash-attn.
-        wheels_changed = ensure_pixal3d_prebuilt_wheels(comfy_root)
+        # Wheel first so CNR / TRELLIS.2 do not compile CUDA sdists.
+        wheels_changed = ensure_pixal3d_prebuilt_wheels(
+            comfy_root,
+            include_attention=include_pixal3d,
+            include_sparse=True,
+            include_drtk=include_pixal3d,
+        )
     if install_lock_nodes and nodes:
         newly = installer(
             nodes,
@@ -1614,6 +1684,8 @@ def apply_volume_launch(
         runtime_changed = ensure_pixal3d_runtime(
             comfy_root,
             workspace / "custom_nodes",
+            include_pixal3d=include_pixal3d,
+            allow_source_compile=False,
         )
     fingerprint = launch_fingerprint(
         launch,

@@ -163,16 +163,22 @@ class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
                 order.append("cnr")
                 return ["Pixal3D-ComfyUI"]
 
+            runtime_kwargs: list[dict] = []
+            wheel_kwargs: list[dict] = []
             with (
                 patch.object(
                     comfy_engine,
                     "ensure_pixal3d_prebuilt_wheels",
-                    side_effect=lambda *_a, **_k: order.append("wheels") or True,
+                    side_effect=lambda *_a, **kwargs: (
+                        order.append("wheels") or wheel_kwargs.append(kwargs) or True
+                    ),
                 ),
                 patch.object(
                     comfy_engine,
                     "ensure_pixal3d_runtime",
-                    side_effect=lambda *_a, **_k: order.append("runtime") or False,
+                    side_effect=lambda *_a, **kwargs: (
+                        order.append("runtime") or runtime_kwargs.append(kwargs) or False
+                    ),
                 ),
             ):
                 comfy_engine.apply_volume_launch(
@@ -186,6 +192,10 @@ class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
                     install_nodes=installer,
                 )
         self.assertEqual(order, ["wheels", "cnr", "runtime"])
+        self.assertEqual(wheel_kwargs[0].get("include_attention"), True)
+        self.assertEqual(wheel_kwargs[0].get("include_drtk"), True)
+        self.assertEqual(runtime_kwargs[0].get("include_pixal3d"), True)
+        self.assertEqual(runtime_kwargs[0].get("allow_source_compile"), False)
 
 
 class Trellis2LaunchOrderTests(unittest.TestCase):
@@ -233,16 +243,25 @@ class Trellis2LaunchOrderTests(unittest.TestCase):
                 order.append("cnr")
                 return ["ComfyUI-Trellis2"]
 
+            runtime_kwargs: list[dict] = []
+            wheel_kwargs: list[dict] = []
+            leftover = workspace / "custom_nodes" / "Pixal3D-ComfyUI"
+            leftover.mkdir(parents=True)
+            (leftover / "requirements.txt").write_text("moge\n", encoding="utf-8")
             with (
                 patch.object(
                     comfy_engine,
                     "ensure_pixal3d_prebuilt_wheels",
-                    side_effect=lambda *_a, **_k: order.append("wheels") or True,
+                    side_effect=lambda *_a, **kwargs: (
+                        order.append("wheels") or wheel_kwargs.append(kwargs) or True
+                    ),
                 ),
                 patch.object(
                     comfy_engine,
                     "ensure_pixal3d_runtime",
-                    side_effect=lambda *_a, **_k: order.append("runtime") or False,
+                    side_effect=lambda *_a, **kwargs: (
+                        order.append("runtime") or runtime_kwargs.append(kwargs) or False
+                    ),
                 ),
             ):
                 comfy_engine.apply_volume_launch(
@@ -256,10 +275,44 @@ class Trellis2LaunchOrderTests(unittest.TestCase):
                     install_nodes=installer,
                 )
         self.assertEqual(order, ["wheels", "cnr", "runtime"])
+        self.assertEqual(wheel_kwargs[0].get("include_attention"), False)
+        self.assertEqual(wheel_kwargs[0].get("include_drtk"), False)
+        self.assertEqual(runtime_kwargs[0].get("include_pixal3d"), False)
+        self.assertEqual(runtime_kwargs[0].get("allow_source_compile"), False)
 
 
 class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
-    def test_compiles_shared_cuda_and_skips_drtk(self):
+    def test_wheel_miss_raises_without_source_compile(self):
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            custom_nodes = root / "custom_nodes"
+            comfy_root.mkdir()
+            (custom_nodes / "ComfyUI-Trellis2").mkdir(parents=True)
+            with (
+                patch.object(comfy_engine, "_comfy_python", return_value="/usr/bin/python3"),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(comfy_engine, "_module_available", return_value=False),
+                patch.object(comfy_engine, "_module_import_error", return_value="missing"),
+                patch.object(comfy_engine, "_ensure_cuda_build_tools"),
+                patch.object(comfy_engine, "ensure_pixal3d_prebuilt_wheels", return_value=False),
+                patch.object(comfy_engine, "_install_flash_attn_wheel", return_value=True),
+                patch.object(comfy_engine, "_install_sparse_3d_prebuilt_wheels", return_value=False),
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    comfy_engine.ensure_pixal3d_runtime(comfy_root, custom_nodes)
+        self.assertIn("GPU source compile is disabled", str(ctx.exception))
+        self.assertIn("o_voxel", str(ctx.exception))
+        joined = " ".join(" ".join(cmd) for cmd in calls)
+        self.assertNotIn("FlexGEMM", joined)
+        self.assertNotIn("TRELLIS.2.git", joined)
+
+    def test_opt_in_source_compile_skips_drtk(self):
         calls: list[list[str]] = []
         available: set[str] = set()
 
@@ -296,7 +349,11 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
                 patch.object(comfy_engine, "_install_flash_attn_wheel", return_value=True),
                 patch.object(comfy_engine, "_install_sparse_3d_prebuilt_wheels", return_value=False),
             ):
-                changed = comfy_engine.ensure_pixal3d_runtime(comfy_root, custom_nodes)
+                changed = comfy_engine.ensure_pixal3d_runtime(
+                    comfy_root,
+                    custom_nodes,
+                    allow_source_compile=True,
+                )
         self.assertTrue(changed)
         joined = " ".join(" ".join(cmd) for cmd in calls)
         self.assertIn("FlexGEMM", joined)
@@ -341,6 +398,54 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
         self.assertNotIn("CuMesh", joined)
         self.assertNotIn("TRELLIS.2.git", joined)
         self.assertNotIn("DRTK", joined)
+
+    def test_ignores_leftover_pixal3d_requirements_and_drtk(self):
+        calls: list[list[str]] = []
+        available: set[str] = {
+            "flex_gemm_ap",
+            "flex_gemm",
+            "cumesh_vb",
+            "cumesh",
+            "o_voxel_vb_ap",
+            "o_voxel",
+        }
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            custom_nodes = root / "custom_nodes"
+            leftover = custom_nodes / "Pixal3D-ComfyUI"
+            leftover.mkdir(parents=True)
+            (leftover / "requirements.txt").write_text("moge\nnatten==0.21.6\n", encoding="utf-8")
+            comfy_root.mkdir()
+            (custom_nodes / "ComfyUI-Trellis2").mkdir(parents=True)
+            with (
+                patch.object(comfy_engine, "_comfy_python", return_value="/usr/bin/python3"),
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(comfy_engine, "_module_available", lambda name, _p: name in available),
+                patch.object(comfy_engine, "_ensure_cuda_build_tools"),
+                patch.object(comfy_engine, "ensure_pixal3d_prebuilt_wheels", return_value=False),
+                patch.object(comfy_engine, "_install_flash_attn_wheel", return_value=True),
+                patch.object(
+                    comfy_engine,
+                    "_install_sparse_3d_prebuilt_wheels",
+                    return_value=False,
+                ),
+            ):
+                changed = comfy_engine.ensure_pixal3d_runtime(
+                    comfy_root,
+                    custom_nodes,
+                    include_pixal3d=False,
+                )
+        self.assertFalse(changed)
+        joined = " ".join(" ".join(cmd) for cmd in calls)
+        self.assertNotIn("requirements.txt", joined)
+        self.assertNotIn("moge", joined)
+        self.assertNotIn("DRTK", joined)
+        self.assertNotIn("flash-attn", joined)
 
     def test_prepare_runtime_symlinks_microsoft_and_facebook(self):
         with tempfile.TemporaryDirectory() as directory:
