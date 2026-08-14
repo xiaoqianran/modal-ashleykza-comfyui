@@ -40,7 +40,7 @@ INSTALLER_REMOTE_PATH = "/opt/comfy-base-nodes/base_nodes.py"
 
 # Directory name from nodes.md → upstream git URL recovered from CNB image
 # history (plus GitHub lookups for nodes added after those Dockerfiles).
-# ``None`` means skip clone (Manager is installed from pip).
+# ``None`` means skip clone (Manager is installed with uv pip).
 BASE_NODE_SOURCES: tuple[tuple[str, str | None], ...] = (
     ("a-person-mask-generator", "https://github.com/djbielejeski/a-person-mask-generator.git"),
     ("audio-separation-nodes-comfyui", "https://github.com/christian-byrne/audio-separation-nodes-comfyui.git"),
@@ -269,7 +269,7 @@ def _restore_git_backups(dst_root: Path) -> None:
 
 
 def _remove_copied_manager(dst_root: Path) -> None:
-    # Use the current pip-distributed Manager instead of loading a second copied
+    # Use the current uv-pip Manager instead of loading a second copied
     # Manager implementation from the CNB / clone tree.
     for manager_name in ("comfyui-manager", "ComfyUI-Manager"):
         manager_dir = dst_root / manager_name
@@ -284,7 +284,7 @@ def _remove_copied_manager(dst_root: Path) -> None:
 # Transitive metadata can still be unsatisfiable in one lock (YuE's
 # descript-audiotools wants protobuf<3.20, IPAdapter-Flux wants protobuf>=4.25.5).
 # Drop those packages from requirement files; remaining deps install sequentially
-# like the CNB image (cm-cli / pip per node), not as one uv-sync solve.
+# like the CNB image (cm-cli / uv pip per node), not as one uv-sync solve.
 _DROP_PACKAGES = frozenset(
     {
         "descript-audiotools",
@@ -495,7 +495,7 @@ def build_base_nodes_commands(
 
     return [
         clone_step,
-        f"{q_py} -m pip install --no-cache-dir 'comfyui-manager==4.2.2' uv",
+        f"/usr/local/bin/uv pip install --python {q_py} --no-cache 'comfyui-manager==4.2.2'",
         deps_step,
     ]
 

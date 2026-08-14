@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import comfy_engine
+import uv_runtime
 import workflow_resolver
 
 
@@ -399,6 +400,8 @@ class WorkflowResolverTests(unittest.TestCase):
         )
         self.assertEqual(len(commands), 2)
         self.assertIn("comfy-cli==1.16.0", commands[0])
+        self.assertIn('"$UV" pip install --python "$PY" --no-cache', commands[0])
+        self.assertNotIn("-m pip", commands[0])
         self.assertIn("registry-install comfyui-kjnodes --version 1.2.3", commands[1])
         self.assertNotIn("nvidia", "\n".join(commands).lower())
 
@@ -408,6 +411,7 @@ class WorkflowResolverTests(unittest.TestCase):
             comfy_cli_version=None,
         )
         self.assertIn("comfy-cli", commands[0])
+        self.assertIn('"$UV" pip install --python "$PY" --no-cache', commands[0])
         self.assertNotIn("comfy-cli==", commands[0])
 
 
@@ -477,7 +481,7 @@ class RegistryVolumeInstallTests(unittest.TestCase):
             self.assertTrue((volume_custom / "ComfyUI-Cosmos3" / "requirements.txt").is_file())
             self.assertTrue(any(cmd[:2] == ["git", "clone"] for cmd in calls))
             self.assertTrue(
-                any(cmd[:3] == ["python3", "-m", "pip"] and "-r" in cmd for cmd in calls)
+                any(uv_runtime.is_uv_pip_cmd(cmd) and "-r" in cmd for cmd in calls)
             )
 
     def test_skip_github_node_still_pips_requirements(self):
@@ -525,7 +529,7 @@ class RegistryVolumeInstallTests(unittest.TestCase):
             self.assertEqual(skipped, [])
             self.assertFalse(any(cmd[:2] == ["git", "clone"] for cmd in calls))
             self.assertTrue(
-                any(cmd[:3] == ["python3", "-m", "pip"] and "-r" in cmd for cmd in calls)
+                any(uv_runtime.is_uv_pip_cmd(cmd) and "-r" in cmd for cmd in calls)
             )
 
     def test_gpu_module_does_not_bake_lock_into_image(self):
@@ -539,7 +543,10 @@ class RegistryVolumeInstallTests(unittest.TestCase):
         self.assertIn("models_vol.reload()", text)
         self.assertIn('apt_install(', text)
         self.assertIn('"cmake"', text)
+        self.assertIn('"curl"', text)
         self.assertIn('"ninja-build"', text)
+        self.assertIn("image_install_uv_command", text)
+        self.assertNotIn("-m pip", text)
         stop_at = text.index('stop_comfyui(getattr(self, "process", None))')
         reload_at = text.index("workspace_vol.reload()")
         self.assertLess(stop_at, reload_at)

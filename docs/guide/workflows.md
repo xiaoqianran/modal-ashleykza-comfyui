@@ -177,7 +177,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
   --out artifacts/pixal3d
 ```
 
-空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA wheels 装在 workspace Volume 的 `/workspace/.python/sparse-3d`（wheel 缓存在 `/workspace/.python/wheels`），容器 venv 只放一个 `.pth` 指针。缩容后下次冷启动复用 Volume site，不会再 pip / 下载。测试请用完即停，不要把 L40S 挂着。
+空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA wheels 装在 workspace Volume 的 `/workspace/.python/sparse-3d`（wheel 缓存在 `/workspace/.python/wheels`），容器 venv 只放一个 `.pth` 指针。缩容后下次冷启动复用 Volume site，不会再 uv pip / 下载。测试请用完即停，不要把 L40S 挂着。
 
 ## 仓库示例：Hunyuan3D 2.1 图生 GLB
 

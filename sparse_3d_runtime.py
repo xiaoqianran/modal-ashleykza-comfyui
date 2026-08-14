@@ -98,7 +98,7 @@ TRELLIS2_WHEEL_FILES: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
         "nvdiffrec_render-0.0.1+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
     ),
 )
-# CUDA wheels are installed with --no-deps so pip cannot replace Ashley's torch.
+# CUDA wheels are installed with --no-deps so the installer cannot replace Ashley's torch.
 # Remaining Requires-Dist: (pip name, import name). No torch / triton / torchvision.
 SPARSE_3D_WHEEL_PY_DEPS: tuple[tuple[str, str], ...] = (
     ("easydict", "easydict"),
@@ -175,11 +175,9 @@ def _pip_install(
     *args: str,
     site_dir: str | Path | None = None,
 ) -> None:
-    cmd = [python, "-m", "pip", "install", "--no-cache-dir"]
-    if site_dir is not None:
-        cmd.extend(["--target", str(site_dir)])
-    cmd.extend(args)
-    _run(cmd)
+    from uv_runtime import pip_install_cmd
+
+    _run(pip_install_cmd(python, *args, site_dir=site_dir))
 
 
 def _download_file(url: str, dest: str | Path) -> None:
@@ -349,7 +347,7 @@ def _install_natten_wheel(
         print(f"[PIXAL3D] cannot map torch to a natten wheel ({exc})", flush=True)
         return False
     print(
-        f"[PIXAL3D] pip install natten=={spec} from {NATTEN_WHEEL_INDEX}",
+        f"[PIXAL3D] uv pip install natten=={spec} from {NATTEN_WHEEL_INDEX}",
         flush=True,
     )
     try:
@@ -389,7 +387,7 @@ def _install_flash_attn_wheel(
             flush=True,
         )
         return False
-    print(f"[PIXAL3D] pip install flash-attn wheel {url}", flush=True)
+    print(f"[PIXAL3D] uv pip install flash-attn wheel {url}", flush=True)
     try:
         _ce()._pip_install(
             python,
@@ -417,7 +415,7 @@ def _install_sparse_3d_python_deps(
     ]
     if not missing:
         return False
-    print(f"[PIXAL3D] pip install sparse-3d python deps {missing}", flush=True)
+    print(f"[PIXAL3D] uv pip install sparse-3d python deps {missing}", flush=True)
     _ce()._pip_install(python, *missing, site_dir=site_dir)
     return True
 
@@ -432,7 +430,7 @@ def _install_trellis2_python_deps(
     ]
     if not missing:
         return False
-    print(f"[TRELLIS2] pip install python deps {missing}", flush=True)
+    print(f"[TRELLIS2] uv pip install python deps {missing}", flush=True)
     _ce()._pip_install(python, *missing, site_dir=site_dir)
     return True
 
@@ -605,7 +603,7 @@ def _install_sparse_3d_prebuilt_wheels(
         if any(_module_available(name, python) for name in imports):
             print(f"[PIXAL3D] {label} already importable", flush=True)
             continue
-        print(f"[PIXAL3D] pip install {label} wheel {url}", flush=True)
+        print(f"[PIXAL3D] uv pip install {label} wheel {url}", flush=True)
         try:
             _ce()._pip_install(
                 python,
@@ -726,7 +724,7 @@ def ensure_pixal3d_runtime(
             _ce().requirements_without_packages(source, frozenset({"natten"})),
             encoding="utf-8",
         )
-        print("[PIXAL3D] pip install requirements.txt (natten uses a prebuilt wheel)", flush=True)
+        print("[PIXAL3D] uv pip install requirements.txt (natten uses a prebuilt wheel)", flush=True)
         _ce()._pip_install(python, "-r", str(filtered), **site_kw)
         changed = True
         if not _module_available("natten", python):
@@ -750,7 +748,7 @@ def ensure_pixal3d_runtime(
                         "flash-attn wheel missing or not importable; "
                         "GPU source compile is disabled"
                     )
-                print("[PIXAL3D] pip install flash-attn from source", flush=True)
+                print("[PIXAL3D] uv pip install flash-attn from source", flush=True)
                 _ce()._ensure_cuda_build_tools()
                 _ce()._pip_install(
                     python,

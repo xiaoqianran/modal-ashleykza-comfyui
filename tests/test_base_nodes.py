@@ -46,6 +46,8 @@ class BaseNodesTests(unittest.TestCase):
         self.assertIn("--no-cache -r", joined)
         self.assertIn("custom_nodes/*/requirements.txt", joined)
         self.assertIn("comfyui-manager==4.2.2", joined)
+        self.assertIn("/usr/local/bin/uv pip install --python", joined)
+        self.assertNotIn("-m pip", joined)
         self.assertNotIn("node uv-sync", joined)
         self.assertNotIn("node install", joined)
 

@@ -31,6 +31,7 @@ from comfy_engine import (
 from modal_config import ModalSettings, idle_release_kwargs
 from recipes import get_profile
 from storage import workspace_dir
+from uv_runtime import image_install_uv_command, image_uv_pip_command, image_uv_uninstall_command
 
 SETTINGS = ModalSettings.from_env(os.environ, sys.argv)
 APP_NAME = SETTINGS.app_name
@@ -82,19 +83,27 @@ runtime_image = (
     # natten, flash-attn, flex_gemm, cumesh, o-voxel use prebuilt wheels at GPU start.
     .apt_install(
         "git",
+        "curl",
         "ca-certificates",
         "cmake",
         "ninja-build",
         "build-essential",
         "python3-dev",
     )
+    # Static musl uv+uvx. Do not bootstrap with pip.
+    .run_commands(image_install_uv_command())
     # Keep Ashley venv ahead of Modal-injected typing_extensions/pydantic.
     .run_commands(
-        "/ComfyUI/venv/bin/python -m pip install -U 'typing_extensions>=4.14' 'pydantic>=2.11'"
+        image_uv_pip_command(
+            "/ComfyUI/venv/bin/python",
+            "typing_extensions>=4.14",
+            "pydantic>=2.11",
+            upgrade=True,
+        )
     )
     # Stable for every workflow; runtime lock-CNR install uses this binary.
     .run_commands(
-        "/ComfyUI/venv/bin/python -m pip install --no-cache-dir 'comfy-cli==1.16.0'"
+        image_uv_pip_command("/ComfyUI/venv/bin/python", "comfy-cli==1.16.0")
     )
 )
 
@@ -118,7 +127,14 @@ if BASE_NODES_ENABLED:
         # stdlib pathlib and crashes Python 3.12 (`from collections import Sequence`).
         .run_commands(
             "set -eu; "
-            "/ComfyUI/venv/bin/python3 -m pip uninstall -y pathlib pathlib2 enum34 typing || true; "
+            + image_uv_uninstall_command(
+                "/ComfyUI/venv/bin/python3",
+                "pathlib",
+                "pathlib2",
+                "enum34",
+                "typing",
+            )
+            + "; "
             "rm -f /ComfyUI/venv/lib/python3.*/site-packages/pathlib.py "
             "/ComfyUI/venv/lib/python3.*/site-packages/pathlib.pyc "
             "/ComfyUI/venv/lib/python3.*/site-packages/__pycache__/pathlib*.pyc"
@@ -152,6 +168,7 @@ runtime_image = (
         "workflow_resolver",
         "comfy_engine",
         "sparse_3d_runtime",
+        "uv_runtime",
         "modal_config",
         "storage",
     )

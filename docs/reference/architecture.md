@@ -66,9 +66,9 @@ Studio
 默认 Image 对所有工作流相同，才能吃到 Modal 层缓存：
 
 1. 构建时解析最新 Ashley `cu128-py312-v*`（不钉 0.32 / 0.33；`COMFY_IMAGE` 可覆盖）
-2. apt + `typing_extensions` / `pydantic`
-3. 固定 `comfy-cli==1.16.0`（给运行时装 Volume 插件用）
-4. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点（默认关，会改 Image）
+2. 静态 musl `uv` + `uvx`（不靠 pip 引导）
+3. `uv pip --python` 装 `typing_extensions` / `pydantic` 与固定 `comfy-cli==1.16.0`
+4. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点（默认关，会改 Image；依赖用 `uv pip`）
 5. `COMFY_INSTALL_NODES=1`：profile 额外 node packs（默认关，会改 Image）
 
 工作流锁里的 CNR **不在 Image 里**。hydrate 写入 `.state/launch.json`，GPU 启动时装到 `/workspace/custom_nodes`。
@@ -79,7 +79,7 @@ Studio
 
 CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes`、或把 CUDA wheels 写入 `/workspace/.python/sparse-3d` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。
 
-CUDA wheels 不进 Image、也不进 models Volume。冷启动时 `sparse_3d_runtime` 用 `pip install --target /workspace/.python/sparse-3d`，wheel 文件缓存在 `/workspace/.python/wheels`，再往容器 venv 的 site-packages 写一个 `comfy_sparse_3d.pth`。`.pth` 随 Image venv 一起消失，Volume 上的 site 还在；下次只要重新写 `.pth` 就能 import。Blackwell 的 boot `.pth` 仍写在 venv 里（几行 Python）。OpenGL 的 `apt-get` 仍是每次冷启动。CNR 的 `requirements.txt` pip 仍进 venv，不在这一层持久化。
+CUDA wheels 不进 Image、也不进 models Volume。冷启动时 `sparse_3d_runtime` 用 `uv pip install --target /workspace/.python/sparse-3d`，wheel 文件缓存在 `/workspace/.python/wheels`，再往容器 venv 的 site-packages 写一个 `comfy_sparse_3d.pth`。`.pth` 随 Image venv 一起消失，Volume 上的 site 还在；下次只要重新写 `.pth` 就能 import。Blackwell 的 boot `.pth` 仍写在 venv 里（几行 Python）。OpenGL 的 `apt-get` 仍是每次冷启动。CNR 的 `requirements.txt` 仍用 `uv pip` 进 venv，不在这一层持久化。
 
 ## Volume 路径
 
