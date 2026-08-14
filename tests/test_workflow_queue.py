@@ -58,6 +58,7 @@ class WorkflowInspectTests(unittest.TestCase):
             "pixal3d-image-to-3d.json",
             "flux2-dev-t2i.json",
             "qwen-image-2512.json",
+            "qwen-image-2512-lightning.json",
             "krea2-turbo-t2i.json",
             "z-image-turbo-t2i.json",
             "ideogram4-t2i.json",

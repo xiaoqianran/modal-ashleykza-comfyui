@@ -203,6 +203,25 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
   --out artifacts/qwen-image-2512
 ```
 
+## 仓库示例：Qwen-Image-2512 Lightning（8 步）
+
+| 文件 | 作用 |
+|---|---|
+| `examples/qwen-image-2512-lightning.json` | 官方 `image_qwen_Image_2512`，打开 LightX2V **8 步** LoRA |
+| `examples/qwen-image-2512-lightning.lock.json` | 与 50 步配方同一套 fp8 底模，LoRA 换成 8steps |
+| `catalog/qwen-image-2512-lightning.json` | Studio 契约：8 步、CFG 1，测试 **L40S**，正式 **RTX-PRO-6000** |
+
+50 步那份慢，是因为官方模板把 Lightning 默认关着。4 步更快但文字/人像更容易糊；2 步 Wuli Turbo 官方自己写了「牺牲画质」。LightX2V 给 2512 的蒸馏默认就是 **8 步**，速度大约是 50 步的 1/6，画质更接近原版。CFG 固定 1，没有负向。同样走 `python3 -m workflow_queue`，不要再写 `queue_qwen.py`。
+
+```bash
+modal run hydrate_modal.py --workflow examples/qwen-image-2512-lightning.json
+MODAL_GPU=L40S modal serve comfyui_modal.py
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/qwen-image-2512-lightning.json \
+  --prompt "雨夜霓虹巷口，红风衣，电影感" \
+  --out artifacts/qwen-image-2512-lightning
+```
+
 ## 仓库示例：Krea-2 Turbo 文生图
 
 | 文件 | 作用 |

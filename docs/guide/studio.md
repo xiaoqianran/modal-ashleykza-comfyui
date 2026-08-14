@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 仍是提示词。不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -41,6 +41,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | Z-Image-Turbo | L40S | RTX-PRO-6000 | 提示词 |
 | FLUX.2 [dev] | RTX-PRO-6000 | RTX-PRO-6000 | 提示词 |
 | Qwen-Image-2512 | L40S | RTX-PRO-6000 | 提示词 |
+| Qwen-Image-2512 Lightning | L40S | RTX-PRO-6000 | 提示词 |
 | Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
 | Ideogram 4 | L40S | RTX-PRO-6000 | 提示词 |
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |

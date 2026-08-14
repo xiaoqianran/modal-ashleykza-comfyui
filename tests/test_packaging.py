@@ -62,7 +62,8 @@ class WindowsBundleTests(unittest.TestCase):
             self.assertTrue((app / "examples" / "z-image-turbo-t2i.json").is_file())
             self.assertTrue((app / "examples" / "ideogram4-t2i.json").is_file())
             self.assertTrue((app / "catalog" / "z-image-turbo.json").is_file())
-            self.assertTrue((app / "catalog" / "ideogram4.json").is_file())
+            self.assertTrue((app / "examples" / "qwen-image-2512-lightning.json").is_file())
+            self.assertTrue((app / "catalog" / "qwen-image-2512-lightning.json").is_file())
             self.assertTrue((app / "README.txt").is_file())
             self.assertNotIn(".env", {path.name for path in app.iterdir()})
 

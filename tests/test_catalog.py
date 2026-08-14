@@ -29,6 +29,7 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("krea2-turbo", ids)
         self.assertIn("z-image-turbo", ids)
         self.assertIn("ideogram4", ids)
+        self.assertIn("qwen-image-2512-lightning", ids)
         self.assertEqual(items[0]["kind"], "t2i")
         self.assertEqual(items[0]["io"]["images_in"], 0)
         for item in items:
@@ -182,6 +183,28 @@ class CatalogTests(unittest.TestCase):
         self.assertFalse(public_catalog(krea)["io"]["negative"])
         self.assertFalse(public_catalog(turbo)["io"]["negative"])
         self.assertFalse(public_catalog(ideogram)["io"]["negative"])
+
+    def test_qwen_image_2512_lightning_is_eight_step_workflow(self):
+        catalog = load_catalog("qwen-image-2512-lightning")
+        lock = workflow_resolver.load_workflow_lock(
+            ROOT / catalog["lock"],
+            require_resolved=True,
+        )
+        names = {model["filename"] for model in lock["models"]}
+        self.assertEqual(catalog["mode"], "workflow")
+        self.assertNotIn("graph", catalog)
+        self.assertEqual(catalog["gpu"], "L40S")
+        self.assertEqual(catalog["gpu_inference"], "RTX-PRO-6000")
+        self.assertNotIn("T4", catalog["gpu_choices"])
+        self.assertEqual(
+            next(spec["default"] for spec in catalog["params"] if spec["id"] == "steps"),
+            8,
+        )
+        self.assertIn("Qwen-Image-2512-Lightning-8steps-V1.0-fp32.safetensors", names)
+        self.assertIn("qwen_image_2512_fp8_e4m3fn.safetensors", names)
+        public = public_catalog(catalog)
+        self.assertTrue(public["io"]["prompt"])
+        self.assertFalse(public["io"]["negative"])
 
     def test_rejects_path_escape_in_workflow_field(self):
         catalog = dict(load_catalog("z-image"))
