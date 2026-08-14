@@ -88,6 +88,47 @@ class Sparse3dWheelUrlTests(unittest.TestCase):
         self.assertEqual(comfy_engine.sparse_3d_wheel_urls("3.12.3", "2.10.0+cu128"), ())
 
 
+class InstallSparse3dWheelsTests(unittest.TestCase):
+    def test_installs_python_deps_without_torch(self):
+        calls: list[list[str]] = []
+        cuda = {
+            "flex_gemm_ap",
+            "flex_gemm",
+            "cumesh_vb",
+            "cumesh",
+            "o_voxel_vb_ap",
+            "o_voxel",
+        }
+
+        def fake_run(cmd, **_kwargs):
+            calls.append(list(cmd))
+
+        with (
+            patch.object(
+                comfy_engine,
+                "_python_text",
+                side_effect=["3.12.3", "2.11.0+cu128"],
+            ),
+            patch.object(comfy_engine, "_run", fake_run),
+            patch.object(
+                comfy_engine,
+                "_module_available",
+                lambda name, _p: name in cuda,
+            ),
+        ):
+            self.assertTrue(
+                comfy_engine._install_sparse_3d_prebuilt_wheels(
+                    "/ComfyUI/venv/bin/python3", include_drtk=False
+                )
+            )
+        dep_calls = [cmd for cmd in calls if "pip" in cmd and "trimesh" in cmd]
+        self.assertEqual(len(dep_calls), 1)
+        self.assertIn("plyfile", dep_calls[0])
+        self.assertIn("easydict", dep_calls[0])
+        self.assertNotIn("torch", dep_calls[0])
+        self.assertFalse(any(str(cmd[-1]).endswith(".whl") for cmd in calls))
+
+
 class FlashAttnWheelTests(unittest.TestCase):
     def test_ashley_py312_torch211_url(self):
         url = comfy_engine.flash_attn_wheel_url("3.12.3", "2.11.0+cu128")

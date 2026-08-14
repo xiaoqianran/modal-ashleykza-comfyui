@@ -75,6 +75,18 @@ DRTK_WHEEL_FILE: tuple[str, tuple[str, ...], str, str] = (
     "drtk-latest",
     "drtk-0.1.0+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
 )
+# CUDA wheels are installed with --no-deps so pip cannot replace Ashley's torch.
+# Remaining Requires-Dist: (pip name, import name). No torch / triton / torchvision.
+SPARSE_3D_WHEEL_PY_DEPS: tuple[tuple[str, str], ...] = (
+    ("easydict", "easydict"),
+    ("filelock", "filelock"),
+    ("numpy", "numpy"),
+    ("pillow", "PIL"),
+    ("plyfile", "plyfile"),
+    ("tqdm", "tqdm"),
+    ("trimesh", "trimesh"),
+    ("zstandard", "zstandard"),
+)
 
 
 def _quote(value: str | Path) -> str:
@@ -1304,6 +1316,19 @@ def _install_flash_attn_wheel(python: str) -> bool:
     )
 
 
+def _install_sparse_3d_python_deps(python: str) -> bool:
+    missing = [
+        pip_name
+        for pip_name, import_name in SPARSE_3D_WHEEL_PY_DEPS
+        if not _module_available(import_name, python)
+    ]
+    if not missing:
+        return False
+    print(f"[PIXAL3D] pip install sparse-3d python deps {missing}", flush=True)
+    _run([python, "-m", "pip", "install", "--no-cache-dir", *missing])
+    return True
+
+
 def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bool:
     """Install flex_gemm / cumesh / o-voxel (and optional DRTK) from CUDA wheels."""
     try:
@@ -1323,7 +1348,7 @@ def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bo
             flush=True,
         )
         return False
-    changed = False
+    changed = _install_sparse_3d_python_deps(python)
     for label, imports, url in specs:
         if any(_module_available(name, python) for name in imports):
             print(f"[PIXAL3D] {label} already importable", flush=True)
