@@ -43,7 +43,7 @@ python -m studio --no-browser
 
 Windows：Releases 里只下一个 `Studio.exe`，双击即可。见 [Studio](../guide/studio.md#studio-exe)。
 
-本机 `127.0.0.1:8787`，启动后默认打开浏览器。顶栏选 Z-Image / Z-Image-Turbo / FLUX.2 [dev] / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step / Pixal3D / TripoSplat。见 [Studio](../guide/studio.md)。
+本机 `127.0.0.1:8787`，启动后默认打开浏览器。顶栏配方、GPU、实测见 [模型列表](../guide/models.md) 与 [Studio](../guide/studio.md)。
 
 ## 通用排队
 

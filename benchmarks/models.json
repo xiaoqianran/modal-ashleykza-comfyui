@@ -1,0 +1,353 @@
+{
+  "schema": 1,
+  "updated": "2026-08-14",
+  "environment": {
+    "image": "ashleykleynhans/comfyui cu128-py312",
+    "comfyui_version": "0.32.0",
+    "modal_profile": "weiranzhiqian",
+    "platform": "Modal",
+    "measurement": "从 POST /prompt 到 /history 出现 success 的客户端墙钟。首张常含装进 VRAM 或同卡换模。",
+    "scaledown_window_seconds": 5,
+    "notes": [
+      "title / kind / gpu / workflow 以 catalog/*.json 为准，本文件只补权重、节点、实测。",
+      "新增 catalog 必须同时加一条 id 相同的记录，否则单测失败。",
+      "测完停 modal serve。不要用 T4。产物不进 Git。"
+    ]
+  },
+  "models": [
+    {
+      "id": "z-image",
+      "family": "z-image",
+      "quant": "bf16",
+      "weights_gb": null,
+      "vram_gb": null,
+      "weights_note": "Comfy-Org Z-Image DiT + Qwen3-4B TE + ae VAE。锁内无自定义节点。",
+      "shared_weights_with": ["z-image-turbo"],
+      "nodes": "core",
+      "output": "1024² png",
+      "smoke": {
+        "status": "pending",
+        "note": "Studio 默认配方。测试卡已改成 L40S，尚未正式记时。"
+      }
+    },
+    {
+      "id": "z-image-turbo",
+      "family": "z-image",
+      "quant": "bf16",
+      "weights_gb": null,
+      "vram_gb": null,
+      "weights_note": "蒸馏 8 步 DiT。TE / VAE 与 Z-Image 共用。CFG 固定 1。",
+      "shared_weights_with": ["z-image"],
+      "nodes": "core",
+      "output": "1024² png",
+      "smoke": {
+        "status": "hydrated",
+        "source": "PR #32",
+        "date": "2026-08-14",
+        "note": "hydrate 已写入 Volume。Ashley 0.32.0 无官方 subgraph，mode=graph。未排队出图。"
+      }
+    },
+    {
+      "id": "cosmos3-edge",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 3.1,
+      "vram_gb": null,
+      "weights_note": "4B Nemotron-dense。transformer 是 ConvRot int4；VAE / tokenizer 来自 nvidia/Cosmos3-Edge。不 split。提示词建议 JSON temporal_caption。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "832×480 / 93 帧 / 24fps mp4",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #35",
+        "seconds": 49.06,
+        "output": "832×480 / 93 帧 / 24fps",
+        "prompt_id": "36ddb017-f005-4760-9258-15b20e92e571"
+      }
+    },
+    {
+      "id": "cosmos3-nano",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 12.4,
+      "vram_gb": 7,
+      "host_ram_gb": 20,
+      "weights_note": "16B。transformer 是 ConvRot int4；VAE / tokenizer 来自 nvidia/Cosmos3-Nano。不 split。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "832×480 / 93 帧 / 24fps mp4",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #34",
+        "seconds": 133.17,
+        "output": "832×480 / 93 帧 / 24fps",
+        "prompt_id": "e77e1f04-09e3-4cb5-8097-9f8f2c111271"
+      }
+    },
+    {
+      "id": "cosmos3-super",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 46.8,
+      "vram_gb": 8,
+      "host_ram_gb": 63,
+      "weights_note": "64B 全能基座。bf16 约 120GB / 主机内存约 240GB。本配方用 Super int4 + split_reasoner + UndTower。",
+      "shared_weights_with": ["cosmos3-super-text2image"],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "832×480 / 93 帧 / 24fps mp4",
+      "smoke": {
+        "status": "pending",
+        "note": "与 Super T2I 同一套 int4。93 帧 SaveVideo 路径已由 Nano 验证；本配方尚未单独记时。"
+      }
+    },
+    {
+      "id": "cosmos3-super-image2video",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 46.7,
+      "vram_gb": 8,
+      "host_ram_gb": 63,
+      "weights_note": "64B 图生视频。transformer 是 I2V int4 + split_reasoner。fps 16。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "832×480 / 93 帧 / 16fps mp4",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #34",
+        "seconds": 517.65,
+        "output": "832×480 / 93 帧 / 16fps",
+        "prompt_id": "cc191f15-eb65-474c-8654-37f8b0641629"
+      }
+    },
+    {
+      "id": "cosmos3-super-image2video-4step",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 46.7,
+      "vram_gb": 8,
+      "host_ram_gb": 63,
+      "weights_note": "DMD2 蒸馏 4 步。euler + CFG 1.0 + distilled_4step。官方示例不拆 reasoner；本仓库仍 split。",
+      "shared_weights_with": ["cosmos3-super-text2image-4step"],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "832×480 / 93 帧 / 16fps mp4",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #35",
+        "seconds": 50.78,
+        "output": "832×480 / 93 帧 / 16fps",
+        "prompt_id": "59019ca8-a1b9-4ca2-9076-b5892a6dd6dc"
+      }
+    },
+    {
+      "id": "cosmos3-super-text2image",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 46.8,
+      "vram_gb": 8,
+      "host_ram_gb": 63,
+      "weights_note": "ConvRot 没有 T2I 专用 int4。用 Super int4 做 1 帧（VAE/tokenizer 仍来自 nvidia/Cosmos3-Super）。",
+      "shared_weights_with": ["cosmos3-super"],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "1024² png",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #34",
+        "seconds": 245.56,
+        "output": "1024²",
+        "prompt_id": "0d454831-26dc-44a7-9604-e79e97b99cea"
+      }
+    },
+    {
+      "id": "cosmos3-super-text2image-4step",
+      "family": "cosmos3",
+      "quant": "int4-convrot",
+      "weights_gb": 46.7,
+      "vram_gb": 8,
+      "host_ram_gb": 63,
+      "weights_note": "权宜：与 I2V-4Step 共用同一套 int4 做 1 帧。不是官方 T2I-4Step bf16（约 120GB）。euler + CFG 1.0。",
+      "shared_weights_with": ["cosmos3-super-image2video-4step"],
+      "nodes": "ComfyUI-Cosmos3",
+      "output": "1024² png",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #35",
+        "seconds": 66.05,
+        "output": "1024²",
+        "prompt_id": "2e9e567e-1e0b-40b5-92b0-87c2080ffcc9"
+      }
+    },
+    {
+      "id": "flux2-dev",
+      "family": "flux2",
+      "quant": "fp8-mixed",
+      "weights_gb": 71,
+      "vram_gb": 70,
+      "weights_note": "官方 image_flux2_text_to_image。fp8 mixed + Mistral TE。L40S 放不下。VAE 在 black-forest-labs/FLUX.2-small-decoder（gated）。",
+      "shared_weights_with": [],
+      "nodes": "core",
+      "output": "1024² png",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "RTX-PRO-6000",
+        "date": "2026-08-13",
+        "source": "PR #21",
+        "seconds": 144.0,
+        "warm_seconds": 15.36,
+        "output": "1024² / 20 步",
+        "note": "5/5 success。首张冷加载；热显存 15.34–15.38s。"
+      },
+      "runs": [
+        {"prompt": "青瓷壶", "seconds": 144.0, "note": "冷加载 ~70GB VRAM"},
+        {"prompt": "雨夜红风衣", "seconds": 15.35},
+        {"prompt": "梯田日出", "seconds": 15.38},
+        {"prompt": "窗边橘猫", "seconds": 15.38},
+        {"prompt": "青花瓷荔枝汽水", "seconds": 15.34}
+      ]
+    },
+    {
+      "id": "ideogram4",
+      "family": "ideogram",
+      "quant": "fp8",
+      "weights_gb": 38,
+      "vram_gb": 38,
+      "weights_note": "开源 Ideogram 4.0。双 DiT fp8 + Qwen3-VL-8B + Gemma4 + Flux2 VAE。Gemma4 只写在 MarkdownNote，锁是手修。",
+      "shared_weights_with": [],
+      "nodes": "core (Ideogram4Scheduler / DualModelGuider 需新 ComfyUI)",
+      "output": "1024² png",
+      "smoke": {
+        "status": "hydrated",
+        "source": "PR #32",
+        "date": "2026-08-14",
+        "note": "hydrate 已写入。Ashley 0.32.0 可能缺 Ideogram4 节点，未排队出图。不要升级 GPU Image。"
+      }
+    },
+    {
+      "id": "krea2-turbo",
+      "family": "krea",
+      "quant": "fp8",
+      "weights_gb": 17,
+      "vram_gb": 17.4,
+      "weights_note": "官方 image_krea2_turbo_t2i。fp8 Turbo DiT + Qwen3VL-4B TE + Qwen Image VAE。8 步，prompt enhancement 默认开。",
+      "shared_weights_with": [],
+      "nodes": "core",
+      "output": "1024² png",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "RTX-PRO-6000",
+        "date": "2026-08-13",
+        "source": "PR #24",
+        "seconds": 39.21,
+        "warm_seconds": 8.94,
+        "output": "1024² / 8 步",
+        "note": "5/5 success，约 17.4GB 显存。prompt enhance 开着，后续张 8.9–19.7s 不稳。"
+      },
+      "runs": [
+        {"prompt": "青瓷壶", "seconds": 39.21, "note": "冷加载"},
+        {"prompt": "雨夜红风衣", "seconds": 19.68},
+        {"prompt": "梯田日出", "seconds": 8.98},
+        {"prompt": "窗边橘猫", "seconds": 8.94},
+        {"prompt": "青花瓷荔枝汽水", "seconds": 17.57}
+      ]
+    },
+    {
+      "id": "pixal3d",
+      "family": "pixal3d",
+      "quant": null,
+      "weights_gb": null,
+      "vram_gb": 32,
+      "weights_note": "图生 GLB。1024_cascade。CNR Pixal3D-ComfyUI@0.2.4。GPU 启动时装预构建 natten / flash-attn wheel。RMBG-2.0 gated。",
+      "shared_weights_with": [],
+      "nodes": "Pixal3D-ComfyUI",
+      "output": "GLB",
+      "smoke": {
+        "status": "pending",
+        "gpu": "L40S",
+        "date": "2026-08-13",
+        "source": "PR #14",
+        "note": "gecko.jpg 跑通并导出 GLB，尚未记录墙钟秒数。"
+      }
+    },
+    {
+      "id": "qwen-image-2512",
+      "family": "qwen",
+      "quant": "fp8",
+      "weights_gb": 32,
+      "vram_gb": 32,
+      "weights_note": "官方 image_qwen_Image_2512。fp8 + Lightning LoRA 默认关。50 步 / CFG 4 / 1328²。",
+      "shared_weights_with": ["qwen-image-2512-lightning"],
+      "nodes": "core",
+      "output": "1328² png",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "RTX-PRO-6000",
+        "date": "2026-08-13",
+        "source": "PR #21",
+        "seconds": 77.59,
+        "warm_seconds": 53.91,
+        "output": "1328² / 50 步",
+        "note": "5/5 success。紧接 Flux.2 同卡切模。测试卡现为 L40S，L40S 耗时待补。"
+      },
+      "runs": [
+        {"prompt": "青瓷壶", "seconds": 77.59, "note": "从 Flux.2 切模"},
+        {"prompt": "雨夜红风衣", "seconds": 53.99},
+        {"prompt": "梯田日出", "seconds": 53.93},
+        {"prompt": "窗边橘猫", "seconds": 53.89},
+        {"prompt": "青花瓷荔枝汽水", "seconds": 53.84}
+      ]
+    },
+    {
+      "id": "qwen-image-2512-lightning",
+      "family": "qwen",
+      "quant": "fp8+lora",
+      "weights_gb": 34,
+      "vram_gb": null,
+      "weights_note": "LightX2V 8 步蒸馏 LoRA（约 1.7GB）叠在同一套 Qwen fp8 底模上。CFG 1，无负向。",
+      "shared_weights_with": ["qwen-image-2512"],
+      "nodes": "core",
+      "output": "1328² png",
+      "smoke": {
+        "status": "hydrated",
+        "source": "PR #33",
+        "date": "2026-08-14",
+        "note": "hydrate 已写入 8 步 LoRA。未排队出图。预期大约是 50 步的 1/6，待实测。"
+      }
+    },
+    {
+      "id": "triposplat",
+      "family": "triposplat",
+      "quant": "fp16",
+      "weights_gb": null,
+      "vram_gb": 48,
+      "weights_note": "图生 Gaussian Splat（SPZ）+ GLB。锁内无 CNR。",
+      "shared_weights_with": [],
+      "nodes": "core",
+      "output": "SPZ + GLB",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-13",
+        "source": "PR #13",
+        "seconds": 53.66,
+        "warm_seconds": 30.1,
+        "note": "3/3 success。耗时随物体变化 30–54s。"
+      },
+      "runs": [
+        {"input": "headphones", "seconds": 53.66},
+        {"input": "wristwatch", "seconds": 30.1},
+        {"input": "rubber-duck", "seconds": 32.83}
+      ]
+    }
+  ]
+}

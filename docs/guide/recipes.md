@@ -1,6 +1,6 @@
 # 配方
 
-`recipes.py` 里的 **profile** 把一组模型包和额外节点绑在一起，给 hydrate 与 GPU Image 使用。
+`recipes.py` 里的 **profile** 把一组模型包和额外节点绑在一起，给 hydrate 与 GPU Image 使用。Studio 顶栏配方不是这些 profile，而是 `catalog/*.json`；完整表见 [模型列表](models.md)。
 
 ```bash
 modal run hydrate_modal.py --action profiles
