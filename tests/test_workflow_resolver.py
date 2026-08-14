@@ -480,6 +480,54 @@ class RegistryVolumeInstallTests(unittest.TestCase):
                 any(cmd[:3] == ["python3", "-m", "pip"] and "-r" in cmd for cmd in calls)
             )
 
+    def test_skip_github_node_still_pips_requirements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            (comfy_root / "custom_nodes").mkdir(parents=True)
+            volume_custom = root / "workspace" / "custom_nodes"
+            dest = volume_custom / "ComfyUI-Cosmos3"
+            dest.mkdir(parents=True)
+            (dest / "requirements.txt").write_text("transformers>=4.51\n", encoding="utf-8")
+            marker = volume_custom.parent / "state" / "cnr" / "ComfyUI-Cosmos3"
+            marker.parent.mkdir(parents=True)
+            marker.write_text(
+                json.dumps(
+                    {
+                        "id": "ComfyUI-Cosmos3",
+                        "version": "main",
+                        "dirs": ["ComfyUI-Cosmos3"],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            calls: list[list[str]] = []
+
+            def fake_run(cmd, **_kwargs):
+                calls.append(list(cmd))
+
+            with (
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(comfy_engine, "_comfy_python", return_value="python3"),
+            ):
+                skipped = comfy_engine.install_registry_nodes(
+                    [
+                        {
+                            "id": "ComfyUI-Cosmos3",
+                            "version": "main",
+                            "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
+                        }
+                    ],
+                    comfy_root=comfy_root,
+                    custom_nodes_dir=volume_custom,
+                )
+            self.assertEqual(skipped, [])
+            self.assertFalse(any(cmd[:2] == ["git", "clone"] for cmd in calls))
+            self.assertTrue(
+                any(cmd[:3] == ["python3", "-m", "pip"] and "-r" in cmd for cmd in calls)
+            )
+
     def test_gpu_module_does_not_bake_lock_into_image(self):
         text = (Path(__file__).resolve().parents[1] / "comfyui_modal.py").read_text(
             encoding="utf-8"

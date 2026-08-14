@@ -276,6 +276,7 @@ def chrome_search_paths() -> list[Path]:
         for item in (
             "/usr/bin/google-chrome",
             "/usr/bin/google-chrome-stable",
+            "/usr/local/bin/google-chrome",
             "/usr/bin/chromium",
             "/usr/bin/chromium-browser",
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",

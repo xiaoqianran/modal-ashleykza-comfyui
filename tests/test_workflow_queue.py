@@ -230,6 +230,8 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(prompt["5"]["inputs"]["width"], 1024)
         self.assertEqual(prompt["5"]["inputs"]["height"], 576)
         self.assertEqual(prompt["2"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["4"]["inputs"]["width"], 1024)
+        self.assertEqual(prompt["4"]["inputs"]["height"], 576)
         self.assertEqual(prompt["15"]["inputs"]["width"], 1024)
         self.assertEqual(prompt["15"]["inputs"]["height"], 576)
 
@@ -357,6 +359,7 @@ class ChromePathTests(unittest.TestCase):
                 for item in paths
             )
         )
+        self.assertIn("/usr/local/bin/google-chrome", paths)
 
     def test_missing_browser_returns_none(self):
         with (

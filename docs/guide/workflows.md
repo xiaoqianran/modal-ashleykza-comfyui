@@ -297,7 +297,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 Comfy 核心还没有 Cosmos 3 原生节点（[Comfy-Org#14228](https://github.com/Comfy-Org/ComfyUI/issues/14228) 仍 open）。四份配方走 [RyukoMatoiFan/ComfyUI-Cosmos3](https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3)（GitHub 自定义节点，GPU 启动时装到 Volume）。64B bf16 大约 120GB 权重、240GB 主机内存，单卡 RTX-PRO-6000 也放不下；锁里的 transformer 换成 [AkaneTendo25/Cosmos3-ConvRot](https://huggingface.co/AkaneTendo25/Cosmos3-ConvRot) **int4**，Super 系列再打开 `split_reasoner`。
 
-ConvRot **没有** Super-Text2Image 专用 int4。`cosmos3-super-text2image` 用同架构的 Super int4 做 **1 帧**文生图（VAE / tokenizer 仍来自 `nvidia/Cosmos3-Super`），才能在 L40S 上跑。
+ConvRot **没有** Super-Text2Image 专用 int4。`cosmos3-super-text2image` 用同架构的 Super int4 做 **1 帧**文生图（VAE / tokenizer 仍来自 `nvidia/Cosmos3-Super`），才能在单卡上跑。Super 系列 int4 主机内存大约 63GB（权重约 47GB）；动态 VRAM 下采样显存大约 8GB，L40S 的 48GB 显存放得下，但主机内存比 Nano 紧。Nano int4 大约 12GB 权重、20GB 主机内存、7GB 显存。
 
 | 文件 | 作用 |
 |---|---|

@@ -14,7 +14,7 @@
     "RTX-PRO-6000"
   ],
   "client_id": "studio-cosmos3-super-i2v",
-  "filename_prefix": "Cosmos3_super_i2v",
+  "filename_prefix": "video/Cosmos3_super_i2v",
   "io": {
     "images_in": 1
   },
