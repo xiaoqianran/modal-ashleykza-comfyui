@@ -12,8 +12,8 @@ def http_json(url: str, payload: dict | None = None, timeout: int = 120) -> Any:
     return workflow_queue.http_json(url, payload, timeout=timeout)
 
 
-def wait_ready(base: str, timeout: int = 900) -> dict[str, Any]:
-    stats = workflow_queue.wait_ready(base, timeout=timeout)
+def wait_ready(base: str, timeout: int = 900, **kwargs: Any) -> dict[str, Any]:
+    stats = workflow_queue.wait_ready(base, timeout=timeout, **kwargs)
     devices = stats.get("devices") or []
     return {
         "ready": True,
