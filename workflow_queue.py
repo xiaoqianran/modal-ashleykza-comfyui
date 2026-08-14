@@ -11,13 +11,14 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import shutil
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,18 @@ TEXT_CLASS_TYPES = {
 }
 NEGATIVE_MARKERS = ("negative", "neg", "负向", "反向")
 ENABLE_GLB_TYPES = {"SplatToMesh", "SaveGLB"}
+SKIP_OBJECT_INFO_TYPES = {
+    "Note",
+    "MarkdownNote",
+    "Reroute",
+    "GetNode",
+    "SetNode",
+    "Graph",
+}
+SUBGRAPH_TYPE_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 GRAPH_TO_PROMPT_JS = """
 async (workflow) => {
     const app = window.comfyAPI?.app?.app;
@@ -139,20 +152,106 @@ def http_json(url: str, payload: dict | None = None, timeout: int = 120) -> Any:
     return json.loads(body.decode("utf-8") or "{}")
 
 
-def wait_ready(base: str, timeout: int = 900) -> dict[str, Any]:
+def _skip_ready_type(name: str) -> bool:
+    return (
+        (not name)
+        or name in SKIP_OBJECT_INFO_TYPES
+        or name.startswith("Primitive")
+        or bool(SUBGRAPH_TYPE_RE.match(name))
+    )
+
+
+def iter_class_types(payload: Any) -> list[str]:
+    """Collect UI ``type`` / API ``class_type`` names, including subgraphs."""
+    found: set[str] = set()
+
+    def walk(obj: Any) -> None:
+        if isinstance(obj, dict):
+            class_type = obj.get("class_type")
+            if isinstance(class_type, str) and class_type.strip():
+                found.add(class_type.strip())
+            nodes = obj.get("nodes")
+            if isinstance(nodes, list):
+                for node in nodes:
+                    if not isinstance(node, dict):
+                        continue
+                    name = node.get("type") or node.get("class_type")
+                    if isinstance(name, str) and name.strip():
+                        found.add(name.strip())
+                    walk(node)
+            for key, value in obj.items():
+                if key == "nodes":
+                    continue
+                walk(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                walk(item)
+
+    walk(payload)
+    return sorted(found)
+
+
+def required_object_types(
+    *,
+    required_types: Iterable[str] | None = None,
+    workflow: Mapping[str, Any] | None = None,
+    lock: Mapping[str, Any] | None = None,
+) -> list[str]:
+    types: set[str] = set()
+    if required_types:
+        types.update(str(item).strip() for item in required_types if str(item).strip())
+    if workflow is not None:
+        types.update(iter_class_types(workflow))
+    if lock is not None:
+        types.update(iter_class_types(lock))
+    return sorted(name for name in types if not _skip_ready_type(name))
+
+
+def missing_object_types(
+    info: Mapping[str, Any] | None,
+    required: Iterable[str],
+) -> list[str]:
+    present = info if isinstance(info, Mapping) else {}
+    return [name for name in required if name not in present]
+
+
+def wait_ready(
+    base: str,
+    timeout: int = 900,
+    *,
+    required_types: Iterable[str] | None = None,
+    workflow: Mapping[str, Any] | None = None,
+    lock: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Wait for ``/system_stats``, then for lock/workflow ``class_type``s in ``/object_info``."""
+    needed = required_object_types(
+        required_types=required_types,
+        workflow=workflow,
+        lock=lock,
+    )
     deadline = time.time() + timeout
     last_error: Exception | None = None
+    stats: dict[str, Any] | None = None
     while time.time() < deadline:
         try:
             stats = http_json(f"{base.rstrip('/')}/system_stats", timeout=20)
-            devices = [
-                device.get("name") for device in (stats.get("devices") or [])
-            ]
-            print(json.dumps({"ready": True, "devices": devices}), flush=True)
-            return stats
+            if not isinstance(stats, dict):
+                stats = {}
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             last_error = exc
             time.sleep(2)
+            continue
+        missing = missing_object_types(fetch_object_info(base), needed) if needed else []
+        if not missing:
+            devices = [device.get("name") for device in (stats.get("devices") or [])]
+            print(
+                json.dumps({"ready": True, "devices": devices, "object_types": needed}),
+                flush=True,
+            )
+            return stats
+        last_error = TimeoutError("missing object_info types: " + ",".join(missing))
+        print(json.dumps({"ready": False, "missing": missing}), flush=True)
+        time.sleep(2)
     raise TimeoutError(f"ComfyUI not ready: {last_error}")
 
 
@@ -825,7 +924,7 @@ def run_jobs(
     out.mkdir(parents=True, exist_ok=True)
     if enable_glb:
         workflow = enable_glb_export(json.loads(json.dumps(workflow)))
-    stats = wait_ready(base, timeout=ready_timeout)
+    stats = wait_ready(base, timeout=ready_timeout, workflow=workflow)
     template = to_api_prompt(base, workflow)
     (out / "workflow.api.json").write_text(
         json.dumps(template, indent=2, ensure_ascii=False) + "\n",

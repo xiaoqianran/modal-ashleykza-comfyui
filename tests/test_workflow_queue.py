@@ -509,6 +509,135 @@ class WorkflowBindTests(unittest.TestCase):
             opened = opener.call_args[0][0]
             self.assertIn("filename=TRELLIS2_studio_00001_.glb", opened)
             self.assertTrue(opened.startswith("http://comfy/view?"))
+    def test_iter_class_types_reads_ui_api_and_skips_primitives(self):
+        ui = {
+            "nodes": [
+                {"id": 1, "type": "LoadImage"},
+                {"id": 2, "type": "Trellis2LoadModel"},
+                {"id": 3, "type": "PrimitiveInt"},
+                {"id": 4, "type": "Note"},
+                {
+                    "id": 5,
+                    "type": "b64333d5-4e6f-4e99-9506-2ec4f63259fe",
+                    "nodes": [{"id": 6, "type": "SaveGLB"}],
+                },
+            ]
+        }
+        self.assertEqual(
+            workflow_queue.iter_class_types(ui),
+            [
+                "LoadImage",
+                "Note",
+                "PrimitiveInt",
+                "SaveGLB",
+                "Trellis2LoadModel",
+                "b64333d5-4e6f-4e99-9506-2ec4f63259fe",
+            ],
+        )
+        api = {
+            "12": {"class_type": "LoadImage", "inputs": {}},
+            "13": {"class_type": "Trellis2LoadModel", "inputs": {}},
+        }
+        self.assertEqual(
+            workflow_queue.iter_class_types(api),
+            ["LoadImage", "Trellis2LoadModel"],
+        )
+        self.assertEqual(
+            workflow_queue.required_object_types(workflow=ui),
+            ["LoadImage", "SaveGLB", "Trellis2LoadModel"],
+        )
+        trellis = json.loads((ROOT / "examples" / "trellis2-image-to-3d.json").read_text())
+        self.assertIn(
+            "Trellis2LoadModel",
+            workflow_queue.required_object_types(workflow=trellis),
+        )
+        self.assertEqual(
+            workflow_queue.required_object_types(
+                required_types=["Trellis2LoadModel", "Note"],
+                lock={"1": {"class_type": "Pixal3DExportGLB"}},
+            ),
+            ["Pixal3DExportGLB", "Trellis2LoadModel"],
+        )
+
+    def test_wait_ready_without_types_only_needs_system_stats(self):
+        info_calls = {"n": 0}
+
+        def fake_http(url: str, payload=None, timeout: int = 120):
+            del payload, timeout
+            return {"devices": [{"name": "L40S"}]}
+
+        def fake_info(_base: str) -> dict:
+            info_calls["n"] += 1
+            return {}
+
+        with (
+            patch.object(workflow_queue, "http_json", fake_http),
+            patch.object(workflow_queue, "fetch_object_info", fake_info),
+        ):
+            stats = workflow_queue.wait_ready("http://comfy", timeout=5)
+        self.assertEqual(stats["devices"][0]["name"], "L40S")
+        self.assertEqual(info_calls["n"], 0)
+
+    def test_wait_ready_waits_for_missing_node_class(self):
+        clock = {"t": 0.0}
+        info_calls = {"n": 0}
+
+        def fake_http(url: str, payload=None, timeout: int = 120):
+            del payload, timeout
+            self.assertIn("/system_stats", url)
+            return {"devices": [{"name": "L40S"}]}
+
+        def fake_info(_base: str) -> dict:
+            info_calls["n"] += 1
+            if info_calls["n"] < 3:
+                return {"LoadImage": {}, "SaveImage": {}}
+            return {
+                "LoadImage": {},
+                "SaveImage": {},
+                "Trellis2LoadModel": {},
+            }
+
+        with (
+            patch.object(workflow_queue, "http_json", fake_http),
+            patch.object(workflow_queue, "fetch_object_info", fake_info),
+            patch.object(
+                workflow_queue.time,
+                "sleep",
+                lambda seconds: clock.__setitem__("t", clock["t"] + seconds),
+            ),
+            patch.object(workflow_queue.time, "time", lambda: clock["t"]),
+        ):
+            stats = workflow_queue.wait_ready(
+                "http://comfy",
+                timeout=20,
+                required_types=["Trellis2LoadModel"],
+            )
+        self.assertEqual(stats["devices"][0]["name"], "L40S")
+        self.assertEqual(info_calls["n"], 3)
+
+    def test_wait_ready_times_out_if_node_class_never_registers(self):
+        clock = {"t": 0.0}
+
+        def fake_http(url: str, payload=None, timeout: int = 120):
+            del payload, timeout
+            return {"devices": [{"name": "L40S"}]}
+
+        with (
+            patch.object(workflow_queue, "http_json", fake_http),
+            patch.object(workflow_queue, "fetch_object_info", lambda _base: {"LoadImage": {}}),
+            patch.object(
+                workflow_queue.time,
+                "sleep",
+                lambda seconds: clock.__setitem__("t", clock["t"] + seconds),
+            ),
+            patch.object(workflow_queue.time, "time", lambda: clock["t"]),
+        ):
+            with self.assertRaisesRegex(TimeoutError, "Trellis2LoadModel"):
+                workflow_queue.wait_ready(
+                    "http://comfy",
+                    timeout=6,
+                    required_types=["Trellis2LoadModel"],
+                )
 
     def test_inspect_cli_does_not_need_base_url(self):
         import io

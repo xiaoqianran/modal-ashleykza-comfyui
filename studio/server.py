@@ -184,13 +184,21 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("还没有 ComfyUI 地址。先启动 GPU，或粘贴已有的 *.modal.run")
     planned = iter_generate_jobs(catalog, payload)
     jobs.append_log(job_id, f"等待 {base} 就绪 · {catalog['title']} · {len(planned)} 个任务")
-    ready = wait_ready(base, timeout=int(payload.get("ready_timeout") or 900))
+    workflow = None
+    if catalog_mode(catalog) == "workflow":
+        workflow = json.loads(workflow_path(catalog).read_text(encoding="utf-8"))
+    elif isinstance(catalog.get("graph"), dict):
+        workflow = catalog["graph"]
+    ready = wait_ready(
+        base,
+        timeout=int(payload.get("ready_timeout") or 900),
+        workflow=workflow,
+    )
     jobs.append_log(job_id, json.dumps({"ready": True, "devices": ready.get("devices")}, ensure_ascii=False))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     template = None
     if catalog_mode(catalog) == "workflow":
-        workflow = json.loads(workflow_path(catalog).read_text(encoding="utf-8"))
         jobs.append_log(job_id, "用运行中的 ComfyUI 做 graphToPrompt()")
         try:
             template = workflow_queue.to_api_prompt(base, workflow)

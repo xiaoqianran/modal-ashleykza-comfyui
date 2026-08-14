@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 from workflow_queue import wait_history
+from workflow_queue import wait_ready as wait_comfy_ready
 
 PROMPTS = [
     {
@@ -86,14 +87,13 @@ def _http_json(url: str, payload: dict | None = None, timeout: int = 60) -> dict
 
 
 def wait_ready(base: str, timeout: int = 900) -> None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            urllib.request.urlopen(f"{base}/system_stats", timeout=10)
-            return
-        except (urllib.error.URLError, TimeoutError, OSError):
-            time.sleep(5)
-    raise TimeoutError(f"ComfyUI at {base} did not become ready within {timeout}s")
+    from catalog import load_catalog
+
+    wait_comfy_ready(
+        base,
+        timeout=timeout,
+        workflow=load_catalog("z-image").get("graph"),
+    )
 
 
 def _safe_dest(dest: Path, filename: str) -> Path:
