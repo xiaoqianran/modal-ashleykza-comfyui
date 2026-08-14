@@ -247,8 +247,19 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 "        sp = Path(matches[0]) if matches else None\n",
                 encoding="utf-8",
             )
-            self.assertTrue(sam3d_runtime.patch_comfy_env_isolation(comfy))
-            self.assertFalse(sam3d_runtime.patch_comfy_env_isolation(comfy))
+            volume_site = (
+                Path(directory) / "workspace" / ".python" / "node-reqs" / "comfy_env"
+                / "isolation" / "workers"
+            )
+            volume_site.mkdir(parents=True)
+            (volume_site / "subprocess.py").write_text(
+                "                msg = self._transport.recv(timeout=60)\n"
+                "        stdout=subprocess.DEVNULL,\n",
+                encoding="utf-8",
+            )
+            workspace = Path(directory) / "workspace"
+            self.assertTrue(sam3d_runtime.patch_comfy_env_isolation(comfy, workspace=workspace))
+            self.assertFalse(sam3d_runtime.patch_comfy_env_isolation(comfy, workspace=workspace))
             ipc = (site / "_ipc_shared.py").read_text(encoding="utf-8")
             worker = (site / "subprocess.py").read_text(encoding="utf-8")
             wrap = (site.parent / "wrap.py").read_text(encoding="utf-8")
@@ -260,6 +271,10 @@ class Sam3dRuntimeTests(unittest.TestCase):
             self.assertIn(sam3d_runtime.WORKER_LOG, worker)
             self.assertNotIn("stdout=subprocess.DEVNULL", worker)
             self.assertIn("matches.sort", wrap)
+            volume_worker = (volume_site / "subprocess.py").read_text(encoding="utf-8")
+            self.assertIn("recv(timeout=600)", volume_worker)
+            self.assertTrue(sam3d_runtime._clear_volume_comfy_env(workspace))
+            self.assertFalse((workspace / ".python" / "node-reqs" / "comfy_env").exists())
 
     def test_warm_pixi_env_runs_isolated_python(self):
         with tempfile.TemporaryDirectory() as directory:

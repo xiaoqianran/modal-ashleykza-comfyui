@@ -82,6 +82,9 @@ WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
 # on the workspace Volume and point site-packages at them with a venv-local .pth.
 NODE_REQS_SITE_MARK = "node-reqs-site"
 NODE_REQS_PTH_NAME = "comfy_node_reqs.pth"
+# Host isolation library. A Volume copy shadows the Image package we patch
+# each boot (ready timeout / worker logs).
+NODE_REQS_SKIP_PACKAGES = frozenset({"comfy-env"})
 
 
 def _quote(value: str | Path) -> str:
@@ -1129,7 +1132,16 @@ def _install_node_requirements(
     if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest:
         print(f"[SKIP] node reqs {dest.name} already on Volume", flush=True)
         return False
-    _run(pip_install_cmd(python, "-r", str(requirements), site_dir=site_dir))
+    filtered = requirements_without_packages(
+        requirements.read_text(encoding="utf-8"),
+        NODE_REQS_SKIP_PACKAGES,
+    )
+    req_file = requirements
+    if filtered != requirements.read_text(encoding="utf-8"):
+        req_file = site_dir / ".markers" / f"{dest.name}.requirements.txt"
+        req_file.write_text(filtered, encoding="utf-8")
+        print(f"[NODE-REQS] skip Image-only packages {sorted(NODE_REQS_SKIP_PACKAGES)}", flush=True)
+    _run(pip_install_cmd(python, "-r", str(req_file), site_dir=site_dir))
     marker.write_text(digest + "\n", encoding="utf-8")
     print(f"[INSTALL] node reqs {dest.name} -> {site_dir}", flush=True)
     return True
