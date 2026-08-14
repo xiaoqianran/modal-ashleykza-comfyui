@@ -1236,7 +1236,25 @@ def _python_text(python: str, code: str) -> str:
         text=True,
         timeout=60,
     )
-    return result.stdout.strip()
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError(f"{python} -c produced no stdout")
+    return lines[-1]
+
+
+def _site_packages(python: str) -> Path | None:
+    try:
+        text = _python_text(
+            python, "import sysconfig; print(sysconfig.get_paths()['purelib'])"
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
+        print(f"[TRELLIS2] cannot locate site-packages ({exc})", flush=True)
+        return None
+    path = Path(text)
+    if not path.is_dir():
+        print(f"[TRELLIS2] site-packages is not a directory: {path}", flush=True)
+        return None
+    return path
 
 
 def _ensure_cuda_build_tools() -> None:
@@ -1348,12 +1366,9 @@ def _install_sparse_3d_python_deps(python: str) -> bool:
 
 def _alias_sparse_3d_packages(python: str) -> bool:
     """PozzettiAndrea wheels import as *_vb / *_ap; Trellis2 imports o_voxel / cumesh / flex_gemm."""
-    try:
-        purelib = Path(
-            _python_text(python, "import sysconfig; print(sysconfig.get_paths()['purelib'])")
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        print(f"[PIXAL3D] cannot locate site-packages for CUDA aliases ({exc})", flush=True)
+    purelib = _site_packages(python)
+    if purelib is None:
+        print("[PIXAL3D] cannot locate site-packages for CUDA aliases", flush=True)
         return False
     aliases = (
         ("o_voxel_vb_ap", "o_voxel"),
@@ -1380,39 +1395,75 @@ def _alias_sparse_3d_packages(python: str) -> bool:
 
 
 BLACKWELL_BOOT_PY = '''\
-"""Load before ComfyUI-Trellis2. RTX PRO 6000 is Blackwell sm_120."""
+"""Load before ComfyUI-Trellis2. RTX PRO 6000 is Blackwell sm_120.
+
+Do not import torch here. A venv .pth runs before --system-site-packages is
+on sys.path (Ashley keeps torch in dist-packages), so `import torch` would
+fail and also print onto stdout that `_python_text` captures as a path.
+"""
+from __future__ import annotations
+
+import builtins
 import os
+import sys
 
 os.environ.setdefault("ATTN_BACKEND", "sdpa")
 os.environ.setdefault("SPARSE_CONV_BACKEND", "spconv")
-try:
-    import torch
 
-    if torch.cuda.is_available():
+_applied = False
+_orig_import = builtins.__import__
+
+
+def _apply_patch() -> None:
+    global _applied
+    if _applied:
+        return
+    try:
+        torch = _orig_import("torch")
+    except Exception:
+        return
+    if not getattr(torch, "cuda", None) or not torch.cuda.is_available():
+        _applied = True
+        return
+    try:
         major, _minor = torch.cuda.get_device_capability(0)
-        if major >= 10:
-            os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-            orig = torch.cuda.get_device_capability
+    except Exception:
+        return
+    if major < 10:
+        _applied = True
+        return
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    orig = torch.cuda.get_device_capability
 
-            def _cap(device=None):
-                m, n = orig(device)
-                return (9, 0) if m >= 10 else (m, n)
+    def _cap(device=None):
+        m, n = orig(device)
+        return (9, 0) if m >= 10 else (m, n)
 
-            torch.cuda.get_device_capability = _cap
-            print("[TRELLIS2] Blackwell CC patch -> (9, 0)", flush=True)
-except Exception as exc:  # noqa: BLE001
-    print(f"[TRELLIS2] Blackwell boot skipped ({exc})", flush=True)
+    torch.cuda.get_device_capability = _cap
+    _applied = True
+    print("[TRELLIS2] Blackwell CC patch -> (9, 0)", file=sys.stderr, flush=True)
+
+
+def _import(name, globals=None, locals=None, fromlist=(), level=0):
+    module = _orig_import(name, globals, locals, fromlist, level)
+    root = name.split(".", 1)[0]
+    if level == 0 and root == "torch":
+        try:
+            _apply_patch()
+        except Exception:
+            pass
+    return module
+
+
+builtins.__import__ = _import
 '''
 
 
 def _install_blackwell_boot(python: str) -> bool:
     """sitecustomize-style .pth so the ComfyUI subprocess gets the CC patch."""
-    try:
-        purelib = Path(
-            _python_text(python, "import sysconfig; print(sysconfig.get_paths()['purelib'])")
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        print(f"[TRELLIS2] cannot write Blackwell boot ({exc})", flush=True)
+    purelib = _site_packages(python)
+    if purelib is None:
+        print("[TRELLIS2] cannot write Blackwell boot", flush=True)
         return False
     boot = purelib / "trellis2_blackwell_boot.py"
     pth = purelib / "trellis2_blackwell.pth"

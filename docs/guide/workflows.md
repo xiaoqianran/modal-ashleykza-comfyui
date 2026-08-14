@@ -28,7 +28,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重 |
 | `scripts/queue_ltx25.py` 的 patch | Ashley 0.32.0 缺官方节点 |
 | Pixal3D 预构建 wheel | 否则会在 GPU 上编译 natten |
-| TRELLIS.2 CUDA 扩展 | 优先装 PozzettiAndrea wheel，对不上再编译 |
+| TRELLIS.2 CUDA 扩展 | 只装 PozzettiAndrea 预构建 wheel，不要在 GPU 上编 |
 | `catalog/*.json` | 只给 Studio 控制面填表单 |
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。

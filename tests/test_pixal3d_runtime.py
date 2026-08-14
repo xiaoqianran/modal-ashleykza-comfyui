@@ -168,7 +168,37 @@ class InstallSparse3dWheelsTests(unittest.TestCase):
                 (purelib / "trellis2_blackwell.pth").read_text(encoding="utf-8"),
                 "import trellis2_blackwell_boot\n",
             )
-            self.assertIn("get_device_capability", (purelib / "trellis2_blackwell_boot.py").read_text(encoding="utf-8"))
+            boot = (purelib / "trellis2_blackwell_boot.py").read_text(encoding="utf-8")
+            self.assertIn("get_device_capability", boot)
+            self.assertIn("file=sys.stderr", boot)
+            self.assertIn("_orig_import", boot)
+            self.assertNotIn("Blackwell boot skipped", boot)
+
+
+class PythonTextTests(unittest.TestCase):
+    def test_python_text_keeps_last_stdout_line(self):
+        class Result:
+            stdout = "[TRELLIS2] Blackwell boot skipped (No module named 'torch')\n/ComfyUI/venv/lib/python3.12/site-packages\n"
+
+        with patch.object(comfy_engine.subprocess, "run", return_value=Result()):
+            self.assertEqual(
+                comfy_engine._python_text("/ComfyUI/venv/bin/python3", "print(1)"),
+                "/ComfyUI/venv/lib/python3.12/site-packages",
+            )
+
+    def test_site_packages_rejects_non_directory(self):
+        with patch.object(
+            comfy_engine,
+            "_python_text",
+            return_value="[TRELLIS2] skipped\n/not/a/real/site-packages",
+        ):
+            self.assertIsNone(comfy_engine._site_packages("/ComfyUI/venv/bin/python3"))
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(comfy_engine, "_python_text", return_value=directory):
+                self.assertEqual(
+                    comfy_engine._site_packages("/ComfyUI/venv/bin/python3"),
+                    Path(directory),
+                )
 
 
 class FlashAttnWheelTests(unittest.TestCase):
