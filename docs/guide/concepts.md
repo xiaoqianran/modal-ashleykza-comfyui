@@ -64,8 +64,8 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
 所以锁内 CNR **不进 Image**：
 
 1. hydrate 把锁写到 `.state/launch.json`
-2. GPU `start()` 读 Volume，装到 `/workspace/custom_nodes`；Pixal3D / TRELLIS CUDA wheels 装到 `/workspace/.python/sparse-3d`
-3. 目录已在 Volume 上则跳过
+2. GPU `start()` 读 Volume，装到 `/workspace/custom_nodes`；Pixal3D / TRELLIS CUDA wheels 装到 `/workspace/.python/sparse-3d`；节点 `requirements.txt` 装到 `/workspace/.python/node-reqs`
+3. clone 已在 Volume 上则跳过；`requirements.txt` hash 对上则跳过 `uv pip`，只重写 venv 里的 `.pth`
 4. 需要 `workspace_vol.commit()`，缩容后下次冷启动才能命中 skip
 
 会改 Image、单独占缓存的只有：`COMFY_BASE_NODES=1`、`COMFY_INSTALL_NODES=1`、`COMFY_LATEST=1`。

@@ -72,6 +72,10 @@ LOCK_SCHEMA = 1
 LAUNCH_STATE_SCHEMA = 1
 LAUNCH_STATE_FILE = "launch.json"
 WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
+# Ephemeral Image venv dies on scaledown. Persist CNR/GitHub requirements.txt
+# on the workspace Volume and point site-packages at them with a venv-local .pth.
+NODE_REQS_SITE_MARK = "node-reqs-site"
+NODE_REQS_PTH_NAME = "comfy_node_reqs.pth"
 
 
 def _quote(value: str | Path) -> str:
@@ -947,6 +951,8 @@ def install_registry_nodes(
     ``comfy node registry-install`` writes under ``<comfy_root>/custom_nodes``.
     Newly created folders are moved onto the Volume so they survive scaledown
     and do not bust the GPU Image cache. Existing Volume installs are skipped.
+    ``requirements.txt`` is installed into ``<workspace>/.python/node-reqs``
+    and reused across cold starts when the file hash matches.
     Markers live under ``/workspace/state/cnr`` so ComfyUI does not scan them.
     """
     nodes = list(custom_nodes)
@@ -984,13 +990,16 @@ def install_registry_nodes(
             ]
             if not missing:
                 print(f"[SKIP] CNR {node_id}@{version} already on Volume", flush=True)
-                # Clone lives on the Volume; uv pip lands in the Image venv and
-                # disappears on scaledown. GitHub nodes still need
-                # requirements.txt on every cold start (Cosmos3: transformers).
-                if url:
-                    python = _comfy_python(comfy_root)
-                    for name in previous["dirs"]:
+                # Clone lives on the Volume. requirements.txt is installed into
+                # /workspace/.python/node-reqs and skipped when the hash matches.
+                python = _comfy_python(comfy_root)
+                reqs_changed = False
+                for name in previous["dirs"]:
+                    reqs_changed = (
                         _install_node_requirements(volume_custom / str(name), python)
+                        or reqs_changed
+                    )
+                _remember_node_reqs(installed, reqs_changed)
                 continue
 
         for name in previous.get("dirs") or ():
@@ -999,11 +1008,7 @@ def install_registry_nodes(
                 shutil.rmtree(stale)
 
         if url:
-            moved = _install_github_node(
-                node,
-                volume_custom,
-                python=_comfy_python(comfy_root),
-            )
+            moved = _install_github_node(node, volume_custom)
         else:
             before = _dir_names(image_custom)
             run_install(node, comfy_root=comfy_root)
@@ -1024,12 +1029,20 @@ def install_registry_nodes(
             + "\n",
             encoding="utf-8",
         )
+        python = _comfy_python(comfy_root)
+        reqs_changed = False
+        for name in moved:
+            reqs_changed = (
+                _install_node_requirements(volume_custom / str(name), python)
+                or reqs_changed
+            )
         kind = "git" if url else "CNR"
         print(
             f"[INSTALL] {kind} {node_id}@{version} -> {volume_custom} ({', '.join(moved) or 'no new dirs'})",
             flush=True,
         )
         installed.append(node_id)
+        _remember_node_reqs(installed, reqs_changed)
     return installed
 
 
@@ -1040,17 +1053,85 @@ def _github_repo_dir_name(url: str) -> str:
     return name
 
 
-def _install_node_requirements(dest: Path, python: str | None) -> None:
+def node_reqs_volume_path(workspace: str | Path) -> Path:
+    return Path(workspace) / ".python" / "node-reqs"
+
+
+def _node_req_marker(site_dir: Path, dest: Path) -> Path:
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in dest.name)
+    return site_dir / ".markers" / f"{safe}.sha256"
+
+
+def _hash_requirements(req_file: Path) -> str:
+    return hashlib.sha256(req_file.read_bytes()).hexdigest()
+
+
+def _remember_node_reqs(installed: list[str], changed: bool) -> None:
+    if changed and NODE_REQS_SITE_MARK not in installed:
+        installed.append(NODE_REQS_SITE_MARK)
+
+
+def _link_node_reqs_site(python: str, site_dir: str | Path) -> bool:
+    """Write a venv .pth so ComfyUI can import Volume-installed node deps.
+
+    The .pth lives in the ephemeral Image venv; rewriting it is not a Volume change.
+    Skip when ``python`` is not a real venv path (unit tests / hydrate CPU).
+    """
+    if not Path(python).is_file():
+        return False
+    purelib = _site_packages(python)
+    if purelib is None:
+        print("[NODE-REQS] cannot link Volume site (no site-packages)", flush=True)
+        return False
+    site_dir = Path(site_dir)
+    site_dir.mkdir(parents=True, exist_ok=True)
+    (site_dir / ".markers").mkdir(parents=True, exist_ok=True)
+    pth = purelib / NODE_REQS_PTH_NAME
+    marker = f"{site_dir}\n"
+    if not pth.is_file() or pth.read_text(encoding="utf-8") != marker:
+        pth.write_text(marker, encoding="utf-8")
+        print(f"[NODE-REQS] linked Volume site {site_dir}", flush=True)
+    return False
+
+
+def ensure_node_reqs_site(comfy_root: str | Path, workspace: str | Path) -> None:
+    """Point the Image venv at Volume-backed CNR/GitHub node site-packages."""
+    python = _comfy_python(Path(comfy_root))
+    _link_node_reqs_site(python, node_reqs_volume_path(workspace))
+
+
+def _install_node_requirements(
+    dest: Path,
+    python: str | None,
+    *,
+    site_dir: str | Path | None = None,
+) -> bool:
+    """Install ``requirements.txt`` onto the Volume site. Skip when the hash matches.
+
+    Returns True if ``uv pip`` ran (Volume changed; caller should commit).
+    """
     requirements = dest / "requirements.txt"
-    if python and requirements.is_file():
-        _run(pip_install_cmd(python, "-r", str(requirements)))
+    if not python or not requirements.is_file():
+        return False
+    if site_dir is None:
+        site_dir = dest.parent.parent / ".python" / "node-reqs"
+    site_dir = Path(site_dir)
+    site_dir.mkdir(parents=True, exist_ok=True)
+    (site_dir / ".markers").mkdir(parents=True, exist_ok=True)
+    marker = _node_req_marker(site_dir, dest)
+    digest = _hash_requirements(requirements)
+    if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest:
+        print(f"[SKIP] node reqs {dest.name} already on Volume", flush=True)
+        return False
+    _run(pip_install_cmd(python, "-r", str(requirements), site_dir=site_dir))
+    marker.write_text(digest + "\n", encoding="utf-8")
+    print(f"[INSTALL] node reqs {dest.name} -> {site_dir}", flush=True)
+    return True
 
 
 def _install_github_node(
     node: Mapping[str, Any],
     volume_custom: Path,
-    *,
-    python: str | None = None,
 ) -> list[str]:
     url = str(node["url"]).strip()
     name = _github_repo_dir_name(url)
@@ -1071,7 +1152,6 @@ def _install_github_node(
         if dest.exists():
             shutil.rmtree(dest)
         _run(["git", "clone", "--depth=1", url, str(dest)])
-    _install_node_requirements(dest, python)
     return [name]
 
 
@@ -1251,6 +1331,7 @@ def apply_volume_launch(
             workspace=workspace,
         )
     if install_lock_nodes and nodes:
+        ensure_node_reqs_site(comfy_root, workspace)
         newly = installer(
             nodes,
             comfy_root=comfy_root,

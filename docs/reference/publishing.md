@@ -58,6 +58,8 @@ mesh3d/    3D 模型（i23d）
 
 Actions 每小时（`cron: 0 * * * *`）用 `HF_TOKEN` 拉取数据集，生成 `docs/gallery/_generated.md` 和缩略图，再 `mkdocs build`。仓库 Settings 需要 secret **`HF_TOKEN`**（Hugging Face 写/读权限）。没有这个 secret 时文档仍能发布，图库显示占位说明。
 
+有 token 时工作流会跑 `python -m gallery_hub.report --require-items`：打印 `collections=` / `items=`，并在拉到 0 件时失败，避免空图库覆盖线上。数据集布局是 `image|video|mesh3d/<recipe>/<collection>/`。
+
 推送一批新作品（本机，不经过 git）：
 
 ```bash
