@@ -456,6 +456,8 @@ class RegistryVolumeInstallTests(unittest.TestCase):
     def test_github_node_clones_onto_volume_and_installs_requirements(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            (comfy_root / "custom_nodes").mkdir(parents=True)
             volume_custom = root / "workspace" / "custom_nodes"
             volume_custom.mkdir(parents=True)
             calls: list[list[str]] = []
@@ -467,24 +469,32 @@ class RegistryVolumeInstallTests(unittest.TestCase):
                     dest.mkdir(parents=True)
                     (dest / "requirements.txt").write_text("transformers>=4.51\n", encoding="utf-8")
 
-            with patch.object(comfy_engine, "_run", fake_run):
-                moved = comfy_engine._install_github_node(
-                    {
-                        "id": "ComfyUI-Cosmos3",
-                        "version": "main",
-                        "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
-                    },
-                    volume_custom,
-                    python="python3",
+            with (
+                patch.object(comfy_engine, "_run", fake_run),
+                patch.object(comfy_engine, "_comfy_python", return_value="python3"),
+            ):
+                moved = comfy_engine.install_registry_nodes(
+                    [
+                        {
+                            "id": "ComfyUI-Cosmos3",
+                            "version": "main",
+                            "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
+                        }
+                    ],
+                    comfy_root=comfy_root,
+                    custom_nodes_dir=volume_custom,
                 )
-            self.assertEqual(moved, ["ComfyUI-Cosmos3"])
+            self.assertEqual(moved, ["ComfyUI-Cosmos3", comfy_engine.NODE_REQS_SITE_MARK])
             self.assertTrue((volume_custom / "ComfyUI-Cosmos3" / "requirements.txt").is_file())
             self.assertTrue(any(cmd[:2] == ["git", "clone"] for cmd in calls))
-            self.assertTrue(
-                any(uv_runtime.is_uv_pip_cmd(cmd) and "-r" in cmd for cmd in calls)
-            )
+            pip_cmds = [cmd for cmd in calls if uv_runtime.is_uv_pip_cmd(cmd) and "-r" in cmd]
+            self.assertEqual(len(pip_cmds), 1)
+            self.assertIn("--target", pip_cmds[0])
+            self.assertIn(str(root / "workspace" / ".python" / "node-reqs"), pip_cmds[0])
+            marker = root / "workspace" / ".python" / "node-reqs" / ".markers" / "ComfyUI-Cosmos3.sha256"
+            self.assertTrue(marker.is_file())
 
-    def test_skip_github_node_still_pips_requirements(self):
+    def test_skip_github_node_pips_requirements_once(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             comfy_root = root / "ComfyUI"
@@ -511,26 +521,51 @@ class RegistryVolumeInstallTests(unittest.TestCase):
             def fake_run(cmd, **_kwargs):
                 calls.append(list(cmd))
 
+            node = {
+                "id": "ComfyUI-Cosmos3",
+                "version": "main",
+                "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
+            }
             with (
                 patch.object(comfy_engine, "_run", fake_run),
                 patch.object(comfy_engine, "_comfy_python", return_value="python3"),
             ):
-                skipped = comfy_engine.install_registry_nodes(
-                    [
-                        {
-                            "id": "ComfyUI-Cosmos3",
-                            "version": "main",
-                            "url": "https://github.com/RyukoMatoiFan/ComfyUI-Cosmos3.git",
-                        }
-                    ],
+                first = comfy_engine.install_registry_nodes(
+                    [node],
                     comfy_root=comfy_root,
                     custom_nodes_dir=volume_custom,
                 )
-            self.assertEqual(skipped, [])
+                second = comfy_engine.install_registry_nodes(
+                    [node],
+                    comfy_root=comfy_root,
+                    custom_nodes_dir=volume_custom,
+                )
+            self.assertEqual(first, [comfy_engine.NODE_REQS_SITE_MARK])
+            self.assertEqual(second, [])
             self.assertFalse(any(cmd[:2] == ["git", "clone"] for cmd in calls))
-            self.assertTrue(
-                any(uv_runtime.is_uv_pip_cmd(cmd) and "-r" in cmd for cmd in calls)
-            )
+            pip_cmds = [cmd for cmd in calls if uv_runtime.is_uv_pip_cmd(cmd) and "-r" in cmd]
+            self.assertEqual(len(pip_cmds), 1)
+            self.assertIn("--target", pip_cmds[0])
+            self.assertIn(str(root / "workspace" / ".python" / "node-reqs"), pip_cmds[0])
+
+    def test_node_reqs_pth_points_at_workspace_site(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy_root = root / "ComfyUI"
+            workspace = root / "workspace"
+            venv_bin = comfy_root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            python = venv_bin / "python3"
+            python.write_text("#!/bin/sh\n", encoding="utf-8")
+            python.chmod(0o755)
+            venv_site = root / "site-packages"
+            venv_site.mkdir()
+            with patch.object(comfy_engine, "_site_packages", return_value=venv_site):
+                comfy_engine.ensure_node_reqs_site(comfy_root, workspace)
+            site = comfy_engine.node_reqs_volume_path(workspace)
+            pth = venv_site / comfy_engine.NODE_REQS_PTH_NAME
+            self.assertEqual(pth.read_text(encoding="utf-8"), f"{site}\n")
+            self.assertTrue(site.is_dir())
 
     def test_gpu_module_does_not_bake_lock_into_image(self):
         text = (Path(__file__).resolve().parents[1] / "comfyui_modal.py").read_text(

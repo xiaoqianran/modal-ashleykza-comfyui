@@ -51,6 +51,7 @@ jobs:
             exit 0
           fi
           python -m gallery_hub.pull --repo "$HF_GALLERY_REPO" --out .cache/hf-gallery
+          python -m gallery_hub.report --src .cache/hf-gallery --repo "$HF_GALLERY_REPO" --require-items
           python -m gallery_hub.build_pages --src .cache/hf-gallery --docs-gallery docs/gallery --repo "$HF_GALLERY_REPO"
 
       - name: Build
