@@ -1,0 +1,40 @@
+{
+  "custom_nodes": [],
+  "models": [
+    {
+      "category": "diffusion_models",
+      "filename": "qwen_image_2512_fp8_e4m3fn.safetensors",
+      "sha256": null,
+      "source": "node:UNETLoader",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors"
+    },
+    {
+      "category": "loras",
+      "filename": "Qwen-Image-2512-Lightning-8steps-V1.0-fp32.safetensors",
+      "sha256": null,
+      "source": "node:LoraLoaderModelOnly",
+      "url": "https://huggingface.co/lightx2v/Qwen-Image-2512-Lightning/resolve/main/Qwen-Image-2512-Lightning-8steps-V1.0-fp32.safetensors"
+    },
+    {
+      "category": "text_encoders",
+      "filename": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "sha256": null,
+      "source": "node:CLIPLoader",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
+    },
+    {
+      "category": "vae",
+      "filename": "qwen_image_vae.safetensors",
+      "sha256": null,
+      "source": "node:VAELoader",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors"
+    }
+  ],
+  "schema": 1,
+  "unresolved": [],
+  "warnings": [],
+  "workflow": {
+    "name": "qwen-image-2512-lightning.json",
+    "sha256": "8310d843381c7e5f4336b9032efb5ba12ed39a88aca8e38bb5a31ad7aafa53a2"
+  }
+}

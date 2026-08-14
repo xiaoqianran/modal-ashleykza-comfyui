@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "id": "qwen-image-2512-lightning",
+  "title": "Qwen-Image-2512 Lightning",
+  "summary": "LightX2V 8 步蒸馏 LoRA。比官方 50 步快约 6 倍，比 4 步/2 步 Turbo 更保画质。测试 L40S，正式 RTX-PRO-6000。",
+  "kind": "t2i",
+  "mode": "workflow",
+  "workflow": "examples/qwen-image-2512-lightning.json",
+  "lock": "examples/qwen-image-2512-lightning.lock.json",
+  "gpu": "L40S",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
+  "client_id": "studio-qwen-image-2512-lightning",
+  "filename_prefix": "Qwen2512_lightning_studio",
+  "io": {"images_in": 0},
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 1328,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 1328,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 8,
+      "minimum": 1,
+      "maximum": 16,
+      "help": "LightX2V 蒸馏 8 步。4 步更快但文字和人像更容易糊；不要改回 50。"
+    }
+  ]
+}
