@@ -24,6 +24,7 @@ known-first-party = [
     "catalog",
     "comfy_engine",
     "comfyui_modal",
+    "gallery_hub",
     "modal_config",
     "recipes",
     "storage",

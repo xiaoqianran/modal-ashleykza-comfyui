@@ -13,6 +13,7 @@ base_nodes.py         基础自定义节点安装
 scripts/              无 UI 时的排队/取件辅助（不是部署必需）
 examples/             示例 workflow / lock
 docs/                 本站点 Markdown
+gallery_hub/          HF 图库数据集（推送 / 拉取 / 编进 Pages）
 mkdocs.yml            MkDocs Material 配置
 ```
 
