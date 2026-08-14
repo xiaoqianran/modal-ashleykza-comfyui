@@ -1,11 +1,60 @@
 import unittest
+from unittest.mock import patch
 
-from modal_config import ModalSettings, wants_latest_dependencies
+from modal_config import (
+    ASHLEY_REGISTRY,
+    ModalSettings,
+    latest_ashley_image_ref,
+    latest_ashley_tag,
+    parse_ashley_version,
+    resolve_comfy_image,
+    wants_latest_dependencies,
+)
+
+
+class AshleyImageResolveTests(unittest.TestCase):
+    def test_picks_highest_semver_and_ignores_other_tags(self):
+        self.assertEqual(parse_ashley_version("v0.33.1"), (0, 33, 1))
+        self.assertIsNone(parse_ashley_version("cu128-py312-v0.33.1"))
+        self.assertIsNone(parse_ashley_version("latest"))
+        self.assertEqual(
+            latest_ashley_tag(["v0.32.0", "v0.33.1", "nightly", "v0.31.0"]),
+            "v0.33.1",
+        )
+        self.assertEqual(
+            latest_ashley_image_ref(tags=["v0.32.0", "v0.33.1"]),
+            f"{ASHLEY_REGISTRY}:cu128-py312-v0.33.1",
+        )
+
+    def test_empty_tags_tell_operator_to_set_comfy_image(self):
+        with self.assertRaisesRegex(RuntimeError, "COMFY_IMAGE"):
+            latest_ashley_tag(["latest", "cu128-py312"])
+
+    def test_explicit_comfy_image_is_not_rewritten(self):
+        pinned = "ghcr.io/ashleykleynhans/comfyui:cu128-py312-v0.31.0"
+        self.assertEqual(resolve_comfy_image({"COMFY_IMAGE": pinned}), pinned)
+        settings = ModalSettings.from_env({"COMFY_IMAGE": pinned})
+        self.assertEqual(settings.image_tag, pinned)
+        self.assertEqual(settings.resolved_image_tag(), pinned)
+
+    def test_default_image_is_unpinned_until_build_time(self):
+        settings = ModalSettings.from_env({})
+        self.assertEqual(settings.image_tag, "")
+        with patch(
+            "modal_config.latest_ashley_image_ref",
+            return_value=f"{ASHLEY_REGISTRY}:cu128-py312-v9.9.9",
+        ) as resolve:
+            self.assertEqual(
+                settings.resolved_image_tag(),
+                f"{ASHLEY_REGISTRY}:cu128-py312-v9.9.9",
+            )
+            resolve.assert_called_once_with()
 
 
 class ModalSettingsTests(unittest.TestCase):
     def test_defaults_follow_modal_runtime_limits(self):
         settings = ModalSettings.from_env({})
+        self.assertEqual(settings.image_tag, "")
         self.assertEqual(settings.ui_timeout_seconds, 24 * 60 * 60)
         self.assertEqual(settings.ui_startup_timeout_seconds, 15 * 60)
         self.assertEqual(settings.ui_scaledown_window_seconds, 5)

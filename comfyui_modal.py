@@ -34,7 +34,7 @@ from storage import workspace_dir
 
 SETTINGS = ModalSettings.from_env(os.environ, sys.argv)
 APP_NAME = SETTINGS.app_name
-IMAGE_TAG = SETTINGS.image_tag
+IMAGE_TAG = SETTINGS.resolved_image_tag()
 COMFY_ROOT = Path("/ComfyUI")
 WORKSPACE = Path("/workspace")
 STORAGE_ROOT = Path(SETTINGS.storage_root)
