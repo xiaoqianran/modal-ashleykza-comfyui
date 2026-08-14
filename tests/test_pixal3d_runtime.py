@@ -81,6 +81,14 @@ class Sparse3dWheelUrlTests(unittest.TestCase):
             "3.12.3", "2.11.0+cu128", include_drtk=True
         )
         self.assertEqual([item[0] for item in with_drtk], ["flex_gemm", "cumesh", "o_voxel", "drtk"])
+        with_nv = comfy_engine.sparse_3d_wheel_urls(
+            "3.12.3", "2.11.0+cu128", include_nvdiffrast=True
+        )
+        self.assertEqual(
+            [item[0] for item in with_nv],
+            ["flex_gemm", "cumesh", "o_voxel", "nvdiffrast", "nvdiffrec_render"],
+        )
+        self.assertIn("nvdiffrast-0.4.0", with_nv[3][2])
 
     def test_missing_for_other_python_or_cuda(self):
         self.assertEqual(comfy_engine.sparse_3d_wheel_urls("3.13.0", "2.11.0+cu128"), ())
@@ -147,6 +155,20 @@ class InstallSparse3dWheelsTests(unittest.TestCase):
                 link = purelib / alias
                 self.assertTrue(link.is_symlink(), alias)
                 self.assertEqual(link.resolve(), (purelib / source).resolve())
+
+    def test_writes_blackwell_boot_pth(self):
+        with tempfile.TemporaryDirectory() as directory:
+            purelib = Path(directory)
+            with patch.object(comfy_engine, "_python_text", return_value=str(purelib)):
+                self.assertTrue(
+                    comfy_engine._install_blackwell_boot("/ComfyUI/venv/bin/python3")
+                )
+            self.assertTrue((purelib / "trellis2_blackwell_boot.py").is_file())
+            self.assertEqual(
+                (purelib / "trellis2_blackwell.pth").read_text(encoding="utf-8"),
+                "import trellis2_blackwell_boot\n",
+            )
+            self.assertIn("get_device_capability", (purelib / "trellis2_blackwell_boot.py").read_text(encoding="utf-8"))
 
 
 class FlashAttnWheelTests(unittest.TestCase):
@@ -255,7 +277,9 @@ class ApplyVolumeLaunchWheelOrderTests(unittest.TestCase):
         self.assertEqual(order, ["wheels", "cnr", "runtime"])
         self.assertEqual(wheel_kwargs[0].get("include_attention"), True)
         self.assertEqual(wheel_kwargs[0].get("include_drtk"), True)
+        self.assertEqual(wheel_kwargs[0].get("include_nvdiffrast"), False)
         self.assertEqual(runtime_kwargs[0].get("include_pixal3d"), True)
+        self.assertEqual(runtime_kwargs[0].get("include_trellis2"), False)
         self.assertEqual(runtime_kwargs[0].get("allow_source_compile"), False)
 
 
@@ -338,7 +362,9 @@ class Trellis2LaunchOrderTests(unittest.TestCase):
         self.assertEqual(order, ["wheels", "cnr", "runtime"])
         self.assertEqual(wheel_kwargs[0].get("include_attention"), False)
         self.assertEqual(wheel_kwargs[0].get("include_drtk"), False)
+        self.assertEqual(wheel_kwargs[0].get("include_nvdiffrast"), True)
         self.assertEqual(runtime_kwargs[0].get("include_pixal3d"), False)
+        self.assertEqual(runtime_kwargs[0].get("include_trellis2"), True)
         self.assertEqual(runtime_kwargs[0].get("allow_source_compile"), False)
 
 
@@ -426,7 +452,7 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
         calls: list[list[str]] = []
         available: set[str] = set()
 
-        def fake_wheels(_python, *, include_drtk):
+        def fake_wheels(_python, *, include_drtk, include_nvdiffrast=False):
             available.update(
                 {"flex_gemm_ap", "flex_gemm", "cumesh_vb", "cumesh", "o_voxel_vb_ap", "o_voxel"}
             )

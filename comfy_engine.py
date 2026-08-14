@@ -75,6 +75,20 @@ DRTK_WHEEL_FILE: tuple[str, tuple[str, ...], str, str] = (
     "drtk-latest",
     "drtk-0.1.0+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
 )
+TRELLIS2_WHEEL_FILES: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
+    (
+        "nvdiffrast",
+        ("nvdiffrast",),
+        "nvdiffrast-latest",
+        "nvdiffrast-0.4.0+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
+    ),
+    (
+        "nvdiffrec_render",
+        ("nvdiffrec_render",),
+        "nvdiffrec_render-latest",
+        "nvdiffrec_render-0.0.1+cu128torch2.11-cp312-cp312-manylinux_2_34_x86_64.manylinux_2_35_x86_64.whl",
+    ),
+)
 # CUDA wheels are installed with --no-deps so pip cannot replace Ashley's torch.
 # Remaining Requires-Dist: (pip name, import name). No torch / triton / torchvision.
 SPARSE_3D_WHEEL_PY_DEPS: tuple[tuple[str, str], ...] = (
@@ -1166,6 +1180,7 @@ def sparse_3d_wheel_urls(
     torch_version: str,
     *,
     include_drtk: bool = False,
+    include_nvdiffrast: bool = False,
 ) -> tuple[tuple[str, tuple[str, ...], str], ...]:
     """PozzettiAndrea CUDA wheels for Ashley's cp312 + torch 2.11 + cu128."""
     python_mm = ".".join(python_version.split(".")[:2])
@@ -1175,6 +1190,8 @@ def sparse_3d_wheel_urls(
     rows = list(SPARSE_3D_WHEEL_FILES)
     if include_drtk:
         rows.append(DRTK_WHEEL_FILE)
+    if include_nvdiffrast:
+        rows.extend(TRELLIS2_WHEEL_FILES)
     return tuple(
         (
             label,
@@ -1362,7 +1379,59 @@ def _alias_sparse_3d_packages(python: str) -> bool:
     return changed
 
 
-def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bool:
+BLACKWELL_BOOT_PY = '''\
+"""Load before ComfyUI-Trellis2. RTX PRO 6000 is Blackwell sm_120."""
+import os
+
+os.environ.setdefault("ATTN_BACKEND", "sdpa")
+os.environ.setdefault("SPARSE_CONV_BACKEND", "spconv")
+try:
+    import torch
+
+    if torch.cuda.is_available():
+        major, _minor = torch.cuda.get_device_capability(0)
+        if major >= 10:
+            os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+            orig = torch.cuda.get_device_capability
+
+            def _cap(device=None):
+                m, n = orig(device)
+                return (9, 0) if m >= 10 else (m, n)
+
+            torch.cuda.get_device_capability = _cap
+            print("[TRELLIS2] Blackwell CC patch -> (9, 0)", flush=True)
+except Exception as exc:  # noqa: BLE001
+    print(f"[TRELLIS2] Blackwell boot skipped ({exc})", flush=True)
+'''
+
+
+def _install_blackwell_boot(python: str) -> bool:
+    """sitecustomize-style .pth so the ComfyUI subprocess gets the CC patch."""
+    try:
+        purelib = Path(
+            _python_text(python, "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[TRELLIS2] cannot write Blackwell boot ({exc})", flush=True)
+        return False
+    boot = purelib / "trellis2_blackwell_boot.py"
+    pth = purelib / "trellis2_blackwell.pth"
+    changed = False
+    if not boot.is_file() or boot.read_text(encoding="utf-8") != BLACKWELL_BOOT_PY:
+        boot.write_text(BLACKWELL_BOOT_PY, encoding="utf-8")
+        changed = True
+    marker = "import trellis2_blackwell_boot\n"
+    if not pth.is_file() or pth.read_text(encoding="utf-8") != marker:
+        pth.write_text(marker, encoding="utf-8")
+        changed = True
+    if changed:
+        print("[TRELLIS2] installed Blackwell boot for ComfyUI subprocess", flush=True)
+    return changed
+
+
+def _install_sparse_3d_prebuilt_wheels(
+    python: str, *, include_drtk: bool, include_nvdiffrast: bool = False
+) -> bool:
     """Install flex_gemm / cumesh / o-voxel (and optional DRTK) from CUDA wheels."""
     try:
         python_version = _python_text(python, "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
@@ -1374,6 +1443,7 @@ def _install_sparse_3d_prebuilt_wheels(python: str, *, include_drtk: bool) -> bo
         python_version,
         torch_version,
         include_drtk=include_drtk,
+        include_nvdiffrast=include_nvdiffrast,
     )
     if not specs:
         print(
@@ -1414,6 +1484,7 @@ def ensure_pixal3d_prebuilt_wheels(
     include_attention: bool = True,
     include_sparse: bool = True,
     include_drtk: bool = False,
+    include_nvdiffrast: bool = False,
 ) -> bool:
     """Install official/community CUDA wheels before CNR can compile sdists."""
     python = _comfy_python(Path(comfy_root))
@@ -1428,7 +1499,11 @@ def ensure_pixal3d_prebuilt_wheels(
             changed = _install_flash_attn_wheel(python) or changed
     if include_sparse:
         changed = (
-            _install_sparse_3d_prebuilt_wheels(python, include_drtk=include_drtk)
+            _install_sparse_3d_prebuilt_wheels(
+                python,
+                include_drtk=include_drtk,
+                include_nvdiffrast=include_nvdiffrast,
+            )
             or changed
         )
     return changed
@@ -1439,6 +1514,7 @@ def ensure_pixal3d_runtime(
     custom_nodes_dir: str | Path,
     *,
     include_pixal3d: bool = False,
+    include_trellis2: bool = False,
     allow_source_compile: bool = False,
 ) -> bool:
     """Install sparse-3D Python deps and CUDA kernels (Pixal3D / TRELLIS.2).
@@ -1458,6 +1534,7 @@ def ensure_pixal3d_runtime(
         include_attention=include_pixal3d,
         include_sparse=True,
         include_drtk=include_pixal3d,
+        include_nvdiffrast=include_trellis2,
     )
     node_dir = (
         _find_pixal3d_node_dir(Path(custom_nodes_dir)) if include_pixal3d else None
@@ -1513,9 +1590,15 @@ def ensure_pixal3d_runtime(
             changed = True
 
     changed = (
-        _install_sparse_3d_prebuilt_wheels(python, include_drtk=include_pixal3d)
+        _install_sparse_3d_prebuilt_wheels(
+            python,
+            include_drtk=include_pixal3d,
+            include_nvdiffrast=include_trellis2,
+        )
         or changed
     )
+    if include_trellis2:
+        changed = _install_blackwell_boot(python) or changed
 
     tmp = Path("/tmp/pixal3d_extensions")
     tmp.mkdir(parents=True, exist_ok=True)
@@ -1723,6 +1806,7 @@ def apply_volume_launch(
     nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
     installer = install_nodes or install_registry_nodes
     include_pixal3d = _lock_has_pixal3d(nodes)
+    include_trellis2 = _lock_has_trellis2(nodes)
     wheels_changed = False
     if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
         # Wheel first so CNR / TRELLIS.2 do not compile CUDA sdists.
@@ -1731,6 +1815,7 @@ def apply_volume_launch(
             include_attention=include_pixal3d,
             include_sparse=True,
             include_drtk=include_pixal3d,
+            include_nvdiffrast=include_trellis2,
         )
     if install_lock_nodes and nodes:
         newly = installer(
@@ -1744,6 +1829,7 @@ def apply_volume_launch(
             comfy_root,
             workspace / "custom_nodes",
             include_pixal3d=include_pixal3d,
+            include_trellis2=include_trellis2,
             allow_source_compile=False,
         )
     fingerprint = launch_fingerprint(
