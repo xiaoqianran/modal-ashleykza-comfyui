@@ -238,13 +238,20 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 'cmd = [\n    PIXI, "run", "--as-is",\n    "--manifest-path", str(manifest),\n]\n',
                 encoding="utf-8",
             )
+            (site.parent / "wrap.py").write_text(
+                '        matches = glob.glob(str(env_dir / "lib/python*/site-packages"))\n'
+                "        sp = Path(matches[0]) if matches else None\n",
+                encoding="utf-8",
+            )
             self.assertTrue(sam3d_runtime.patch_comfy_env_isolation(comfy))
             self.assertFalse(sam3d_runtime.patch_comfy_env_isolation(comfy))
             ipc = (site / "_ipc_shared.py").read_text(encoding="utf-8")
             worker = (site / "subprocess.py").read_text(encoding="utf-8")
+            wrap = (site.parent / "wrap.py").read_text(encoding="utf-8")
             self.assertIn("SOCKET_ACCEPT_TIMEOUT = 600", ipc)
             self.assertIn("is_pixi = False", worker)
             self.assertIn('PIXI, "run", "--as-is", "--frozen",', worker)
+            self.assertIn("matches.sort", wrap)
 
     def test_warm_pixi_env_runs_isolated_python(self):
         with tempfile.TemporaryDirectory() as directory:

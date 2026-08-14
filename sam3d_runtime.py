@@ -39,6 +39,17 @@ _TIMEOUT_ASSIGN_RE = re.compile(r"^(SOCKET_ACCEPT_TIMEOUT\s*=\s*)\d+", re.M)
 _PIXI_RUN_AS_IS = 'PIXI, "run", "--as-is",'
 _PIXI_RUN_FROZEN = 'PIXI, "run", "--as-is", "--frozen",'
 _IS_PIXI_RE = re.compile(r"is_pixi = ['\"]\.pixi['\"] in str\(self\.python\)")
+_WRAP_SP_GLOB = (
+    '        matches = glob.glob(str(env_dir / "lib/python*/site-packages"))\n'
+    "        sp = Path(matches[0]) if matches else None"
+)
+_WRAP_SP_FIXED = (
+    '        matches = glob.glob(str(env_dir / "lib/python*/site-packages"))\n'
+    "        matches.sort(key=lambda p: tuple("
+    "int(x) if str(x).isdigit() else 0 "
+    "for x in Path(p).parent.name.replace('python', '', 1).split('.')), reverse=True)\n"
+    "        sp = Path(matches[0]) if matches else None"
+)
 _STRIPPED_NODE_REQS = """\
 # GeometryPack / Multiband are not in the object-generation graph.
 # install.py would clone them and pixi-build CGAL.
@@ -201,6 +212,16 @@ def patch_comfy_env_isolation(comfy_root: str | Path) -> bool:
             if updated != text:
                 worker.write_text(updated, encoding="utf-8")
                 changed = True
+        wrap = site / "isolation" / "wrap.py"
+        if wrap.is_file():
+            text = wrap.read_text(encoding="utf-8")
+            if _WRAP_SP_GLOB in text:
+                wrap.write_text(text.replace(_WRAP_SP_GLOB, _WRAP_SP_FIXED, 1), encoding="utf-8")
+                changed = True
+                print(
+                    "[SAM3D] prefer python3.12 site-packages over python3.1 glob",
+                    flush=True,
+                )
     return changed
 
 
