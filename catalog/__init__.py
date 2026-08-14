@@ -43,6 +43,7 @@ PUBLIC_KEYS = (
     "kind",
     "mode",
     "gpu",
+    "gpu_inference",
     "gpu_choices",
     "params",
     "io",
@@ -118,6 +119,9 @@ def validate_catalog(payload: dict[str, Any]) -> dict[str, Any]:
     choices = list(payload.get("gpu_choices") or (payload["gpu"],))
     if payload["gpu"] not in choices:
         raise ValueError(f"catalog gpu {payload['gpu']!r} is not in gpu_choices")
+    inference = str(payload.get("gpu_inference") or payload["gpu"]).strip()
+    if inference not in choices:
+        raise ValueError(f"catalog gpu_inference {inference!r} is not in gpu_choices")
     seen: set[str] = set()
     for spec in payload.get("params") or ():
         if not isinstance(spec, dict) or not spec.get("id"):
@@ -148,6 +152,7 @@ def validate_catalog(payload: dict[str, Any]) -> dict[str, Any]:
     payload["kind"] = kind
     payload["mode"] = mode
     payload["gpu_choices"] = choices
+    payload["gpu_inference"] = inference
     payload["io"] = catalog_io(payload)
     return payload
 
@@ -161,6 +166,7 @@ def list_item(catalog: dict[str, Any]) -> dict[str, Any]:
         "kind": catalog.get("kind") or "other",
         "mode": catalog_mode(catalog),
         "gpu": catalog.get("gpu"),
+        "gpu_inference": catalog.get("gpu_inference") or catalog.get("gpu"),
         "gpu_choices": list(catalog.get("gpu_choices") or ()),
         "io": io,
     }
