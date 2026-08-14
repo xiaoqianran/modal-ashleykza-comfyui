@@ -137,14 +137,16 @@ python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow ex
 
 Ashley 0.32.0 已有核心节点（`TripoSplatConditioning`、`SplatToFile3D`、`SaveGLB` 等），锁里 `custom_nodes` 为空。`background_removal/` 已加入 Storage 目录。官方模板把 `SplatToMesh` / 第二路 `SaveGLB` 设成 bypass；原生输出仍是 `spz` + 已启用的 `SaveGLB`。
 
-`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `scripts/queue_triposplat.py`：展平 subgraph、可选打开 mesh/GLB、排队、把模型拉到 `artifacts/triposplat`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（不要用 T4）。跑完立刻停掉 `modal serve`，不要把 L40S 挂着。
+`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `python3 -m workflow_queue --enable-glb`：展平 subgraph、打开被 bypass 的 mesh/GLB、排队、把模型拉到 `--out`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（不要用 T4）。跑完立刻停掉 `modal serve`，不要把 L40S 挂着。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/triposplat-image-to-gaussian-splat.json
 MODAL_GPU=L40S modal serve comfyui_modal.py
-python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
+python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/triposplat-image-to-gaussian-splat.json \
-  --images img1.png img2.png img3.png
+  --enable-glb \
+  --images img1.png img2.png img3.png \
+  --out artifacts/triposplat
 ```
 
 `--no-glb` 可关掉 mesh 重建（省显存）。空闲 scaledown 默认 5 秒，但 leftover `modal serve` / 开着的 ComfyUI 页会阻止缩容。
@@ -161,9 +163,10 @@ python3 scripts/queue_triposplat.py --base-url https://<your>.modal.run \
 ```bash
 modal run hydrate_modal.py --workflow examples/pixal3d-image-to-3d.json
 MODAL_GPU=L40S modal serve comfyui_modal.py
-python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
+python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/pixal3d-image-to-3d.json \
-  --images gecko.png
+  --images gecko.png \
+  --out artifacts/pixal3d
 ```
 
 空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA 内核装在容器 venv，缩容后下次冷启动会再装一遍。测试请用完即停，不要把 L40S 挂着。

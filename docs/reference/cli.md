@@ -53,9 +53,12 @@ Windows：Releases 里只下一个 `Studio.exe`，双击即可。见 [Studio](..
 python3 -m workflow_queue --inspect --workflow examples/z-image-base.json
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/z-image-base.json --prompt "a celadon teapot"
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --workflow examples/triposplat-image-to-gaussian-splat.json \
+  --enable-glb --images photo.png --out artifacts/triposplat
 ```
 
-把官方 UI JSON 交给正在跑的 ComfyUI 做 `graphToPrompt()`，再 `POST /prompt`。见 [工作流与锁文件](../guide/workflows.md)。
+把官方 UI JSON 交给正在跑的 ComfyUI 做 `graphToPrompt()`，再 `POST /prompt`。TripoSplat 官方模板把 mesh/GLB 设成 bypass，加 `--enable-glb`。见 [工作流与锁文件](../guide/workflows.md)。`scripts/queue_ltx25.py` 仍要保留（Ashley 0.32.0 缺官方节点）。
 
 ## 官方模板分析
 
