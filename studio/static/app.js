@@ -222,6 +222,13 @@ function addCards(results) {
   });
 }
 
+function gpuLabel(recipe, name) {
+  if (name === recipe.gpu && name === recipe.gpu_inference) return name;
+  if (name === recipe.gpu) return `${name}（测试）`;
+  if (name === recipe.gpu_inference) return `${name}（正式推理）`;
+  return name;
+}
+
 function applyCatalog(recipe) {
   catalog = recipe;
   Object.keys(uploadsByParam).forEach((key) => delete uploadsByParam[key]);
@@ -229,7 +236,7 @@ function applyCatalog(recipe) {
   $("recipe-heading").textContent = recipe.title;
   $("recipe-summary").textContent = recipe.summary || "";
   $("gpu").innerHTML = (recipe.gpu_choices || [recipe.gpu])
-    .map((name) => `<option value="${name}">${name}</option>`)
+    .map((name) => `<option value="${name}">${gpuLabel(recipe, name)}</option>`)
     .join("");
   $("gpu").value = recipe.gpu;
   $("prompt-wrap").hidden = !hasPromptParam();

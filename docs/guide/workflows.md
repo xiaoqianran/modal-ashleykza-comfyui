@@ -171,7 +171,7 @@ python3 scripts/queue_pixal3d.py --base-url https://<your>.modal.run \
 |---|---|
 | `examples/flux2-dev-t2i.json` | 官方 UI 工作流 `image_flux2_text_to_image`（subgraph） |
 | `examples/flux2-dev-t2i.lock.json` | 解析锁：fp8 mixed DiT + Mistral TE + small decoder VAE |
-| `catalog/flux2-dev.json` | Studio 契约，默认 **RTX-PRO-6000**（约 71GB） |
+| `catalog/flux2-dev.json` | Studio 契约：约 71GB，测试和正式都是 **RTX-PRO-6000** |
 
 锁内 `custom_nodes` 为空。`POST /prompt` 不能直接吃这份 UI JSON；无 UI 时用 `python3 -m workflow_queue`。不要用 T4 / L40S。VAE 在 `black-forest-labs/FLUX.2-small-decoder`，hydrate 需要已授权的 `HF_TOKEN`。跑完立刻停掉 `modal serve`。
 
@@ -190,7 +190,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 |---|---|
 | `examples/qwen-image-2512.json` | 官方 UI 工作流 `image_qwen_Image_2512`（subgraph） |
 | `examples/qwen-image-2512.lock.json` | 解析锁：fp8 DiT + Qwen2.5-VL TE + Lightning LoRA（模板里默认关） |
-| `catalog/qwen-image-2512.json` | Studio 契约，默认 **RTX-PRO-6000**（约 32GB） |
+| `catalog/qwen-image-2512.json` | Studio 契约：约 32GB，测试 **L40S**，正式 **RTX-PRO-6000** |
 
 同样走通用 `workflow_queue`，不要再写 `queue_qwen.py`。
 
@@ -209,7 +209,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 |---|---|
 | `examples/krea2-turbo-t2i.json` | 官方 UI 工作流 `image_krea2_turbo_t2i`（subgraph） |
 | `examples/krea2-turbo-t2i.lock.json` | 解析锁：fp8 Turbo DiT + Qwen3VL-4B TE + Qwen Image VAE |
-| `catalog/krea2-turbo.json` | Studio 契约，默认 **RTX-PRO-6000**（约 17GB） |
+| `catalog/krea2-turbo.json` | Studio 契约：约 17GB，测试 **L40S**，正式 **RTX-PRO-6000** |
 
 官方 Turbo **8 步**，prompt enhancement 默认开。锁内 `custom_nodes` 为空。同样走 `python3 -m workflow_queue`，不要再写 `queue_krea.py`。风格 LoRA 在模板里默认关，锁里仍有 `krea2_darkbrush` 一份。跑完立刻停掉 `modal serve`。
 

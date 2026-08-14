@@ -35,21 +35,21 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 打开后**默认选中 Z-Image**。顶栏「配方」下拉可换成：
 
-| 配方 | 默认 GPU | 输入 |
-|---|---|---|
-| Z-Image | RTX-PRO-6000 | 提示词 |
-| FLUX.2 [dev] | RTX-PRO-6000 | 提示词 |
-| Qwen-Image-2512 | RTX-PRO-6000 | 提示词 |
-| Krea-2 Turbo | RTX-PRO-6000 | 提示词 |
-| Pixal3D | L40S | 上传图 |
-| TripoSplat | L40S | 上传图 |
+| 配方 | 测试默认 | 正式推理 | 输入 |
+|---|---|---|---|
+| Z-Image | T4 | RTX-PRO-6000 | 提示词 |
+| FLUX.2 [dev] | RTX-PRO-6000 | RTX-PRO-6000 | 提示词 |
+| Qwen-Image-2512 | L40S | RTX-PRO-6000 | 提示词 |
+| Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
+| Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
+| TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 
 换配方只会换表单和允许的卡，不会改引擎代码。
 
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：用配方里的默认卡。文生图（Z-Image / FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo）都是 **RTX-PRO-6000**。Pixal3D / TripoSplat 是 **L40S**。不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
+4. **启动 GPU**：默认用配方里的测试卡（能放下显存的便宜卡）。Z-Image 是 **T4**。Krea / Qwen / Pixal3D / TripoSplat 是 **L40S**。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
@@ -91,8 +91,9 @@ Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSe
   "mode": "graph",
   "workflow": "examples/z-image-base.json",
   "lock": "examples/z-image-base.lock.json",
-  "gpu": "RTX-PRO-6000",
-  "gpu_choices": ["RTX-PRO-6000"],
+  "gpu": "T4",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["T4", "RTX-PRO-6000"],
   "params": [
     {"id": "prompt", "type": "text", "bind": "prompt", "title": "提示词", "required": true},
     {"id": "seed", "type": "int", "bind": "seed", "title": "种子", "default": -1, "minimum": -1}
@@ -115,7 +116,8 @@ Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSe
   "workflow": "examples/your.json",
   "lock": "examples/your.lock.json",
   "gpu": "L40S",
-  "gpu_choices": ["L40S"],
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
   "params": [
     {
       "id": "image",
@@ -137,7 +139,7 @@ Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSe
 - 为每个 JSON 写 Python 适配器
 - 在 catalog 里编造 HuggingFace 地址（那是锁文件 / resolver 的事）
 - 给图生配方默认 T4
-- 给文生图配方默认 T4（一律 RTX-PRO-6000）
+- 测试默认用 RTX-PRO-6000（能放下显存就用便宜卡；正式推理才写 `gpu_inference`）
 - 把 `graph` 抄到每个新配方上
 
 `workflow` / `lock` 必须是仓库内相对路径，不能 `..`。
