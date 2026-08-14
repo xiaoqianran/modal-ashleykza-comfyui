@@ -213,6 +213,56 @@ class Sam3dRuntimeTests(unittest.TestCase):
             self.assertTrue(changed)
             self.assertTrue(sam3d_runtime.volume_pixi_bin(workspace).is_file())
 
+    def test_patch_comfy_env_isolation_freezes_pixi_and_raises_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            comfy = Path(directory) / "ComfyUI"
+            site = (
+                comfy
+                / "venv"
+                / "lib"
+                / "python3.12"
+                / "site-packages"
+                / "comfy_env"
+                / "isolation"
+                / "workers"
+            )
+            site.mkdir(parents=True)
+            (site / "_ipc_shared.py").write_text(
+                "SOCKET_ACCEPT_TIMEOUT = 60  # seconds to wait for worker to connect\n",
+                encoding="utf-8",
+            )
+            (site / "subprocess.py").write_text(
+                'cmd = [\n    PIXI, "run", "--as-is",\n    "--manifest-path", str(manifest),\n]\n',
+                encoding="utf-8",
+            )
+            self.assertTrue(sam3d_runtime.patch_comfy_env_isolation(comfy))
+            self.assertFalse(sam3d_runtime.patch_comfy_env_isolation(comfy))
+            ipc = (site / "_ipc_shared.py").read_text(encoding="utf-8")
+            worker = (site / "subprocess.py").read_text(encoding="utf-8")
+            self.assertIn("SOCKET_ACCEPT_TIMEOUT = 600", ipc)
+            self.assertIn('PIXI, "run", "--as-is", "--frozen",', worker)
+
+    def test_warm_pixi_env_runs_frozen_feature(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            env_root = sam3d_runtime.comfy_env_root(workspace)
+            _ready_pixi_python(workspace)
+            (env_root / "pixi.toml").write_text("[workspace]\n", encoding="utf-8")
+            pixi = _fake_pixi(sam3d_runtime.volume_pixi_bin(workspace))
+            calls: list[dict] = []
+
+            def fake_run(cmd, **kwargs):
+                calls.append({"cmd": cmd, "cwd": kwargs.get("cwd")})
+
+            with patch.object(comfy_engine, "_run", fake_run):
+                sam3d_runtime.warm_pixi_env(workspace)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]["cmd"][0], str(pixi))
+            self.assertIn("--frozen", calls[0]["cmd"])
+            self.assertIn("sam3dobjects-nodes", calls[0]["cmd"])
+            self.assertEqual(calls[0]["cwd"], str(env_root))
+
     def test_strips_geometrypack_and_runs_install_py(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

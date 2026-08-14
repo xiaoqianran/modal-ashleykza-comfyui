@@ -17,6 +17,7 @@ before ``install.py`` — otherwise pixi would clone and build CGAL.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import urllib.request
@@ -31,6 +32,12 @@ PIXI_LINUX_X64_URL = (
     "https://github.com/prefix-dev/pixi/releases/download/"
     f"v{PIXI_VERSION}/pixi-x86_64-unknown-linux-musl"
 )
+# comfy-env 0.3.x waits 60s for the isolation worker. First ``pixi run`` of a
+# CUDA env is slower than that unless the lock is frozen and the timeout is raised.
+WORKER_SOCKET_TIMEOUT_SECONDS = 600
+_TIMEOUT_ASSIGN_RE = re.compile(r"^(SOCKET_ACCEPT_TIMEOUT\s*=\s*)\d+", re.M)
+_PIXI_RUN_AS_IS = 'PIXI, "run", "--as-is",'
+_PIXI_RUN_FROZEN = 'PIXI, "run", "--as-is", "--frozen",'
 _STRIPPED_NODE_REQS = """\
 # GeometryPack / Multiband are not in the object-generation graph.
 # install.py would clone them and pixi-build CGAL.
@@ -154,6 +161,84 @@ def ensure_pixi_cli(workspace: str | Path) -> bool:
     return changed
 
 
+def _comfy_env_packages(comfy_root: Path) -> list[Path]:
+    return sorted((Path(comfy_root) / "venv" / "lib").glob("python3.*/site-packages/comfy_env"))
+
+
+def patch_comfy_env_isolation(comfy_root: str | Path) -> bool:
+    """Make Image-local comfy-env 0.3.x isolation usable on a cold GPU boot.
+
+    The Image venv is ephemeral; this rewrite is lock-gated and per container.
+    """
+    changed = False
+    for site in _comfy_env_packages(Path(comfy_root)):
+        ipc = site / "isolation" / "workers" / "_ipc_shared.py"
+        if ipc.is_file():
+            text = ipc.read_text(encoding="utf-8")
+            updated, count = _TIMEOUT_ASSIGN_RE.subn(
+                rf"\g<1>{WORKER_SOCKET_TIMEOUT_SECONDS}",
+                text,
+                count=1,
+            )
+            if count and updated != text:
+                ipc.write_text(updated, encoding="utf-8")
+                changed = True
+                print(
+                    f"[SAM3D] SOCKET_ACCEPT_TIMEOUT -> {WORKER_SOCKET_TIMEOUT_SECONDS}s",
+                    flush=True,
+                )
+        worker = site / "isolation" / "workers" / "subprocess.py"
+        if worker.is_file():
+            text = worker.read_text(encoding="utf-8")
+            if _PIXI_RUN_AS_IS in text and _PIXI_RUN_FROZEN not in text:
+                worker.write_text(
+                    text.replace(_PIXI_RUN_AS_IS, _PIXI_RUN_FROZEN, 1),
+                    encoding="utf-8",
+                )
+                changed = True
+                print("[SAM3D] pixi run: added --frozen", flush=True)
+    return changed
+
+
+def _pixi_feature_names(root: Path) -> list[str]:
+    names: list[str] = []
+    for python in sorted(root.glob(".pixi/envs/*/bin/python")):
+        names.append(python.parent.parent.name)
+    for python in sorted(root.glob("envs/*/.pixi/envs/default/bin/python")):
+        names.append(python.parents[4].name)
+    return names
+
+
+def warm_pixi_env(workspace: str | Path) -> None:
+    """Run ``pixi run --frozen`` once so the isolation worker is not the first solve."""
+    root = comfy_env_root(workspace)
+    manifest = root / "pixi.toml"
+    pixi = volume_pixi_bin(workspace)
+    if not manifest.is_file() or not pixi.is_file():
+        return
+    names = _pixi_feature_names(root)
+    if not names:
+        return
+    env = os.environ.copy()
+    env[COMFY_ENV_ROOT_VAR] = str(root)
+    for name in names:
+        cmd = [
+            str(pixi),
+            "run",
+            "--as-is",
+            "--frozen",
+            "--manifest-path",
+            str(manifest),
+            "-e",
+            name,
+            "python",
+            "-c",
+            "print('sam3d-pixi-ok')",
+        ]
+        print(f"[SAM3D] warming pixi env {name}", flush=True)
+        _ce()._run(cmd, env=env, cwd=str(root))
+
+
 def _strip_optional_node_reqs(node_dir: Path) -> bool:
     path = node_dir / "comfy-env-root.toml"
     if not path.is_file():
@@ -183,23 +268,27 @@ def ensure_sam3d_runtime(
         return False
     root = apply_comfy_env_root(workspace)
     pixi_changed = ensure_pixi_cli(workspace)
+    installed = False
     if _pixi_env_ready(root):
         print(f"[SAM3D] pixi env already on Volume {root}", flush=True)
-        return pixi_changed
-    _strip_optional_node_reqs(node_dir)
-    install = node_dir / "install.py"
-    if not install.is_file():
-        raise RuntimeError(f"SAM 3D install.py missing: {install}")
-    python = _ce()._comfy_python(Path(comfy_root))
-    env = os.environ.copy()
-    env[COMFY_ENV_ROOT_VAR] = str(root)
-    env["COMFY_ENV_INSTALL_ISOLATED"] = "1"
-    print(f"[SAM3D] running {install} COMFY_ENV_ROOT={root}", flush=True)
-    _ce()._run([python, str(install)], env=env, cwd=str(node_dir))
-    ensure_pixi_cli(workspace)
-    if not _pixi_env_ready(root):
-        print(
-            f"[SAM3D] warning: install.py finished but no pixi python under {root}",
-            flush=True,
-        )
-    return True
+    else:
+        _strip_optional_node_reqs(node_dir)
+        install = node_dir / "install.py"
+        if not install.is_file():
+            raise RuntimeError(f"SAM 3D install.py missing: {install}")
+        python = _ce()._comfy_python(Path(comfy_root))
+        env = os.environ.copy()
+        env[COMFY_ENV_ROOT_VAR] = str(root)
+        env["COMFY_ENV_INSTALL_ISOLATED"] = "1"
+        print(f"[SAM3D] running {install} COMFY_ENV_ROOT={root}", flush=True)
+        _ce()._run([python, str(install)], env=env, cwd=str(node_dir))
+        ensure_pixi_cli(workspace)
+        if not _pixi_env_ready(root):
+            print(
+                f"[SAM3D] warning: install.py finished but no pixi python under {root}",
+                flush=True,
+            )
+        installed = True
+    patch_comfy_env_isolation(comfy_root)
+    warm_pixi_env(workspace)
+    return pixi_changed or installed
