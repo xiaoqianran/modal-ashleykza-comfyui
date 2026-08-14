@@ -3,9 +3,10 @@
 Two execution modes:
 
 - ``graph``: catalog embeds a ComfyUI API prompt with ``$placeholders``.
-  Use only when the Image is missing nodes from the official UI JSON (Z-Image).
+  Use only when the Image is missing nodes from the official UI JSON
+  (Z-Image / Z-Image-Turbo).
 - ``workflow``: official UI JSON + ``graphToPrompt()`` + bind by node class.
-  This is the default for new recipes (Pixal3D / TripoSplat).
+  This is the default for new recipes (Pixal3D / TripoSplat / Ideogram 4).
 """
 
 from __future__ import annotations

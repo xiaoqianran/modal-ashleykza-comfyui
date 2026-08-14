@@ -468,7 +468,7 @@ def main(argv: list[str] | None = None) -> None:
     url = studio_url(args.host, args.port)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Studio  {url}", flush=True)
-    print("顶栏配方可选 Z-Image / FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo / Pixal3D / TripoSplat。", flush=True)
+    print("顶栏配方可选 Z-Image / Z-Image-Turbo / FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo / Ideogram 4 / Pixal3D / TripoSplat。", flush=True)
     print("密钥只存在本机 .studio.env，不会进 Git。", flush=True)
     print("默认 GPU 是 T4；生成结束后会停掉 serve，避免空闲还计费。", flush=True)
     atexit.register(stop_serve)

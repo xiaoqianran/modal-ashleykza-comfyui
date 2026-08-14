@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "id": "z-image-turbo",
+  "title": "Z-Image-Turbo",
+  "summary": "蒸馏 8 步文生图，官方说能进 16GB。测试默认 T4，正式推理 RTX-PRO-6000。CFG 固定 1。",
+  "kind": "t2i",
+  "mode": "graph",
+  "workflow": "examples/z-image-turbo-t2i.json",
+  "lock": "examples/z-image-turbo-t2i.lock.json",
+  "gpu": "T4",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["T4", "RTX-PRO-6000"],
+  "client_id": "studio-z-image-turbo",
+  "filename_prefix": "Z_image_turbo_studio",
+  "io": {"images_in": 0},
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 64
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 64
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 8,
+      "minimum": 1,
+      "maximum": 16,
+      "help": "官方蒸馏 8 NFE。再加步数几乎没收益。"
+    }
+  ],
+  "graph": {
+    "62": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen_3_4b.safetensors",
+        "type": "lumina2",
+        "device": "default"
+      }
+    },
+    "63": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "ae.safetensors"
+      }
+    },
+    "66": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "z_image_turbo_bf16.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "70": {
+      "class_type": "ModelSamplingAuraFlow",
+      "inputs": {
+        "model": ["66", 0],
+        "shift": 3.0
+      }
+    },
+    "67": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["62", 0],
+        "text": "$prompt"
+      }
+    },
+    "71": {
+      "class_type": "ConditioningZeroOut",
+      "inputs": {
+        "conditioning": ["67", 0]
+      }
+    },
+    "68": {
+      "class_type": "EmptySD3LatentImage",
+      "inputs": {
+        "width": "$width",
+        "height": "$height",
+        "batch_size": 1
+      }
+    },
+    "69": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": ["70", 0],
+        "positive": ["67", 0],
+        "negative": ["71", 0],
+        "latent_image": ["68", 0],
+        "seed": "$seed",
+        "steps": "$steps",
+        "cfg": 1,
+        "sampler_name": "res_multistep",
+        "scheduler": "simple",
+        "denoise": 1.0
+      }
+    },
+    "65": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["69", 0],
+        "vae": ["63", 0]
+      }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": ["65", 0],
+        "filename_prefix": "$filename_prefix"
+      }
+    }
+  }
+}

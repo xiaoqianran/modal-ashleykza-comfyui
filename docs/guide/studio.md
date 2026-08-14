@@ -2,7 +2,7 @@
 
 引擎（hydrate / Volume / GPU ComfyUI）保持不动。Studio 是本机 App：读 `catalog/*.json` 这份**配方契约**，画出该工作流的表单（提示词、尺寸、上传图），再把任务交给已经在跑的 ComfyUI。
 
-打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Krea-2 Turbo 仍是提示词。不会改 `comfy_engine.py`。
+打开后**默认选中 Z-Image**，出现 Z-Image 的配置。换成 Pixal3D / TripoSplat 就换成「上传图片」，换成 FLUX.2 / Qwen-Image-2512 / Krea-2 Turbo / Z-Image-Turbo / Ideogram 4 仍是提示词。不会改 `comfy_engine.py`。
 
 密钥只写在本机 `.studio.env`（已 gitignore）。页面只绑 `127.0.0.1`。
 
@@ -16,7 +16,7 @@
 
 - 本机联网、Modal 账号、Hugging Face token
 - 走代理：设 `HTTPS_PROXY` / `ALL_PROXY`（内置 Modal 带 `api-proxy-support`）；不要代理就设 `MODAL_DISABLE_API_PROXY=1`
-- FLUX.2 / Qwen / Krea-2 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image 不需要）
+- FLUX.2 / Qwen / Krea-2 / Ideogram 4 / Pixal3D / TripoSplat：本机已装 Chrome 或 Edge（Z-Image / Z-Image-Turbo 不需要）
 - 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
 
 密钥写在 `%LOCALAPPDATA%\ComfyStudio\runtime\app\.studio.env`，不会上传 Git。生成结束后默认停 GPU。
@@ -38,9 +38,11 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | 配方 | 测试默认 | 正式推理 | 输入 |
 |---|---|---|---|
 | Z-Image | T4 | RTX-PRO-6000 | 提示词 |
+| Z-Image-Turbo | T4 | RTX-PRO-6000 | 提示词 |
 | FLUX.2 [dev] | RTX-PRO-6000 | RTX-PRO-6000 | 提示词 |
 | Qwen-Image-2512 | L40S | RTX-PRO-6000 | 提示词 |
 | Krea-2 Turbo | L40S | RTX-PRO-6000 | 提示词 |
+| Ideogram 4 | L40S | RTX-PRO-6000 | 提示词 |
 | Pixal3D | L40S | RTX-PRO-6000 | 上传图 |
 | TripoSplat | L40S | RTX-PRO-6000 | 上传图 |
 
@@ -49,7 +51,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：默认用配方里的测试卡（能放下显存的便宜卡）。Z-Image 是 **T4**。Krea / Qwen / Pixal3D / TripoSplat 是 **L40S**。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
+4. **启动 GPU**：默认用配方里的测试卡（能放下显存的便宜卡）。Z-Image / Z-Image-Turbo 是 **T4**。Krea / Qwen / Ideogram 4 / Pixal3D / TripoSplat 是 **L40S**。FLUX.2 约 70GB，L40S 放不下，测试也只能是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
@@ -73,9 +75,9 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 | `mode` | 何时用 | 生成时做什么 |
 |---|---|---|
 | `workflow`（默认，新配方用这个） | 官方 UI JSON 能在当前 Image 里打开 | 运行中的 ComfyUI 做 `graphToPrompt()`，再按 `params.bind` 填 LoadImage / 文本 / sampler |
-| `graph` | Image **缺节点**，官方 JSON 会红（现在只有 Z-Image） | 使用 catalog 里嵌好的 API prompt，`$prompt` `$seed` 等占位符 |
+| `graph` | Image **缺节点**，官方 JSON 会红（现在只有 Z-Image / Z-Image-Turbo） | 使用 catalog 里嵌好的 API prompt，`$prompt` `$seed` 等占位符 |
 
-Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph 外壳。这是兼容补丁，**不是**每个配方都要嵌一份 graph。
+Z-Image 与 Z-Image-Turbo 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSelector` / `SaveImageAdvanced` 以及 subgraph 外壳。内层仍是 core 节点，所以 catalog 里嵌一份兼容 prompt。这不是每个配方都要抄的。
 
 浏览器拿不到 `graph` 字段（`public_catalog` 会剥掉），避免把整份 prompt 泄漏到前端。
 

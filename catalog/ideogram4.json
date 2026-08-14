@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "id": "ideogram4",
+  "title": "Ideogram 4",
+  "summary": "开源 Ideogram 4.0 文生图（fp8）。双 DiT + Qwen3-VL + Gemma4 + Flux2 VAE，约 38GB。测试 L40S，正式 RTX-PRO-6000。支持自然语言或 JSON 提示词。",
+  "kind": "t2i",
+  "mode": "workflow",
+  "workflow": "examples/ideogram4-t2i.json",
+  "lock": "examples/ideogram4-t2i.lock.json",
+  "gpu": "L40S",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
+  "client_id": "studio-ideogram4",
+  "filename_prefix": "Ideogram4_studio",
+  "io": {"images_in": 0},
+  "params": [
+    {
+      "id": "prompt",
+      "type": "text",
+      "bind": "prompt",
+      "title": "提示词",
+      "required": true,
+      "help": "自然语言或结构化 JSON。JSON 对排版和画面内文字更稳，也更不容易被安全过滤器误伤。"
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": -1,
+      "minimum": -1,
+      "help": "-1 表示每条提示词随机。"
+    },
+    {
+      "id": "width",
+      "type": "int",
+      "bind": "width",
+      "title": "宽",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "height",
+      "type": "int",
+      "bind": "height",
+      "title": "高",
+      "default": 1024,
+      "minimum": 512,
+      "maximum": 2048,
+      "step": 16
+    },
+    {
+      "id": "steps",
+      "type": "int",
+      "bind": "steps",
+      "title": "步数",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 48,
+      "help": "官方 Default 预设 20 步；Turbo 12；Quality 48。"
+    }
+  ]
+}
