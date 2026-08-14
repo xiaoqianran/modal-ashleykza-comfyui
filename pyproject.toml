@@ -27,6 +27,7 @@ known-first-party = [
     "gallery_hub",
     "modal_config",
     "recipes",
+    "sparse_3d_runtime",
     "storage",
     "studio",
     "template_analyzer",

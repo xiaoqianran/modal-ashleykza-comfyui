@@ -27,6 +27,7 @@ MODULES = (
     "hydrate_modal.py",
     "modal_config.py",
     "recipes.py",
+    "sparse_3d_runtime.py",
     "storage.py",
     "workflow_queue.py",
     "workflow_resolver.py",

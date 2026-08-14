@@ -50,6 +50,7 @@ sync_image = (
         "recipes",
         "workflow_resolver",
         "comfy_engine",
+        "sparse_3d_runtime",
         "modal_config",
         "storage",
     )
