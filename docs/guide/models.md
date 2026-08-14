@@ -20,7 +20,7 @@ python3 -m benchmarks --write
 | 计时 | 从 POST /prompt 到 /history 出现 success 的客户端墙钟。首张常含装进 VRAM 或同卡换模。 |
 | 空闲缩容 | **5 秒**（`modal serve` 会挡住） |
 
-测试默认 **L40S**（FLUX.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。
+测试默认 **L40S**（FLUX.2 / TRELLIS.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。
 
 ## 总览
 
@@ -41,7 +41,7 @@ python3 -m benchmarks --write
 | `pixal3d` | Pixal3D | i23d | **L40S** | RTX-PRO-6000 | — | GLB | — | 待补测 |
 | `qwen-image-2512` | Qwen-Image-2512 | t2i | **L40S** | RTX-PRO-6000 | 50 | 1328² png | 32 GB | RTX-PRO-6000 首张 77.6s / 热 53.9s |
 | `qwen-image-2512-lightning` | Qwen-Image-2512 Lightning | t2i | **L40S** | RTX-PRO-6000 | 8 | 1328² png | 34 GB | 已 hydrate，未记时 |
-| `trellis2` | TRELLIS.2 | i23d | **RTX-PRO-6000** | RTX-PRO-6000 | — | GLB | 16 GB | 待补测 |
+| `trellis2` | TRELLIS.2 | i23d | **RTX-PRO-6000** | RTX-PRO-6000 | — | GLB | 16 GB | RTX-PRO-6000 208.3s |
 | `triposplat` | TripoSplat | i23d | **L40S** | RTX-PRO-6000 | — | SPZ + GLB | — | L40S 首张 53.7s / 热 30.1s |
 | `z-image-turbo` | Z-Image-Turbo | t2i | **L40S** | RTX-PRO-6000 | 8 | 1024² png | — | 已 hydrate，未记时 |
 
@@ -368,9 +368,10 @@ Microsoft TRELLIS.2-4B 图生 GLB（几何）。visualbruno ComfyUI-Trellis2。�
 | 节点 | ComfyUI-Trellis2 |
 | 权重 | 16 GB；显存 — |
 | 共用 | — |
-| 实测状态 | `pending` |
-| 实测 GPU / 耗时 | 待补测 |
-| 备注 | 权重已 hydrate。CUDA 走预构建 wheel。待 PRO-6000 排队。 |
+| 实测状态 | `recorded` · PR #37 · 2026-08-14 |
+| 实测 GPU / 耗时 | RTX-PRO-6000 208.3s |
+| 冒烟产物 | GLB |
+| 备注 | 合成物体图，导出 8.7MB GLB。attention sdpa，preprocess 开 rembg。 |
 
 ### TripoSplat (`triposplat`)
 

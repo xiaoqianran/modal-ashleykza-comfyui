@@ -311,9 +311,14 @@
       "nodes": "ComfyUI-Trellis2",
       "output": "GLB",
       "smoke": {
-        "status": "pending",
+        "status": "recorded",
         "gpu": "RTX-PRO-6000",
-        "note": "权重已 hydrate。CUDA 走预构建 wheel。待 PRO-6000 排队。"
+        "date": "2026-08-14",
+        "source": "PR #37",
+        "seconds": 208.3,
+        "output": "GLB",
+        "prompt_id": "a05b1a06-48da-4c8c-a4f6-1071adf3d66c",
+        "note": "合成物体图，导出 8.7MB GLB。attention sdpa，preprocess 开 rembg。"
       }
     },
     {

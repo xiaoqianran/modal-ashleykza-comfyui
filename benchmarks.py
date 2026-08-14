@@ -177,7 +177,7 @@ def render_models_markdown(overlay: dict[str, Any] | None = None) -> str:
         f"| 计时 | {_pipe(env.get('measurement'))} |",
         f"| 空闲缩容 | **{env.get('scaledown_window_seconds', 5)} 秒**（`modal serve` 会挡住） |",
         "",
-        "测试默认 **L40S**（FLUX.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。",
+        "测试默认 **L40S**（FLUX.2 / TRELLIS.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。",
         "",
         "## 总览",
         "",
