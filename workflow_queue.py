@@ -34,6 +34,7 @@ TEXT_CLASS_TYPES = {
     "PrimitiveString",
 }
 NEGATIVE_MARKERS = ("negative", "neg", "负向", "反向")
+ENABLE_GLB_TYPES = {"SplatToMesh", "SaveGLB"}
 GRAPH_TO_PROMPT_JS = """
 async (workflow) => {
     const app = window.comfyAPI?.app?.app;
@@ -227,6 +228,31 @@ def wait_history(
 
 def is_ui_workflow(payload: Any) -> bool:
     return isinstance(payload, dict) and isinstance(payload.get("nodes"), list)
+
+
+def iter_node_lists(obj: Any):
+    if isinstance(obj, dict):
+        nodes = obj.get("nodes")
+        if isinstance(nodes, list) and nodes and isinstance(nodes[0], dict) and "type" in nodes[0]:
+            yield obj, nodes
+        for value in obj.values():
+            yield from iter_node_lists(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from iter_node_lists(item)
+
+
+def enable_glb_export(
+    workflow: dict[str, Any],
+    types: set[str] | None = None,
+) -> dict[str, Any]:
+    """Official TripoSplat template bypasses mesh/GLB export; turn those nodes on."""
+    wanted = types or ENABLE_GLB_TYPES
+    for _container, nodes in iter_node_lists(workflow):
+        for node in nodes:
+            if isinstance(node, dict) and node.get("type") in wanted:
+                node["mode"] = 0
+    return workflow
 
 
 def is_api_prompt(payload: Any) -> bool:
@@ -794,8 +820,11 @@ def run_jobs(
     negative: str | None = None,
     client_id: str = "workflow-queue",
     ready_timeout: int = 900,
+    enable_glb: bool = False,
 ) -> list[dict[str, Any]]:
     out.mkdir(parents=True, exist_ok=True)
+    if enable_glb:
+        workflow = enable_glb_export(json.loads(json.dumps(workflow)))
     stats = wait_ready(base, timeout=ready_timeout)
     template = to_api_prompt(base, workflow)
     (out / "workflow.api.json").write_text(
@@ -856,6 +885,12 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="print bindable nodes; does not need a GPU",
     )
+    parser.add_argument(
+        "--enable-glb",
+        action="store_true",
+        help="un-bypass SplatToMesh / SaveGLB (TripoSplat official template)",
+    )
+    parser.add_argument("--no-glb", action="store_true")
     args = parser.parse_args(argv)
     payload = json.loads(Path(args.workflow).read_text(encoding="utf-8"))
     if args.inspect:
@@ -872,6 +907,7 @@ def main(argv: list[str] | None = None) -> None:
         negative=args.negative,
         client_id=args.client_id,
         ready_timeout=args.ready_timeout,
+        enable_glb=bool(args.enable_glb) and not args.no_glb,
     )
 
 

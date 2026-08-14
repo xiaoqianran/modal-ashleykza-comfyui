@@ -336,6 +336,45 @@ class WorkflowBindTests(unittest.TestCase):
         payload = {"1": {"class_type": "SaveImage", "inputs": {}}}
         self.assertEqual(workflow_queue.to_api_prompt(None, payload), payload)
 
+    def test_enable_glb_export_unbypasses_mesh_and_save_nodes(self):
+        workflow = {
+            "nodes": [
+                {"id": 51, "type": "SaveGLB", "mode": 0},
+                {"id": 76, "type": "SplatToMesh", "mode": 4},
+                {"id": 67, "type": "SaveGLB", "mode": 4},
+                {"id": 92, "type": "SplatToFile3D", "mode": 0},
+            ]
+        }
+        patched = workflow_queue.enable_glb_export(workflow)
+        by_id = {node["id"]: node for node in patched["nodes"]}
+        self.assertEqual(by_id[51]["mode"], 0)
+        self.assertEqual(by_id[76]["mode"], 0)
+        self.assertEqual(by_id[67]["mode"], 0)
+        self.assertEqual(by_id[92]["mode"], 0)
+
+    def test_triposplat_example_has_bypassed_mesh_export(self):
+        source = ROOT / "examples" / "triposplat-image-to-gaussian-splat.json"
+        workflow = json.loads(source.read_text(encoding="utf-8"))
+        by_id = {node["id"]: node for node in workflow["nodes"]}
+        self.assertEqual(by_id[76]["type"], "SplatToMesh")
+        self.assertEqual(by_id[76]["mode"], 4)
+        self.assertEqual(by_id[67]["type"], "SaveGLB")
+        self.assertEqual(by_id[67]["mode"], 4)
+        self.assertEqual(by_id[51]["mode"], 0)
+        patched = workflow_queue.enable_glb_export(json.loads(json.dumps(workflow)))
+        patched_by_id = {node["id"]: node for node in patched["nodes"]}
+        self.assertEqual(patched_by_id[76]["mode"], 0)
+        self.assertEqual(patched_by_id[67]["mode"], 0)
+
+    def test_iter_mesh_names_finds_windows_glb_path(self):
+        history = {
+            "outputs": {"17": {"text": [r"C:\Users\me\output\pixal3d_demo.glb"]}}
+        }
+        self.assertEqual(
+            workflow_queue.iter_mesh_names(history),
+            ["C:/Users/me/output/pixal3d_demo.glb"],
+        )
+
     def test_queue_prompt_ids_reads_running_and_pending(self):
         ids = workflow_queue.queue_prompt_ids(
             {
