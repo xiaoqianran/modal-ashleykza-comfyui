@@ -37,7 +37,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 | 配方 | 默认 GPU | 输入 |
 |---|---|---|
-| Z-Image | T4 | 提示词 |
+| Z-Image | RTX-PRO-6000 | 提示词 |
 | FLUX.2 [dev] | RTX-PRO-6000 | 提示词 |
 | Qwen-Image-2512 | RTX-PRO-6000 | 提示词 |
 | Krea-2 Turbo | RTX-PRO-6000 | 提示词 |
@@ -49,7 +49,7 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：用配方里的默认卡。Z-Image 是 **T4**。Pixal3D / TripoSplat 是 **L40S**。FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo 是 **RTX-PRO-6000**。不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
+4. **启动 GPU**：用配方里的默认卡。文生图（Z-Image / FLUX.2 [dev] / Qwen-Image-2512 / Krea-2 Turbo）都是 **RTX-PRO-6000**。Pixal3D / TripoSplat 是 **L40S**。不会因为换配方就静默升卡，但下拉框会换成该配方允许的卡。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
 7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
@@ -91,8 +91,8 @@ Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSe
   "mode": "graph",
   "workflow": "examples/z-image-base.json",
   "lock": "examples/z-image-base.lock.json",
-  "gpu": "T4",
-  "gpu_choices": ["T4", "L4", "L40S"],
+  "gpu": "RTX-PRO-6000",
+  "gpu_choices": ["RTX-PRO-6000"],
   "params": [
     {"id": "prompt", "type": "text", "bind": "prompt", "title": "提示词", "required": true},
     {"id": "seed", "type": "int", "bind": "seed", "title": "种子", "default": -1, "minimum": -1}
@@ -137,6 +137,7 @@ Z-Image 必须是 `graph`：Ashley 0.32.0 没有官方模板里的 `ResolutionSe
 - 为每个 JSON 写 Python 适配器
 - 在 catalog 里编造 HuggingFace 地址（那是锁文件 / resolver 的事）
 - 给图生配方默认 T4
+- 给文生图配方默认 T4（一律 RTX-PRO-6000）
 - 把 `graph` 抄到每个新配方上
 
 `workflow` / `lock` 必须是仓库内相对路径，不能 `..`。

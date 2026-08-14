@@ -29,6 +29,10 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("krea2-turbo", ids)
         self.assertEqual(items[0]["kind"], "t2i")
         self.assertEqual(items[0]["io"]["images_in"], 0)
+        for item in items:
+            if item["kind"] == "t2i":
+                self.assertEqual(item["gpu"], "RTX-PRO-6000", item["id"])
+                self.assertEqual(item["gpu_choices"], ["RTX-PRO-6000"], item["id"])
 
     def test_bind_graph_fills_prompt_and_seed(self):
         catalog = load_catalog("z-image")
@@ -40,8 +44,8 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(graph["69"]["inputs"]["seed"], 42)
         self.assertEqual(graph["69"]["inputs"]["steps"], 20)
         self.assertEqual(values["width"], 1024)
-        self.assertEqual(catalog["gpu"], "T4")
-        self.assertEqual(catalog["gpu_choices"][0], "T4")
+        self.assertEqual(catalog["gpu"], "RTX-PRO-6000")
+        self.assertEqual(catalog["gpu_choices"][0], "RTX-PRO-6000")
         self.assertEqual(catalog["mode"], "graph")
         self.assertIsInstance(graph["68"]["inputs"]["width"], int)
 
@@ -120,10 +124,11 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(flux["gpu"], "RTX-PRO-6000")
         self.assertEqual(flux["gpu_choices"], ["RTX-PRO-6000"])
         self.assertEqual(qwen["gpu"], "RTX-PRO-6000")
+        self.assertEqual(qwen["gpu_choices"], ["RTX-PRO-6000"])
         self.assertEqual(krea["gpu"], "RTX-PRO-6000")
-        self.assertIn("RTX-PRO-6000", qwen["gpu_choices"])
-        self.assertIn("RTX-PRO-6000", krea["gpu_choices"])
+        self.assertEqual(krea["gpu_choices"], ["RTX-PRO-6000"])
         self.assertNotIn("T4", flux["gpu_choices"])
+        self.assertNotIn("T4", qwen["gpu_choices"])
         self.assertNotIn("T4", krea["gpu_choices"])
         self.assertTrue(public_catalog(flux)["io"]["prompt"])
         self.assertTrue(public_catalog(qwen)["io"]["prompt"])
