@@ -403,6 +403,74 @@ class WorkflowBindTests(unittest.TestCase):
                     lost_after=4,
                 )
 
+    def test_history_view_items_reads_result_glb_path(self):
+        history = {
+            "status": {"status_str": "success"},
+            "outputs": {
+                "12": {"result": ["/workspace/output/TRELLIS2_studio_00001_.glb"]}
+            },
+        }
+        items = workflow_queue.history_view_items(history)
+        self.assertEqual(
+            items,
+            [
+                {
+                    "filename": "TRELLIS2_studio_00001_.glb",
+                    "subfolder": "",
+                    "type": "output",
+                }
+            ],
+        )
+
+    def test_history_view_items_reads_text_windows_glb(self):
+        history = {
+            "outputs": {"17": {"text": [r"C:\Users\me\output\pixal3d_demo.glb"]}}
+        }
+        items = workflow_queue.history_view_items(history)
+        self.assertEqual(items[0]["filename"], "pixal3d_demo.glb")
+
+    def test_history_view_items_dedupes_images_and_result(self):
+        history = {
+            "outputs": {
+                "9": {
+                    "images": [{"filename": "out.png", "type": "output"}],
+                    "result": ["out.png"],
+                }
+            }
+        }
+        items = workflow_queue.history_view_items(history)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["filename"], "out.png")
+
+    def test_download_outputs_fetches_result_glb(self):
+        history = {
+            "status": {"status_str": "success"},
+            "outputs": {
+                "12": {"result": ["/workspace/output/TRELLIS2_studio_00001_.glb"]}
+            },
+        }
+        payload = b"glTF" + b"\x00" * 8
+
+        class FakeResponse:
+            def read(self):
+                return payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            dest = Path(directory)
+            with patch("workflow_queue.urllib.request.urlopen", return_value=FakeResponse()) as opener:
+                saved = workflow_queue.download_outputs("http://comfy", history, dest)
+            self.assertEqual([path.name for path in saved], ["TRELLIS2_studio_00001_.glb"])
+            self.assertEqual(saved[0].read_bytes(), payload)
+            opened = opener.call_args[0][0]
+            self.assertIn("filename=TRELLIS2_studio_00001_.glb", opened)
+            self.assertTrue(opened.startswith("http://comfy/view?"))
+
     def test_inspect_cli_does_not_need_base_url(self):
         import io
         from contextlib import redirect_stdout

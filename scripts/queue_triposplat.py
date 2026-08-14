@@ -8,7 +8,6 @@ import json
 import mimetypes
 import sys
 import time
-import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -20,6 +19,7 @@ if str(_ROOT) not in sys.path:
 
 from workflow_queue import (  # noqa: E402,I001
     convert_ui_workflow as convert_with_browser,
+    download_outputs,
     wait_history,
 )
 
@@ -108,44 +108,6 @@ def bind_load_image(prompt: dict, image_name: str) -> dict:
     if not found:
         raise RuntimeError("converted prompt has no LoadImage node")
     return prompt
-
-
-def _safe_dest(dest: Path, filename: str) -> Path:
-    dest = dest.resolve()
-    name = Path(str(filename).replace("\\", "/")).name
-    if not name or name in {".", ".."}:
-        raise ValueError(f"unsafe output filename: {filename!r}")
-    path = (dest / name).resolve()
-    if path != dest and dest not in path.parents:
-        raise ValueError(f"output path escapes destination: {filename!r}")
-    return path
-
-
-def download_outputs(base: str, history: dict, dest: Path) -> list[Path]:
-    saved: list[Path] = []
-    dest.mkdir(parents=True, exist_ok=True)
-    for node_output in (history.get("outputs") or {}).values():
-        if not isinstance(node_output, dict):
-            continue
-        for key in ("images", "gifs", "videos", "audio", "3d", "mesh", "files"):
-            for item in node_output.get(key) or []:
-                if isinstance(item, str):
-                    item = {"filename": item}
-                if not isinstance(item, dict) or not item.get("filename"):
-                    continue
-                query = urllib.parse.urlencode(
-                    {
-                        "filename": item["filename"],
-                        "subfolder": item.get("subfolder") or "",
-                        "type": item.get("type") or "output",
-                    }
-                )
-                path = _safe_dest(dest, str(item["filename"]))
-                with urllib.request.urlopen(f"{base}/view?{query}", timeout=300) as response:
-                    path.write_bytes(response.read())
-                saved.append(path)
-                print(json.dumps({"saved": str(path), "bytes": path.stat().st_size}), flush=True)
-    return saved
 
 
 def main() -> None:
