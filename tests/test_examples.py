@@ -180,9 +180,12 @@ class ScriptContractTests(unittest.TestCase):
         for frame in frames:
             self.assertIn("text", frame)
             self.assertGreaterEqual(len(frame["text"].split()), 20)
+            self.assertIn("Makoto Shinkai", frame["text"])
+            self.assertNotIn("photorealistic", frame["text"].lower())
         module = _load_script("build_campus_storyboard_json.py")
         rebuilt = module.build()
         self.assertEqual(len(rebuilt["frames"]), 100)
+        self.assertIn("Makoto Shinkai", rebuilt["style_lock"])
 
 
 if __name__ == "__main__":

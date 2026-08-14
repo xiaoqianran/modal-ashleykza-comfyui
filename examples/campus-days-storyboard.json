@@ -1,714 +1,719 @@
 {
   "schema": 1,
   "title": "美好的校园时光 · Campus Days",
-  "summary": "100-frame FLUX.2 storyboard: arrival, classes, sports, library, seasons, friendship, festivals, exams, graduation.",
+  "summary": "100-frame FLUX.2 storyboard in a Makoto Shinkai / CoMix Wave Films look: suburban Japanese high school, Aoi and Haruto, weather as the co-star.",
   "flux2_notes": {
     "language": "English prompts for Mistral TE; UI titles in Chinese.",
-    "style": "Natural full sentences; subject first; positive wording; no negative prompt.",
-    "length": "Roughly 30–80 words per frame.",
+    "style": "Locked Shinkai cinematic anime: volumetric clouds, anamorphic flare, cobalt-to-amber grade, painted backgrounds. Not photoreal live-action.",
+    "characters": {
+      "Aoi": "16, long black hair, red ribbon, sailor uniform",
+      "Haruto": "16, messy dark hair, navy blazer, loosened striped tie"
+    },
+    "length": "Scene sentence plus a shared style lock; roughly 60–120 words.",
     "workflow": "examples/flux2-dev-t2i.json via catalog flux2-dev on RTX-PRO-6000.",
     "runner": "scripts/run_flux2_campus_storyboard.py"
   },
+  "style_lock": "Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime.",
   "frames": [
     {
       "id": "001",
       "act": 1,
       "act_title": "开学清晨",
       "title": "校门晨曦",
-      "text": "A wide establishing shot of an East Asian university gate at dawn, pale gold sunlight cutting through morning mist, fresh green plane trees lining the stone path, a few students in navy blazers walking uphill with backpacks, soft cinematic lighting, photorealistic, 24mm landscape still."
+      "text": "Wide establishing shot of a suburban Japanese high-school gate at dawn. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie walk uphill under a sky of towering peach and gold cumulonimbus. Cherry trees, telephone poles, and a distant clock tower. Pale god rays cut the mist. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "002",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "单车入校",
-      "text": "A teenage boy in a white shirt and navy blazer rides a bicycle through the open campus gate, wind lifting his tie slightly, cherry blossom petals drifting across the frame, warm side light, documentary photography, 35mm film still, sharp focus."
+      "title": "电车到站",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes steps off a morning commuter train onto a quiet suburban platform. Sun flares through the carriage windows; tracks recede toward layered morning clouds. Other students in sailor uniforms blur past. A 5 Centimeters per Second station mood. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "003",
       "act": 1,
       "act_title": "开学清晨",
       "title": "樱花大道",
-      "text": "Two friends, a girl and a boy in matching school uniforms, walk together under blooming cherry trees on campus, pink petals falling like snow, they laugh while holding iced coffee cups, shallow depth of field, golden morning glow, photorealistic editorial portrait."
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie walk a cherry-lined slope to school, petals drifting like snow. Behind them a vast spring sky of white stratus over deep blue. Petals catch the sun as tiny sparks. Soft two-shot, characters small under the trees. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "004",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "公告栏前",
-      "text": "Close-up of a campus bulletin board covered with club flyers and exam schedules, a girl with a ponytail pins a handwritten note while classmates gather behind her, natural daylight, fine paper texture, 50mm street photography, photorealistic."
+      "title": "铁路道口",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes waits at a suburban railway crossing, bag hugged to her chest, red crossing lights blinking. A train rushes past with step-printed glass reflections. Crepuscular rays fan between the cars. Classic Shinkai level-crossing composition. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "005",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "教学楼台阶",
-      "text": "Low-angle view of wide stone steps leading to a red-brick academic building, students climbing in small groups, long shadows stretching across the stairs, clear blue sky, cinematic composition, photorealistic campus life scene."
+      "title": "教学楼仰望",
+      "text": "Low-angle view of a red-brick school building against an enormous afternoon sky. Tiny silhouettes of students on the stairs. Windows flash like gold. Clouds stacked in painterly layers, almost more important than the building. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "006",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "新生问路",
-      "text": "A nervous freshman with an oversized backpack asks directions from an upperclassman near a campus map sign, both smiling gently, ivy climbing the wall behind them, soft overcast light, intimate human moment, 85mm portrait, photorealistic."
+      "title": "天台相遇",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie meet for the first time on the school rooftop, chain-link fence and water tower behind them. Wind lifts her ribbon. A cathedral of clouds fills the upper two-thirds of the frame. Shy, bright eyes. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "007",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "铃声响起",
-      "text": "Interior hallway of a school building as the first bell rings, classroom doors opening and students pouring into the corridor with books and tablets, motion blur at the edges, bright fluorescent mixed with window light, photorealistic."
+      "title": "走廊光柱",
+      "text": "Empty school hallway just after the first bell. Dust motes and chalk sparkle in a diagonal shaft of window light. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes runs past with her bag bouncing, hair and ribbon catching the flare. Quiet before the rush. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "008",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "教室窗景",
-      "text": "View from inside a sunlit classroom looking out through tall windows at the green campus quad, desks neatly arranged, chalk dust floating in a sunbeam, quiet anticipation before class, still life atmosphere, 35mm, photorealistic."
+      "title": "教室窗云",
+      "text": "From inside a wooden classroom, looking out through tall open windows at a sky of rolling summer clouds. Empty desks in the foreground, curtains breathing. The clouds are rendered with extreme painted detail, almost a character themselves. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "009",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "同桌微笑",
-      "text": "Two desk mates, a girl and a boy, share a shy smile across a wooden classroom desk, open textbooks and color highlighters between them, afternoon light on their faces, gentle teenage romance mood, 85mm shallow focus, photorealistic."
+      "title": "同桌侧光",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sit as desk-mates. Warm late-morning light from the window rims their profiles; outside, a slice of blue sky and a single power line. Open textbooks between them. Gentle, almost silent smile. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "010",
       "act": 1,
       "act_title": "开学清晨",
-      "title": "班主任点名",
-      "text": "A kind middle-aged teacher stands at the front of a classroom calling roll from a clipboard, rows of uniformed students sit attentively, blackboard reads Welcome New Semester in chalk, balanced classroom lighting, photorealistic documentary style."
+      "title": "黑板与天空",
+      "text": "A kind homeroom teacher writes Welcome New Semester on a green blackboard while sunlight from the side windows turns the chalk dust into gold. Rows of sailor uniforms. Beyond the windows, infinite layered clouds. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "011",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "数学板书",
-      "text": "A teacher writes elegant geometry proofs on a green blackboard while students take notes, white chalk lines crisp against the dark board, sunlight stripes across the back row, academic atmosphere, 50mm classroom photography, photorealistic."
+      "title": "数学课光斑",
+      "text": "Geometry proofs on a green blackboard, white chalk lines catching window glare. Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie copies notes, a bright anamorphic flare streaking across the classroom. Outside, a slice of cobalt sky. Quiet concentration. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "012",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "认真听讲",
-      "text": "Close portrait of a focused girl listening in class, chin resting on her hand, eyes bright with curiosity, blurred classmates behind her, window light on one cheek, editorial student portrait, 85mm, photorealistic."
+      "title": "窗边听讲",
+      "text": "Close portrait of Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes listening in class, chin in her hand, eyes reflecting the window. Behind her, bokeh of classmates and a sky full of luminous clouds. Soft rim light on her hair and red ribbon. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "013",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "传纸条",
-      "text": "A playful moment as a folded note passes secretly between desks during a lecture, only hands and uniform sleeves visible, teacher blurred at the front, candid school memory, warm tones, 35mm film still, photorealistic."
+      "title": "课桌纸条",
+      "text": "A folded note slides across a wooden desk between Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie. Only hands, sailor sleeves, and a stripe of sunset on the wood. The rest of the classroom falls into warm shadow. Secret, tender. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "014",
       "act": 2,
       "act_title": "课堂时光",
       "title": "英语朗读",
-      "text": "Students stand in turn reading English aloud from textbooks, a boy at the podium speaks confidently while others follow along, classroom flags and vocabulary posters on the wall, natural light, photorealistic."
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie stands at the podium reading English, sunlight turning the pages gold. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes follows along in her seat, a faint smile. Classroom flags, vocabulary posters, and through the windows a huge peaceful sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "015",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "化学实验",
-      "text": "High school chemistry lab with students in safety goggles watching a gentle blue flame, glass beakers and periodic table chart behind them, cool lab light mixed with warm window glow, science education scene, sharp detail, photorealistic."
+      "title": "化学室蓝焰",
+      "text": "Chemistry lab at dusk. Students in goggles watch a small blue flame. Glassware catches orange window light. Beyond the lab windows, a violet-orange twilight sky. Science as a quiet miracle. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "016",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "显微镜下",
-      "text": "A girl peers into a microscope while her lab partner sketches observations in a notebook, specimen slides and stainless steel benches around them, concentrated expressions, macro documentary style, photorealistic."
+      "title": "显微镜光",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes looks into a microscope while Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sketches in a notebook. A single sunbeam from a high window ignites floating dust. Stainless benches, specimen slides, and a square of blazing sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "017",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "美术素描",
-      "text": "Art classroom with students drawing still-life vases on easels, charcoal smudges on fingers, north-facing skylight giving soft even illumination, creative campus afternoon, fine art photography, photorealistic."
+      "title": "美术室北窗",
+      "text": "Art room with north-facing windows. Students draw still-life vases; charcoal on fingers. The windows show a vast cloudscape like a painted mural. Easels, wooden floors, and drifting light motes. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "018",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "音乐教室",
-      "text": "A student plays piano near open windows while others tune violins in a music room, sheet music scattered on stands, late afternoon light painting the wooden floor gold, romantic school club mood, 35mm, photorealistic."
+      "title": "音乐室钢琴",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes plays piano by open windows while classmates tune violins. Late-afternoon gold floods the wooden floor. Sheet music lifts in the breeze. Outside, telephone wires cut across a glowing sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "019",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "体育课集合",
-      "text": "PE teacher blows a whistle on a green athletic field as students line up in gym uniforms, white running shoes on red track lanes, distant bleachers and goal posts, bright midday sun, sports documentary photography, photorealistic."
+      "title": "操场集合",
+      "text": "PE class lining up on a green field under a sky of towering white clouds. Tiny students in white gym clothes. Distant clock tower and goal posts. The sky occupies most of the frame, as in a Shinkai establishing shot. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "020",
       "act": 2,
       "act_title": "课堂时光",
-      "title": "课间走廊",
-      "text": "Crowded hallway between classes, friends leaning against lockers trading snacks and stories, posters for the autumn festival on the walls, lively youthful energy, handheld street style, 28mm, photorealistic."
+      "title": "课间天台风",
+      "text": "Between classes, Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and friends lean on the rooftop fence, hair and ribbons in the wind. The town spreads below in hyper-detailed miniature. Clouds race overhead with dramatic volumetric shadows. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "021",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "食堂排队",
-      "text": "Students queue with trays in a bright campus cafeteria, steam rising from noodle stations, overhead menus in Chinese and English, friendly chatter filling the space, wide interior shot, photorealistic food court atmosphere."
+      "act_title": "午间与放学路",
+      "title": "食堂窗景",
+      "text": "School cafeteria at lunch. Steam from bowls, chatter as painted background motion. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sit by a huge window showing summer clouds over the sports field. Interior warmth against the cool blue outside. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "022",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "分享午餐",
-      "text": "Four friends share lunch at a cafeteria table, swapping side dishes and laughing, rice bowls, soup cups, and fruit on plastic trays, warm indoor lighting, slice-of-life photography, 50mm, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "便当分享",
+      "text": "Four friends share homemade bento on the rooftop, chopsticks and colorful side dishes. Above them an ocean of afternoon cumulonimbus. Wind, laughter, and sparkling rice grains catching the sun. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "023",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "窗边独坐",
-      "text": "A quiet boy eats alone by a tall cafeteria window overlooking the sports field, headphones around his neck, sketchbook open beside his tray, thoughtful mood, soft backlight, cinematic solitude, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "天台独坐",
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sits alone on the rooftop with a sketchbook, headphones around his neck. His small figure against a cathedral sky of gold-edged clouds. Quiet, slightly lonely, hopeful. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "024",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "小卖部冰饮",
-      "text": "After lunch rush at a campus convenience shop, students buy iced lemon tea and ice cream bars, glass-door refrigerators glowing cool blue, coins and student cards on the counter, vivid color, documentary retail scene, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "自动贩卖机",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes buys canned coffee from a glowing vending machine in a shaded school corridor. The machine's colored lights contrast with the blazing white-blue sky at the corridor's end. Everyday Shinkai still life. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "025",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "操场散步",
-      "text": "Two girls walk the rubber track slowly after lunch, uniforms loosened, hair ribbons fluttering, cloud shadows moving across the field, distant students playing soccer, peaceful campus afternoon, 35mm, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "银杏树荫",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and a friend walk slowly along a ginkgo path after lunch. Dappled god rays through dense leaves. Distant students like tiny notes on the field. Deep green against a pale luminous sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "026",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "篮球三分",
-      "text": "A boy leaps for a three-point shot on an outdoor basketball court, ball frozen mid-air, friends watching from the sideline, afternoon sun flaring behind the hoop, dynamic sports photography, 70mm, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "放学电车窗",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes rides the evening train home, forehead near the glass. The window holds a double image: her face and a burning orange sky over suburban rooftops. Step-printed reflections, telephone poles streaming past. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "027",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "足球传球",
-      "text": "Students play casual soccer on a green campus pitch, one player passes through defenders, cleats kicking up grass, goal net and school building in background, action freeze, telephoto sports still, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "人行天桥",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie cross a pedestrian overpass after school, bags on shoulders. Below, a river of cars and a railway. Above, a monumental sunset. They are small silhouettes on the bridge. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "028",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "看台加油",
-      "text": "Cheerful classmates sit on metal bleachers clapping for a relay race, homemade banners and bottled water around them, blue sky and white clouds above, youthful team spirit, wide shot, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "便利店黄昏",
+      "text": "A corner convenience store at blue hour, interior fluorescent against indigo sky. Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie waits outside with two ice creams. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes appears from the sliding door. Wet pavement optional sheen, nostalgic suburban quiet. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "029",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "跑道冲刺",
-      "text": "Final sprint of a school track race, two runners neck and neck, faces strained with effort, red lane markers sharp beneath their feet, crowd blur in background, high-speed sports capture, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "电线与晚霞",
+      "text": "Looking up along a row of wooden utility poles and tangled wires, the sky a gradient from fire-orange to deep violet. A single crow. No people, or only a tiny cyclist far below. Pure Shinkai sky portrait. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "030",
       "act": 3,
-      "act_title": "午间与操场",
-      "title": "树荫小憩",
-      "text": "Friends nap and study under a large campus oak tree, textbooks as pillows, dappled shade on faces, a gentle breeze moving leaves, lazy golden hour approaching, pastoral school memory, 50mm, photorealistic."
+      "act_title": "午间与放学路",
+      "title": "坡道回家",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes walks a steep residential slope between old houses, bag bouncing, the sun exploding behind the hill. Lens flare, long shadows, cicada-season heat haze. A 5 Centimeters per Second after-school road. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "031",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "图书馆入口",
-      "text": "Grand wooden doors of a university library open to a quiet reading hall, students ascending marble steps with laptops and stacks of books, reverent atmosphere, symmetrical architecture, soft ambient light, photorealistic."
+      "title": "图书馆光柱",
+      "text": "University-style high-school library with tall windows. Volumetric light falls between book stacks like water. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes is a small figure reaching for a novel. Dust sparkles. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "032",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "书架寻书",
-      "text": "A girl on tiptoe reaches for a novel on a tall library shelf, sunbeams through tall windows illuminating dust motes, rows of colorful spines, quiet scholarly mood, 35mm, photorealistic."
+      "title": "窗边自习",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie study at a library window desk. Lamps, notes, two cups of tea. Outside: rain-dark trees and a silver sky. Glass reflections overlay their faces with clouds. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "033",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "自习长桌",
-      "text": "Long study tables in the library filled with students preparing for exams, lamps, highlighted notes, and coffee cups, focused silence, evening blue outside windows, academic diligence scene, photorealistic."
+      "title": "夜自习蓝窗",
+      "text": "Evening study hall. Desk lamps make warm islands; the windows are deep ultramarine. Students bent over books. A clock on the wall. The blue outside is as saturated as a Shinkai night. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "034",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "双人复习",
-      "text": "A boy and girl quiz each other with flashcards in a library corner, whispering and smiling when an answer is right, stacked textbooks between them, intimate study partnership, shallow depth of field, photorealistic."
+      "title": "天台望远镜",
+      "text": "Astronomy club on the roof at dusk. Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie aims a small telescope; Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes looks up with wonder. The first stars puncture a violet sky still holding orange at the horizon. City lights beginning far below. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "035",
       "act": 4,
       "act_title": "图书馆与社团",
       "title": "摄影社外拍",
-      "text": "Campus photography club on the lawn, one student frames a shot with a DSLR while others pose playfully, camera straps and light reflectors on the grass, creative youth energy, meta photography scene, 50mm, photorealistic."
+      "text": "Photography club on the lawn. A student frames Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes against a sky of epic clouds. Camera straps, a silver reflector catching sun. The real subject is the weather behind her. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "036",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "戏剧排练",
-      "text": "Drama club rehearses on a small auditorium stage, students in simple costumes reading scripts, spotlight warming the wooden floor, empty seats in darkness beyond, theatrical school life, cinematic contrast, photorealistic."
+      "title": "礼堂彩排",
+      "text": "Drama club on a small wooden stage, a single warm spotlight. Empty seats dissolve into darkness. A side door open to blinding afternoon. Theatrical dust in the beam. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "037",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "街舞社团",
-      "text": "Dance club practices hip-hop moves in a mirrored studio after school, sneakers squeaking on polished floor, urban posters on the wall, energetic poses reflected, dynamic youth culture, wide angle, photorealistic."
+      "title": "体育馆镜面",
+      "text": "Dance club in a gym with high windows. Sneakers on polished wood that reflects the sky. Mirrored wall, motion, and a slice of brilliant clouds through clerestory glass. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "038",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "天文台夜",
-      "text": "A small campus observatory dome opens at dusk as astronomy club members align a telescope, violet sky fading to stars, silhouettes of excited students, science wonder mood, long exposure feel, photorealistic."
+      "title": "天文台开顶",
+      "text": "A small campus observatory dome opening at twilight. Silhouettes of students. The sky is a painted gradient of magenta, indigo, and early stars. Sense of weather-as-wonder, like Weathering With You. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "039",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "志愿者义卖",
-      "text": "Charity bake sale tables on the campus lawn, students in club aprons sell cupcakes and handmade crafts, colorful bunting between trees, smiling customers with paper bags, community warmth, documentary style, photorealistic."
+      "title": "文化祭灯笼",
+      "text": "Paper lanterns strung between ginkgo trees on the school lawn at festival dusk. Booths, steam, and tiny students. The sky still holds leftover gold. Lantern light mixing with the last sun. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "040",
       "act": 4,
       "act_title": "图书馆与社团",
-      "title": "广播站午后",
-      "text": "Two students host the school radio show in a tiny broadcast booth, microphones, mixing board lights, playlist notes on the desk, song request slips pinned nearby, cozy media nook, warm tungsten light, photorealistic."
+      "title": "广播室黄昏",
+      "text": "Tiny school radio booth. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie lean toward microphones. Mixing-board LEDs, playlist notes. Through a small window, the sky is on fire. Cozy interior against epic exterior. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "041",
       "act": 5,
       "act_title": "四季校园",
-      "title": "春雨操场",
-      "text": "Light spring rain dots the empty running track, a girl walks alone with a clear umbrella, puddles mirror red track lanes and gray sky, fresh green buds on nearby trees, melancholy beauty, 35mm rainy day photography, photorealistic."
+      "title": "春雨透明伞",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes walks the empty running track under a transparent umbrella in light spring rain. Puddles mirror a silver-blue sky. Fresh buds, wet red lanes, soft rain curtains. Melancholy and beautiful. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "042",
       "act": 5,
       "act_title": "四季校园",
-      "title": "初夏林荫",
-      "text": "Bright early summer on campus, students in short-sleeve uniforms eat watermelon under plane trees, strong green canopy, cicada-season heat haze in the distance, vivid seasonal slice of life, photorealistic."
+      "title": "雨后彩虹",
+      "text": "After the rain, a vivid rainbow arcs over the school clock tower. Students with folded umbrellas point upward. Puddles hold the whole sky. Air full of glittering droplets. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "043",
       "act": 5,
       "act_title": "四季校园",
-      "title": "荷塘月色",
-      "text": "Evening by a campus pond with lotus leaves, friends sit on a wooden bridge sharing earphones, moon reflection rippling on dark water, fireflies hinted near the reeds, poetic night scene, soft blue hour, photorealistic."
+      "title": "初夏蝉鸣",
+      "text": "Blazing early summer. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes eats watermelon under plane trees, white sailor collar bright. Heat shimmer over the distant field. A sky so blue it feels painted. Deep leaf-shadow and sparkle. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "044",
       "act": 5,
       "act_title": "四季校园",
-      "title": "银杏大道",
-      "text": "Autumn campus avenue covered in golden ginkgo leaves, students kick piles of leaves while walking to class, warm amber sunlight filtering through yellow crowns, nostalgic fall mood, seasonal landscape photography, photorealistic."
+      "title": "荷塘晚风",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sit on a wooden bridge over a campus lotus pond at blue hour. Sharing one pair of earphones. Moon and clouds doubled in the water. Firefly-like sparks near the reeds. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "045",
       "act": 5,
       "act_title": "四季校园",
-      "title": "秋日读书",
-      "text": "A boy reads on a bench surrounded by fallen maple leaves, scarf loose around his neck, hot tea steam rising from a thermos beside him, quiet contemplation, portrait with bokeh leaves, 85mm, photorealistic."
+      "title": "银杏金雨",
+      "text": "Autumn avenue buried in golden ginkgo leaves. Students kick the leaves walking to class. The sky is a clear cold blue; the trees burn amber. Leaves in the air like slow sparks. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "046",
       "act": 5,
       "act_title": "四季校园",
-      "title": "初雪教学楼",
-      "text": "First snow dusts the red-brick classroom building and bare branches, students in coats photograph the scene with phones, breath visible in cold air, winter campus hush, crisp daylight, photorealistic."
+      "title": "枫叶长椅",
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie reads on a bench among falling maple leaves, thermos steaming. Bokeh of red and gold around him. Behind, a huge quiet autumn sky. Nostalgia you can almost hear. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "047",
       "act": 5,
       "act_title": "四季校园",
-      "title": "雪地雪人",
-      "text": "Friends build a small snowman on the campus quad, scarves and mittens colorful against white snow, laughter and flying snowballs in soft focus background, playful winter memory, bright overcast light, photorealistic."
+      "title": "初雪校舍",
+      "text": "First snow dusts the red-brick school and bare branches. Students in coats photograph the scene; breath hangs in the air. A pale winter sun and a sky of thin, luminous clouds. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "048",
       "act": 5,
       "act_title": "四季校园",
-      "title": "冬日窗暖",
-      "text": "Inside a heated classroom while snow falls outside tall windows, students cup warm mugs during a break, condensation on the glass, cozy contrast, intimate indoor winter scene, photorealistic."
+      "title": "雪夜教室",
+      "text": "Heated classroom at night while snow falls past the tall windows in slow streaks. Warm interior lamps versus cold blue-white outside. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes cups a mug, watching the snow as if it were a movie. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "049",
       "act": 5,
       "act_title": "四季校园",
-      "title": "春日返校",
-      "text": "Spring semester return, cherry blossoms fuller than before, old friends reunite with hugs near the gate, luggage and blooming trees framing the embrace, renewal and joy, emotional reunion portrait, 50mm, photorealistic."
+      "title": "春日重逢",
+      "text": "New spring. Fuller cherry blossoms than last year. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie hug near the school gate, petals swirling, sky enormous and kind. Renewal, almost too bright to look at. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "050",
       "act": 5,
       "act_title": "四季校园",
-      "title": "夏至黄昏",
-      "text": "Long summer twilight over the campus clock tower, sky gradient from orange to indigo, silhouettes of graduates tossing caps in rehearsal on the lawn below, epic golden hour wide shot, photorealistic."
+      "title": "夏至积雨云",
+      "text": "Midsummer twilight. A colossal cumulonimbus towers over the clock tower, lit from within like a lantern. Tiny graduates rehearse on the lawn below. The cloud is the protagonist. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "051",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "天台吹风",
-      "text": "Three friends sit on a rooftop ledge safe behind a fence, legs dangling, city and campus spread below, wind tousling their hair, sharing chips and secrets at sunset, youthful freedom mood, cinematic backlit portrait, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "天台晚风",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes, Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie, and a friend sit on the rooftop at sunset, legs behind the safe fence. The town is a carpet of gold windows. Wind, snacks, secrets. Sky of layered fire and violet. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "052",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "生日惊喜",
-      "text": "Classmates surprise a girl with a small birthday cake in the homeroom after final period, candles glowing, handmade banner and phone flashlights, her hands covering happy tears, warm celebration scene, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "教室生日",
+      "text": "After the last bell, classmates surprise Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes with a small cake. Candlelight on faces. Handmade banner. Through the windows, a deep blue evening. Warm indoor gold versus cool sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "053",
       "act": 6,
-      "act_title": "青春与友谊",
+      "act_title": "青春与心跳",
       "title": "雨中共伞",
-      "text": "A boy quietly holds an umbrella over a girl as they cross a rainy campus courtyard, their shoulders almost touching, reflections on wet stone, soft gray rain light, tender teenage romance, 50mm, photorealistic."
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie holds a dark umbrella over Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes as they cross a rainy school courtyard. Shoulders almost touching. Stone tiles full of sky-reflections. Gray-blue rain light with a single warm window behind them. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "054",
       "act": 6,
-      "act_title": "青春与友谊",
+      "act_title": "青春与心跳",
       "title": "单车后座",
-      "text": "A girl rides on the back rack of a bicycle along a tree-lined campus road at dusk, arms spread for balance, both laughing, long shadows on the pavement, carefree motion blur at edges, photorealistic."
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes rides on the back of Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie's bicycle down a tree-lined slope at dusk. Her arms open for balance, ribbon flying. Long shadows, huge amber sky. Motion implied by hair and leaves, not blurry smearing. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "055",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "考试加油",
-      "text": "Before a major exam, friends form a circle in the hallway doing a team cheer, hands stacked in the center, determined smiles, backpacks at their feet, motivational school moment, documentary style, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "考前加油",
+      "text": "Friends form a circle in a sunlit hallway before exams, hands stacked. A window at the end of the corridor explodes with morning god rays. Determined smiles, backpacks at their feet. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "056",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "深夜便利店",
-      "text": "Two students in hoodies buy instant noodles at a 24-hour shop near campus after study group, fluorescent glow, rain on the glass door, tired but happy faces, urban night slice of life, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "雨夜便利店",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie in hoodies buy instant noodles at a 24-hour shop after studying. Rain needles the glass door. Interior fluorescent versus wet indigo street. Tired, happy faces. Classic Shinkai night still. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "057",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "吉他草坪",
-      "text": "A boy plays acoustic guitar on the campus lawn at golden hour while friends sing along softly, sheet music weighted by stones, distant frisbee players blurred, music friendship scene, warm lens flare, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "草坪吉他",
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie plays acoustic guitar on the lawn at golden hour; Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes sings softly. Sheet music weighted by stones. Behind them, a sky of molten clouds. Lens flare across the strings. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "058",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "胶片合影",
-      "text": "A group of six friends squeeze into a self-timer photo on stone steps, someone runs into frame at the last second, imperfect genuine smiles, vintage film color grade, nostalgic student album aesthetic, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "台阶合影",
+      "text": "Six friends squeeze onto stone steps for a self-timer photo, one running into frame. Behind them the school and an operatic sky. Genuine messy smiles, key-visual poster energy. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "059",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "争吵和解",
-      "text": "Two close friends sit on playground bleachers after a quarrel, one offers a soda as peace, awkward half-smiles turning into relief, late afternoon empty field behind them, emotional honesty, intimate 85mm portrait, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "看台和解",
+      "text": "After a quarrel, Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sit on empty bleachers. He offers a canned soda. Awkward half-smiles. The field is vast; the evening sky even vaster. Silence filling with relief. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "060",
       "act": 6,
-      "act_title": "青春与友谊",
-      "title": "毕业墙留言",
-      "text": "Students write messages and signatures on a temporary graduation memory wall on campus, colorful markers, polaroids taped among the notes, hands layering new wishes, bittersweet farewell texture, close documentary shot, photorealistic."
+      "act_title": "青春与心跳",
+      "title": "毕业墙夕照",
+      "text": "Students write on a temporary memory wall in the courtyard at sunset. Polaroids, colorful markers, overlapping hands. The wall is backlit; the sky behind it is a wash of rose and gold. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "061",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "校园文化节",
-      "text": "Outdoor cultural festival on the main quad, booths with calligraphy, dance, and robotics demos, paper lanterns strung between trees, crowds in festive mood, vibrant campus carnival, wide establishing shot, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "文化祭全景",
+      "text": "Wide shot of the school cultural festival on the main quad. Booths, lanterns, crowds of tiny students. Late-afternoon clouds stacked like continents. A Your Name festival afternoon. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "062",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "汉服走秀",
-      "text": "Students in elegant hanfu walk a simple runway on the lawn during culture day, bamboo fans and embroidered sleeves moving gracefully, audience clapping under parasols, traditional meets youth, fashion show photography, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "浴衣夏祭",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes in a pale yukata walks a summer festival path of paper lanterns. Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie in a simple yukata beside her. Sparklers, goldfish scooping stalls, and a sky still holding twilight fire. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "063",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "辩论赛",
-      "text": "Intense high school debate in a lecture hall, two teams at opposing podiums, timers and water bottles on the table, audience leaning forward, spotlight on speakers, intellectual competition scene, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "烟花远眺",
+      "text": "From the school rooftop, distant fireworks bloom over the town. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie watch, faces lit in changing color. Smoke, sparks, and a deep summer night sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "064",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "合唱比赛",
-      "text": "School choir in matching uniforms performs on stage, mouths open in harmony, conductor's hands raised, parents recording from the dark auditorium, uplifting performance moment, stage lighting, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "合唱舞台光",
+      "text": "School choir on stage in matching uniforms, mouths open in harmony. A side door leaks blazing sunset into the dark auditorium. Dust and emotion in the spotlight. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "065",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "科技展机器人",
-      "text": "Robotics club displays a small wheeled robot navigating cones in the science building atrium, curious younger students watch, LED status lights blinking, banners for STEM week, future-facing campus event, sharp detail, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "辩论馆窗",
+      "text": "High-school debate in a lecture hall. Two teams at podiums. Behind the speakers, a wall of windows showing racing storm clouds. Intellectual tension plus weather drama. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "066",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "校园马拉松",
-      "text": "Charity campus marathon with numbered bibs, runners passing a water station near the lake, volunteers handing cups, colorful flags marking the route, energetic community scene, sports event photography, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "湖边马拉松",
+      "text": "Charity campus run along a lake. Runners as small colorful notes. Morning mist, mirrored sky on the water, flags snapping. Huge peaceful clouds. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "067",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "露天电影",
-      "text": "Night outdoor movie on the athletic field, students on blankets and folding chairs facing a large screen, projector beam cutting through faint mist, stars above, shared popcorn, romantic campus cinema, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "操场露天电影",
+      "text": "Night outdoor movie on the athletic field. A projector beam cuts faint mist. Students on blankets. Stars and a huge moon. The screen glows like a second window in the dark. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "068",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "中秋灯笼",
-      "text": "Mid-autumn evening on campus with paper lanterns glowing along a path, students share mooncakes on a stone table, full moon rising behind the library dome, festival warmth, soft lantern light, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "中秋校庭",
+      "text": "Mid-autumn evening. Paper lanterns along a path; students share mooncakes. A full moon rises behind the library dome, clouds drifting like silk. Warm lantern gold versus cold moonlight. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "069",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "圣诞装饰",
-      "text": "Student council hangs lights and paper snowflakes in the main hallway before winter break, ladder, tape, and laughter, mixed holiday and exam-week chaos, cozy institutional charm, documentary interior, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "冬至走廊灯",
+      "text": "Students hang paper snowflakes and warm lights in the main hallway before winter break. A ladder, tape, laughter. Through the end-window: early dusk, first snow. Cozy institutional charm. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "070",
       "act": 7,
-      "act_title": "节庆与比赛",
-      "title": "新年倒计时",
-      "text": "Friends on the dorm rooftop count down to the new year with sparklers, city lights below, breath in cold air, scarves and puffer jackets, joy and hope on their faces, celebratory night portrait, photorealistic."
+      "act_title": "节庆与天气",
+      "title": "跨年火花",
+      "text": "Friends on a dorm rooftop with sparklers at year's end. Breath in cold air. City lights below, a clear winter sky of sharp stars above. Joyful faces in sparkler-orange. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "071",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "模考清晨",
-      "text": "Early morning before mock exams, a girl reviews notes under a desk lamp in the dorm, alarm clock, stacked past papers, pale dawn through curtains, determined calm, study grind portrait, photorealistic."
+      "title": "黎明书桌",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes reviews notes at a dorm desk before dawn. Desk lamp, stacked papers, pale peach light seeping through curtains. Determined calm. The sky outside is just beginning to glow. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "072",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "错题本",
-      "text": "Close-up of hands rewriting math mistakes in a neat error notebook, red pen corrections, ruler and eraser crumbs, textbook open beside, academic discipline detail shot, photorealistic."
+      "title": "窗边错题",
+      "text": "Close-up of hands rewriting math in a neat notebook, red pen, eraser crumbs. A window behind the desk shows a quiet morning sky and a single power line. Discipline as a still life. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "073",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "老师答疑",
-      "text": "After class, a teacher patiently explains a physics problem at the podium while two students listen closely, emptying classroom, late sun through windows, mentorship warmth, educational documentary, 50mm, photorealistic."
+      "title": "放学答疑",
+      "text": "After class, a teacher explains a physics problem to Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie at the blackboard. The classroom is emptying. Late sun turns the windows into gold panels. Mentorship, dust, and silence. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "074",
       "act": 8,
       "act_title": "备考与成长",
       "title": "通宵自习室",
-      "text": "Late night in a 24-hour study room, few students remain with coffee and dim desk lamps, city glow outside floor-to-ceiling glass, quiet exhaustion and persistence, noir academic mood, photorealistic."
+      "text": "24-hour study room at 1 a.m. A few students, coffee, dim lamps. Floor-to-ceiling glass shows a sleeping city and a navy sky. Quiet persistence, Shinkai night interior. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "075",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "成绩公布",
-      "text": "Students crowd a posted score list on a hallway board, mixed reactions of relief and surprise, fingers pointing at names, phones photographing results, tense human drama, candid school journalism style, photorealistic."
+      "title": "成绩墙光",
+      "text": "Students crowd a posted score list in a hallway. Mixed relief and surprise. A window at the corridor's end floods the scene with white-gold morning. Human drama under too-beautiful light. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "076",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "运动受伤",
-      "text": "A boy sits on the bench with a wrapped ankle while teammates and the nurse comfort him, ice pack and water bottle nearby, concern and solidarity on faces, empathetic sports moment, photorealistic."
+      "title": "看台冰袋",
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie sits on a bench with a wrapped ankle, teammates around him. Ice pack, water bottle, concern. Behind them the empty field and a patient sky. Soft, empathetic sports pause. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "077",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "演讲比赛",
-      "text": "A girl delivers a speech on auditorium stage for a student election, confident posture, microphone, projected slide behind her, peers watching attentively, leadership coming of age, stage photography, photorealistic."
+      "title": "讲台逆光",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes delivers a student-election speech on the auditorium stage. Microphone, a faint projected slide. A high window behind her creates a halo. Coming-of-age courage. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "078",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "实习西装",
-      "text": "Senior students practice job interviews in career center mock rooms, one adjusts a borrowed blazer in a mirror, resume folders on the table, transition to adulthood, clean office light, photorealistic."
+      "title": "镜前西装",
+      "text": "Career-center mock interview. Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie adjusts a borrowed blazer in a tall mirror. Resume folder on the table. Through the window, spring clouds. The first step out of uniform. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "079",
       "act": 8,
       "act_title": "备考与成长",
       "title": "宿舍夜谈",
-      "text": "Four roommates in bunk beds talk softly with flashlights and snacks after lights-out, posters and fairy lights on walls, whispered laughter, intimate dorm night, low-key warm photography, photorealistic."
+      "text": "Four roommates in bunks talk with flashlights and snacks after lights-out. Fairy lights, posters. A small window shows the moon and thin clouds. Intimate, warm, whispered laughter. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "080",
       "act": 8,
       "act_title": "备考与成长",
-      "title": "清晨跑步",
-      "text": "Disciplined students jog around the track at sunrise before class, breath mist in cool air, rhythmic footsteps, pink sky over empty bleachers, healthy routine scene, wide landscape, photorealistic."
+      "title": "晨跑粉空",
+      "text": "Students jog the track at sunrise. Breath mist. Pink and gold sky over empty bleachers. Tiny figures on a red oval. Healthy, hopeful, the day not yet begun. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "081",
       "act": 9,
       "act_title": "毕业与告别",
       "title": "学位服试穿",
-      "text": "Graduating seniors try on black gowns and mortarboards in a classroom, adjusting tassels and taking mirror selfies, excitement and nervousness, pre-commencement joy, natural light, photorealistic."
+      "text": "Seniors try on black gowns and mortarboards in a classroom. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes adjusts her tassel in a window's gold light. Excitement and nerves. Outside, a gentle graduation-day sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "082",
       "act": 9,
       "act_title": "毕业与告别",
-      "title": "抛帽瞬间",
-      "text": "Frozen moment of graduation caps flying into a bright blue sky above the campus lawn, gowns swirling, arms raised, crowd cheering below, iconic farewell image, high shutter speed celebration, photorealistic."
+      "title": "抛帽与云",
+      "text": "Graduation caps flying into a bright blue sky above the campus lawn. Gowns swirling. The caps are tiny against cathedral clouds. Iconic farewell, sky-first composition. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "083",
       "act": 9,
       "act_title": "毕业与告别",
-      "title": "师生拥抱",
-      "text": "A graduate hugs their homeroom teacher on stage steps after the ceremony, diploma tube in hand, tears and smiles, families blurred in background, emotional gratitude portrait, 85mm, photorealistic."
+      "title": "师生台阶",
+      "text": "A graduate hugs their homeroom teacher on sunlit stage steps. Diploma tube in hand. Tears that still look like light. Families as soft background. Afternoon clouds watching quietly. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "084",
       "act": 9,
       "act_title": "毕业与告别",
       "title": "空教室回望",
-      "text": "An empty classroom after the last day, chairs upturned on desks, sunlight on dusty chalk tray, a lone graduate pauses in the doorway looking back, bittersweet silence, cinematic farewell still, photorealistic."
+      "text": "Empty classroom after the last day. Chairs upturned, chalk tray dusty. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes pauses in the doorway, small against a wall of blazing windows. Bittersweet silence. The sky pouring in. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "085",
       "act": 9,
       "act_title": "毕业与告别",
       "title": "校服签名",
-      "text": "Friends sign each other's white uniform shirts with colorful markers in the courtyard, inside jokes and names covering the fabric, laughter and a few tears, youth ritual close-up, photorealistic."
+      "text": "Friends sign each other's white uniform shirts in the courtyard. Colorful markers, inside jokes. Laughter and a few tears. Petals or leaves in the air, depending on the season of the heart. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "086",
       "act": 9,
       "act_title": "毕业与告别",
-      "title": "最后一堂课",
-      "text": "Final class ends as the teacher closes the grade book and students applaud standing, blackboard message reads Thank You, golden afternoon through windows, closure and gratitude, classroom documentary, photorealistic."
+      "title": "最后一课",
+      "text": "Final class ends. The teacher closes the grade book; students stand and applaud. Blackboard reads Thank You. Golden afternoon through every window. Closure rendered as light. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "087",
       "act": 9,
       "act_title": "毕业与告别",
-      "title": "火车站送别",
-      "text": "At the campus-town train station, friends wave as one boards with a suitcase for university elsewhere, platform signs, late summer heat, mixed joy and separation, travel farewell scene, 35mm, photorealistic."
+      "title": "月台送别",
+      "text": "Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes waves from a train window; Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie stands on the platform with a suitcase remaining. Summer heat, station signs, a sky too beautiful for goodbye. A 5 Centimeters per Second farewell. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "088",
       "act": 9,
       "act_title": "毕业与告别",
-      "title": "相册翻阅",
-      "text": "Hands flip through a printed photo album on a dorm desk, images of sports days and festivals visible, string lights and packed boxes nearby, moving-out day nostalgia, tactile memory detail, photorealistic."
+      "title": "相簿与纸箱",
+      "text": "Hands flip a printed photo album on a dorm desk among packed boxes. Sports days and festivals visible on the pages. A window shows moving-out day weather: clear, slightly cruel blue. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "089",
       "act": 9,
       "act_title": "毕业与告别",
       "title": "钟楼夕阳",
-      "text": "Silhouette of the campus clock tower against a vast orange sunset, two graduates walk away down the central path hand in hand, long shadows, timeless romantic ending wide shot, photorealistic."
+      "text": "Silhouette of the school clock tower against a vast orange sunset. Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie walk away down the central path, almost holding hands, tiny under the sky. Timeless ending wide shot. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "090",
       "act": 9,
       "act_title": "毕业与告别",
-      "title": "十年之约",
-      "text": "Epilogue mood: the same campus gate years later in soft memory-like light, young alumni return with coffee, comparing old photos on a phone, smiles of recognition, nostalgic reunion tone, gentle film grain, photorealistic."
+      "title": "多年后校门",
+      "text": "The same school gate years later, memory-soft light. Young adults who look like Aoi and Haruto compare old photos on a phone, smiling. Cherry trees, the old sky still doing its work. Nostalgic reunion. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "091",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
+      "act_title": "尾声·天空还在",
       "title": "课桌刻字",
-      "text": "Macro detail of faded initials carved inside a wooden desk lid, pencil scratches and old gum stains telling silent stories, sun stripe across the grain, intimate school relic, photorealistic."
+      "text": "Macro of faded initials carved inside a wooden desk lid. Pencil scars, sun stripe on the grain. Through the tiny gap of the lid, a slice of classroom window and sky. A relic that still holds weather. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "092",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "球鞋与跑道",
-      "text": "Worn running shoes rest on red track lane one beside a folded relay sash, morning dew on the rubber surface, empty stadium stretching ahead, quiet athletic poetry, low angle, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "跑道球鞋",
+      "text": "Worn running shoes on red lane one, a folded relay sash beside them. Morning dew. Empty stadium stretching toward a pale enormous sky. Quiet athletic poetry. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "093",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "琴房留言",
-      "text": "A music room piano with student messages taped inside the lid, metronome and forgotten scarf on the bench, afternoon dust in light beams, sentimental still life, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "琴房开窗",
+      "text": "Music-room piano with student notes taped inside the lid. Metronome, a forgotten scarf. Windows wide open to a sea of afternoon clouds. Dust in the light like slow snow. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "094",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "食堂阿姨",
-      "text": "Warm portrait of a cafeteria auntie serving an extra portion with a kind smile, steam, stainless counters, students waiting patiently behind, everyday campus kindness, documentary portrait, 50mm, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "食堂窗口",
+      "text": "A kind cafeteria server hands an extra portion through the steam, smiling. Stainless counters. Behind the students, windows full of weather. Everyday campus kindness under a beautiful sky. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "095",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "保安敬礼",
-      "text": "Campus security guard greets students at the gate with a friendly morning salute, badge gleaming, blooming trees framing the routine ritual, sense of safety and belonging, community portrait, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "校门口早安",
+      "text": "The school guard greets students at the gate with a small salute. Badge glinting. Blooming trees. A morning sky of clean layered clouds. A ritual of belonging. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "096",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "流浪猫学长",
-      "text": "A calico campus cat naps on a sunny windowsill while students tiptoe past smiling, small bowl of food below, ivy and brick texture, whimsical school mascot moment, gentle humor, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "窗台校猫",
+      "text": "A calico campus cat sleeps on a sunny windowsill. Students tiptoe past, smiling. Ivy, brick, a small food bowl. Beyond the glass: blinding blue and white clouds. Gentle mascot moment. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "097",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "雨后彩虹",
-      "text": "Double rainbow arches over the campus sports field after a storm, students point upward with umbrellas folded, puddles reflecting vivid color, hopeful cinematic sky, wide landscape, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "暴雨后的操场",
+      "text": "Double rainbow over the sports field after a storm. Students point upward, umbrellas folded. Puddles are perfect mirrors. Air glittering. Weather as blessing. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "098",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "萤火虫步道",
-      "text": "Summer night path between dormitories lined with soft garden lights and fireflies, couples and friends stroll slowly, crickets implied in the warm dark, magical campus evening, long exposure feel, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "萤火虫小径",
+      "text": "Summer night path between dormitories. Garden lights, fireflies, slow walkers. A deep blue sky with a few bright stars. Magical without being fantasy; still a real campus. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "099",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "信箱情书",
-      "text": "A shy student drops a handwritten letter into a campus wooden suggestion mailbox at dusk, heart pounding implied in careful fingers, lantern light and cicada season, tender secret romance, close shot, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "黄昏信箱",
+      "text": "Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie drops a handwritten letter into a wooden campus mailbox at dusk. Careful fingers. Lantern-colored sky, cicada-season haze. A shy confession to the weather itself. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     },
     {
       "id": "100",
       "act": 10,
-      "act_title": "尾声·珍藏时光",
-      "title": "青春不散场",
-      "text": "Final panoramic tableau of the whole friend group on the school steps at golden hour, arms around shoulders, uniforms and graduation scarves mixed, facing the camera with bright hopeful smiles, title-card energy, epic 24mm group portrait, photorealistic."
+      "act_title": "尾声·天空还在",
+      "title": "天空还在",
+      "text": "Final key visual: the whole friend group on the school steps at golden hour, Aoi, a 16-year-old Japanese high-school girl with long black hair and a small red ribbon, sailor-style uniform, large clear eyes and Haruto, a 16-year-old Japanese high-school boy with slightly messy dark hair, navy school blazer and a loosened striped tie at the center, arms around shoulders, facing us with bright hopeful smiles. Behind them the clock tower and a sky so detailed it could be a painting of heaven. Title-card energy. Youth does not end; the sky remains. Cinematic anime film still in the visual language of Makoto Shinkai and CoMix Wave Films. Hyper-detailed painted background, layered volumetric clouds filling most of the sky, anamorphic lens flare, crepuscular god rays, sparkling airborne light particles, saturated cobalt-blue to amber-orange color grade, wet-surface reflections when it rains, nostalgic emotional quiet. Anime characters slightly small in the frame so the sky and architecture can breathe. Painted key visual, not live-action photography, not generic TV anime."
     }
   ]
 }
