@@ -71,7 +71,7 @@ def _ready_pixi_python(workspace: Path) -> Path:
         / "bin"
         / "python"
     )
-    env_python.parent.mkdir(parents=True)
+    env_python.parent.mkdir(parents=True, exist_ok=True)
     env_python.write_text("", encoding="utf-8")
     return env_python
 
@@ -182,7 +182,8 @@ class Sam3dRuntimeTests(unittest.TestCase):
                     workspace=workspace,
                 )
             self.assertFalse(changed)
-            self.assertEqual(calls, [])
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], str(sam3d_runtime.comfy_env_root(workspace) / "envs" / "sam3dobjects-nodes" / ".pixi" / "envs" / "default" / "bin" / "python"))
             download.assert_not_called()
             self.assertTrue(home_bin.is_symlink())
 
@@ -209,9 +210,10 @@ class Sam3dRuntimeTests(unittest.TestCase):
                     root / "custom_nodes",
                     workspace=workspace,
                 )
-            run.assert_not_called()
             self.assertTrue(changed)
             self.assertTrue(sam3d_runtime.volume_pixi_bin(workspace).is_file())
+            self.assertEqual(run.call_count, 1)
+            self.assertTrue(any("sam3d-python-ok" in str(part) for part in run.call_args[0][0]))
 
     def test_patch_comfy_env_isolation_freezes_pixi_and_raises_timeout(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -232,6 +234,7 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (site / "subprocess.py").write_text(
+                "is_pixi = '.pixi' in str(self.python)\n"
                 'cmd = [\n    PIXI, "run", "--as-is",\n    "--manifest-path", str(manifest),\n]\n',
                 encoding="utf-8",
             )
@@ -240,28 +243,27 @@ class Sam3dRuntimeTests(unittest.TestCase):
             ipc = (site / "_ipc_shared.py").read_text(encoding="utf-8")
             worker = (site / "subprocess.py").read_text(encoding="utf-8")
             self.assertIn("SOCKET_ACCEPT_TIMEOUT = 600", ipc)
+            self.assertIn("is_pixi = False", worker)
             self.assertIn('PIXI, "run", "--as-is", "--frozen",', worker)
 
-    def test_warm_pixi_env_runs_frozen_feature(self):
+    def test_warm_pixi_env_runs_isolated_python(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workspace = root / "workspace"
-            env_root = sam3d_runtime.comfy_env_root(workspace)
-            _ready_pixi_python(workspace)
-            (env_root / "pixi.toml").write_text("[workspace]\n", encoding="utf-8")
-            pixi = _fake_pixi(sam3d_runtime.volume_pixi_bin(workspace))
+            python = _ready_pixi_python(workspace)
             calls: list[dict] = []
 
             def fake_run(cmd, **kwargs):
                 calls.append({"cmd": cmd, "cwd": kwargs.get("cwd")})
 
-            with patch.object(comfy_engine, "_run", fake_run):
+            with (
+                patch.dict(os.environ, {"PATH": os.environ.get("PATH", "")}, clear=False),
+                patch.object(comfy_engine, "_run", fake_run),
+            ):
                 sam3d_runtime.warm_pixi_env(workspace)
             self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0]["cmd"][0], str(pixi))
-            self.assertIn("--frozen", calls[0]["cmd"])
-            self.assertIn("sam3dobjects-nodes", calls[0]["cmd"])
-            self.assertEqual(calls[0]["cwd"], str(env_root))
+            self.assertEqual(calls[0]["cmd"][0], str(python))
+            self.assertTrue(any("sam3d-python-ok" in str(part) for part in calls[0]["cmd"]))
 
     def test_strips_geometrypack_and_runs_install_py(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -297,7 +299,7 @@ class Sam3dRuntimeTests(unittest.TestCase):
                 )
             toml = (custom / "comfy-env-root.toml").read_text(encoding="utf-8")
         self.assertTrue(changed)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0]["cmd"][0], "python3")
         self.assertTrue(str(calls[0]["cmd"][1]).endswith("install.py"))
         self.assertEqual(calls[0]["cwd"], str(custom))
@@ -305,6 +307,7 @@ class Sam3dRuntimeTests(unittest.TestCase):
             calls[0]["env"][sam3d_runtime.COMFY_ENV_ROOT_VAR],
             str(workspace / ".python" / "comfy-env"),
         )
+        self.assertTrue(any("sam3d-python-ok" in str(part) for part in calls[1]["cmd"]))
         self.assertNotIn("ComfyUI-GeometryPack", toml)
 
 

@@ -38,6 +38,7 @@ WORKER_SOCKET_TIMEOUT_SECONDS = 600
 _TIMEOUT_ASSIGN_RE = re.compile(r"^(SOCKET_ACCEPT_TIMEOUT\s*=\s*)\d+", re.M)
 _PIXI_RUN_AS_IS = 'PIXI, "run", "--as-is",'
 _PIXI_RUN_FROZEN = 'PIXI, "run", "--as-is", "--frozen",'
+_IS_PIXI_RE = re.compile(r"is_pixi = ['\"]\.pixi['\"] in str\(self\.python\)")
 _STRIPPED_NODE_REQS = """\
 # GeometryPack / Multiband are not in the object-generation graph.
 # install.py would clone them and pixi-build CGAL.
@@ -190,53 +191,53 @@ def patch_comfy_env_isolation(comfy_root: str | Path) -> bool:
         worker = site / "isolation" / "workers" / "subprocess.py"
         if worker.is_file():
             text = worker.read_text(encoding="utf-8")
-            if _PIXI_RUN_AS_IS in text and _PIXI_RUN_FROZEN not in text:
-                worker.write_text(
-                    text.replace(_PIXI_RUN_AS_IS, _PIXI_RUN_FROZEN, 1),
-                    encoding="utf-8",
-                )
+            updated = text
+            if _PIXI_RUN_AS_IS in updated and _PIXI_RUN_FROZEN not in updated:
+                updated = updated.replace(_PIXI_RUN_AS_IS, _PIXI_RUN_FROZEN, 1)
+            patched_pixi, n_pixi = _IS_PIXI_RE.subn("is_pixi = False", updated, count=1)
+            if n_pixi:
+                updated = patched_pixi
+                print("[SAM3D] isolation worker uses env python (skip pixi run)", flush=True)
+            if updated != text:
+                worker.write_text(updated, encoding="utf-8")
                 changed = True
-                print("[SAM3D] pixi run: added --frozen", flush=True)
     return changed
 
 
-def _pixi_feature_names(root: Path) -> list[str]:
-    names: list[str] = []
-    for python in sorted(root.glob(".pixi/envs/*/bin/python")):
-        names.append(python.parent.parent.name)
-    for python in sorted(root.glob("envs/*/.pixi/envs/default/bin/python")):
-        names.append(python.parents[4].name)
-    return names
+def _isolated_python_bins(root: Path) -> list[Path]:
+    return sorted(root.glob(".pixi/envs/*/bin/python")) + sorted(
+        root.glob("envs/*/.pixi/envs/default/bin/python")
+    )
+
+
+def apply_isolated_env(workspace: str | Path) -> Path | None:
+    """Export conda-style activation so the worker can skip ``pixi run``."""
+    pythons = _isolated_python_bins(comfy_env_root(workspace))
+    if not pythons:
+        return None
+    prefix = pythons[0].parent.parent
+    os.environ["CONDA_PREFIX"] = str(prefix)
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+    _prepend_path(prefix / "bin")
+    lib = prefix / "lib"
+    if lib.is_dir():
+        current = os.environ.get("LD_LIBRARY_PATH", "")
+        value = str(lib)
+        parts = current.split(os.pathsep) if current else []
+        if value not in parts:
+            os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([value, *parts]) if parts else value
+    print(f"[SAM3D] isolated env prefix {prefix}", flush=True)
+    return prefix
 
 
 def warm_pixi_env(workspace: str | Path) -> None:
-    """Run ``pixi run --frozen`` once so the isolation worker is not the first solve."""
-    root = comfy_env_root(workspace)
-    manifest = root / "pixi.toml"
-    pixi = volume_pixi_bin(workspace)
-    if not manifest.is_file() or not pixi.is_file():
-        return
-    names = _pixi_feature_names(root)
-    if not names:
-        return
+    """Start the isolated interpreter once so a missing python fails at boot."""
+    apply_isolated_env(workspace)
+    pythons = _isolated_python_bins(comfy_env_root(workspace))
     env = os.environ.copy()
-    env[COMFY_ENV_ROOT_VAR] = str(root)
-    for name in names:
-        cmd = [
-            str(pixi),
-            "run",
-            "--as-is",
-            "--frozen",
-            "--manifest-path",
-            str(manifest),
-            "-e",
-            name,
-            "python",
-            "-c",
-            "print('sam3d-pixi-ok')",
-        ]
-        print(f"[SAM3D] warming pixi env {name}", flush=True)
-        _ce()._run(cmd, env=env, cwd=str(root))
+    for python in pythons:
+        print(f"[SAM3D] warming isolated python {python}", flush=True)
+        _ce()._run([str(python), "-c", "print('sam3d-python-ok')"], env=env)
 
 
 def _strip_optional_node_reqs(node_dir: Path) -> bool:
