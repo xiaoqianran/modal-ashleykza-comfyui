@@ -12,6 +12,8 @@ C  modal deploy 上 GPU（CUDA 节点仍在 GPU 启动时装）
 
 默认 `hydrate` 仍是解析器只绑定 JSON 里已有的 URL / CNR，**不猜** HuggingFace 仓库。要走 Manager + CPU 探测用 `--action probe`。
 
+**探测不能保证下到模型和插件。** Manager 自己也做不到：`model-list.json` 只是一份有限目录（[上游 #2284](https://github.com/Comfy-Org/ComfyUI-Manager/issues/2284)），`cm-cli install-deps` 只装自定义节点、不下权重。按文件名去 HuggingFace / Civitai 搜索会下错同名文件，这里不做。能保证下载的只有锁里已经写死的 `url` / CNR，也就是现有 `hydrate` + GPU 启动装节点。`probe` 只是：一对一命中就补进锁并下载；命不中就列出 `unresolved` / `missing_nodes_unmapped`，等人手补。
+
 ## 三种方式
 
 === "Catalog"

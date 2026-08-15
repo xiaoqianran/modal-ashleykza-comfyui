@@ -90,7 +90,7 @@ python3 -m manager_catalog --workflow examples/你的.json
 modal run hydrate_modal.py --action probe --workflow examples/你的.json
 ```
 
-一对一命中才写入；两个 URL / 未知 `models/` 目录仍留 `unresolved`。不要为此再写一份 `queue_*.py`。
+一对一命中才写入；两个 URL / 未知 `models/` 目录仍留 `unresolved`。Manager 的模型表覆盖不全，探测**不能保证**下到所有权重。不要为此再写一份 `queue_*.py`。
 
 若 `unresolved` 条目已经带了 `url`、`reason` 为 `missing_category`，只差补 ComfyUI 目录名，再挪进 `models`。手修 `.lock.json` 后也可以 hydrate。已手修的 fully resolved 锁不会被 `probe` 覆盖。
 

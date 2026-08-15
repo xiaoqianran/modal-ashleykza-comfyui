@@ -437,8 +437,8 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ## 无法自动解决的情况
 
-- 工作流只有本地文件名，Manager `model-list.json` 里也没有唯一 URL
-- custom node 的 `class_type` 在 Manager 表里对应两个 GitHub 仓
+- 工作流只有本地文件名，Manager `model-list.json` 里也没有唯一 URL（这是常态；探测**不能保证**下到权重）
+- custom node 的 `class_type` 在 Manager 表里对应两个 GitHub 仓，或根本不在表里
 - 下载需要网页交互或自定义授权
 - 模型名由节点运行时动态计算
 - 工作流依赖的 ComfyUI 版本与当前 Image 不兼容
