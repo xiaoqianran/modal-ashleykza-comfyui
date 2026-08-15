@@ -19,7 +19,7 @@
 - workflow 模式需要本机 Chrome 或 Edge（`graphToPrompt`）。`mode=graph` 的 Z-Image / Z-Image-Turbo 不需要
 - 未签名，SmartScreen 可能提示「Windows 已保护你的电脑」，选「更多信息」→「仍要运行」
 
-密钥写在 `%LOCALAPPDATA%\ComfyStudio\runtime\app\.studio.env`，不会上传 Git。生成结束后默认停 GPU。
+密钥写在 `%LOCALAPPDATA%\ComfyStudio\runtime\app\.studio.env`，不会上传 Git。生成结束后默认停残留 GPU 容器（已部署的 App 留着）。
 
 发版：打 `studio-v*` 标签，或在 Actions 里手动跑 **Studio Windows** 并勾选 publish。
 
@@ -42,12 +42,12 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 1. 填 Modal token（或留空，沿用 `modal setup` 的 CLI 登录）和 `HF_TOKEN`，保存。
 2. 确认顶栏配方，默认是 **Z-Image**。
 3. **准备权重** → 按该配方的 `workflow` 跑 hydrate。
-4. **启动 GPU**：默认用配方里的测试卡。除 FLUX.2 / TRELLIS.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下。TRELLIS.2 效果依赖显卡，测试和正式都是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。
+4. **部署 GPU**：默认 `modal deploy`（第一次请求才起卡，空闲 5 秒缩到 0）。测试卡除 FLUX.2 / TRELLIS.2 外一律 **L40S**（不要用 T4）。FLUX.2 约 70GB，L40S 放不下。TRELLIS.2 效果依赖显卡，测试和正式都是 **RTX-PRO-6000**。正式出图在下拉里选 **RTX-PRO-6000**。不会静默升卡。只有改 GPU 端 Python 才设 `STUDIO_GPU_MODE=serve`。
 5. 也可以把已经在跑的 `*.modal.run` 贴进「Comfy 地址」。
 6. 文生图：提示词一行一条，调步数 / CFG / 尺寸 / 种子。图生配方：拖入图片（可多张，按张排队）。
-7. **生成结束后默认停止 GPU**。需要接着跑，勾选「任务结束后继续占着 GPU」。
+7. **生成结束后默认停残留 GPU 容器**（不 `modal app stop`，快照还在）。需要接着跑，勾选「任务结束后继续占着 GPU」。不要把 ComfyUI 页开着。
 
-关掉 Studio（Ctrl+C）也会尝试停掉它拉起的 serve。
+关掉 Studio（Ctrl+C）也会尝试停残留容器，不会卸掉已部署的 App。
 
 ## 契约（经得起拷问的模板）
 

@@ -54,8 +54,14 @@ async function pollJob(jobId, logNode) {
 
 function setPill(runtime) {
   const pill = $("status-pill");
-  if (runtime.serve_running || runtime.base_url) {
-    pill.textContent = runtime.serve_running ? "GPU 运行中" : "已有地址";
+  if (runtime.serve_running) {
+    pill.textContent = "GPU 运行中";
+    pill.dataset.state = "ready";
+  } else if (runtime.deployed || (runtime.gpu_mode === "deploy" && runtime.base_url)) {
+    pill.textContent = "已部署";
+    pill.dataset.state = "ready";
+  } else if (runtime.base_url) {
+    pill.textContent = "已有地址";
     pill.dataset.state = "ready";
   } else {
     pill.textContent = "未连接";

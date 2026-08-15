@@ -10,7 +10,7 @@
 python -m pip install -U modal
 modal secret create comfyui-creds --from-dotenv .env --force
 modal run hydrate_modal.py --catalog z-image
-modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 或按工作流 JSON / 旧 pack：
@@ -18,7 +18,7 @@ modal serve comfyui_modal.py
 ```bash
 modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
-modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 ## 约定
@@ -32,7 +32,7 @@ modal serve comfyui_modal.py
 | 模型 Volume | `comfyui-ashleykza-models` → `/mnt/comfy-storage` |
 | Secret | `comfyui-creds` |
 | GPU | L40S（RTX-PRO-6000 必须显式 `MODAL_GPU`；不要用 T4） |
-| 空闲缩容 | 5 秒；`modal serve` / 开着的 UI 会阻止缩容 |
+| 空闲缩容 | 5 秒；`modal serve` / 开着的 UI 会阻止缩容。冒烟用 `modal deploy` |
 
 ## 阅读顺序
 

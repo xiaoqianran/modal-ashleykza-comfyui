@@ -85,11 +85,11 @@ Modal 按 Image **层**缓存。Ashley 基础镜像 + apt + `typing_extensions` 
 
 - 默认 `scaledown_window=5s`，并且 `min_containers=0`、`buffer_containers=0`。容器空闲后应回到 0，按秒计费。
 - **这不是保活开关。** 下面任何一件事都会让 5 秒缩容根本不会发生，GPU 会一直计费：
-  - `modal serve` 进程还在跑，浏览器开着 ComfyUI（WebSocket）
+  - leftover `modal serve` 还在本机跑（默认冒烟用 `modal deploy`，不要 serve）
+  - 浏览器开着 ComfyUI（WebSocket）
   - 脚本还在轮询 `/system_stats` 或 `/history`
   - `@modal.enter` 还在启动（编译 CUDA 扩展时算启动，不是空闲）
-  - 测完没人 `Ctrl+C` / Studio 没点停止
-- Studio 生成结束后**默认立刻停掉 serve 并 `modal container stop` 残留容器**。要接着占卡，勾选「继续占着 GPU」。
+- Studio 生成结束后**默认 `modal container stop` 残留容器**，不 `modal app stop`（快照还在）。要接着占卡，勾选「继续占着 GPU」。
 - 默认 GPU 是 **L40S**，不要用 T4。不要把 `RTX-PRO-6000` 写进 fallback 列表；Modal 会在 L40S 没货时静默换贵卡。
 - 成片写在 Volume `comfyui-ashleykza-workspace` 的 `/output`。GPU 在 `output/` 变化时和容器退出时 `commit()`，所以缩容后文件还在。
 - 取成片用 CPU，不要为了下视频把贵卡留着：

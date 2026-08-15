@@ -2,9 +2,9 @@
 
 ## GPU 跑完还不释放 / 一直在计费
 
-`scaledown_window=5` **已经写在 Cls 上**，但这只在容器真正空闲时生效。常见原因：
+默认冒烟是 **`modal deploy`**：空闲 5 秒缩到 0。不要 `modal app stop`（会丢掉快照）。`scaledown_window=5` **已经写在 Cls 上**，但这只在容器真正空闲时生效。常见原因：
 
-1. `modal serve` 还在本机跑（SIGINT 有时还留下容器）
+1. leftover `modal serve` 还在本机跑（SIGINT 有时还留下容器）
 2. 浏览器开着 ComfyUI，WebSocket 算活动
 3. 脚本还在轮询 `/system_stats`
 4. Pixal3D 等还在 `@modal.enter` 里编译，这是启动不是空闲
@@ -12,13 +12,13 @@
 处理：
 
 ```bash
-# 停掉本机 serve
+# 若误开了 serve，先停掉本机进程
 pkill -INT -f "modal serve comfyui_modal.py" || true
 modal container list
 modal container stop <container-id>   # 有残留就立刻杀
 ```
 
-Studio 生成结束后会默认做这件事。测试请用 **L40S**（`MODAL_GPU` 默认就是 L40S）。不要用 T4。不要把 `L40S,RTX-PRO-6000` 写进 fallback：Modal 会在 L40S 没货时改开贵卡。
+Studio 生成结束后会默认停残留容器，不会卸掉已部署的 App。测试请用 **L40S**（`MODAL_GPU` 默认就是 L40S）。不要用 T4。不要把 `L40S,RTX-PRO-6000` 写进 fallback：Modal 会在 L40S 没货时改开贵卡。
 
 ## App has no function named 'ui'
 
@@ -34,7 +34,7 @@ Studio 生成结束后会默认做这件事。测试请用 **L40S**（`MODAL_GPU
 4. `modal run hydrate_modal.py --action resolve --workflow <file>` 查看 `unresolved`
 5. 补 URL 后重新 `hydrate`
 
-GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再开新的 GPU 容器；已运行的容器在缩容后会 `Volume.reload()` 读到新的 `launch.json`。`modal serve` 没有持久快照，换工作流后重启 serve 即可。`modal deploy` 的 memory snapshot 只冻结 ComfyUI 进程；`snap=False` 仍会读最新 Volume。
+GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再发下一次 HTTP；已运行的容器在缩容后会 `Volume.reload()` 读到新的 `launch.json`。`modal serve` 没有持久快照，只有改 GPU 端 `.py` 才用。`modal deploy` 的 memory snapshot 只冻结 ComfyUI 进程；`snap=False` 仍会读最新 Volume。
 
 ## 模型或成片套了两层目录
 
@@ -66,7 +66,7 @@ modal run hydrate_modal.py --action outputs
 
 ## 换工作流每次都在重建 Image
 
-锁内 CNR 不能写进 Image 的 `run_commands` / `add_local_file`。当前实现里 hydrate 只更新 Volume `.state/launch.json`，`modal serve comfyui_modal.py` 应复用同一 Image。若日志里仍在 `Building image` 且层哈希在变，检查是否带了 `COMFY_INSTALL_NODES=1` 或 `COMFY_BASE_NODES=1`。
+锁内 CNR 不能写进 Image 的 `run_commands` / `add_local_file`。当前实现里 hydrate 只更新 Volume `.state/launch.json`，`modal deploy comfyui_modal.py` 应复用同一 Image。若日志里仍在 `Building image` 且层哈希在变，检查是否带了 `COMFY_INSTALL_NODES=1` 或 `COMFY_BASE_NODES=1`。
 
 ## Secret 找不到
 

@@ -5,7 +5,7 @@ active lock to Volume ``.state/launch.json``; GPU start installs lock CNR
 nodes into ``/workspace/custom_nodes`` (skip if already present).
 
     modal run hydrate_modal.py --workflow examples/z-image-base.json
-    modal serve comfyui_modal.py
+    MODAL_GPU=L40S modal deploy comfyui_modal.py
 
 The 130 GitHub base clones and profile extra packs stay off unless
 ``COMFY_BASE_NODES=1`` / ``COMFY_INSTALL_NODES=1`` (those do change the Image).
@@ -334,7 +334,8 @@ modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 
 # 2. GPU UI (same Image for every workflow; lock CNR on workspace Volume)
-MODAL_GPU=L40S modal serve comfyui_modal.py
 MODAL_GPU=L40S modal deploy comfyui_modal.py
+# live-edit GPU-imported .py only:
+# MODAL_GPU=L40S modal serve comfyui_modal.py
 """.strip()
     )

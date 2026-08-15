@@ -135,8 +135,8 @@ async (workflow) => {
 }
 """
 IDLE_REMINDER = (
-    "任务已结束。scaledown 5s 挡不住 leftover modal serve / 开着的 ComfyUI。"
-    "请立刻停掉 serve，不要把贵卡挂着。"
+    "任务已结束。deploy 空闲 5s 会缩到 0； leftover modal serve / 开着的 ComfyUI 页仍会挡缩容。"
+    "不要把贵卡挂着。"
 )
 
 
