@@ -181,11 +181,15 @@ Z-Image 与 Z-Image-Turbo 必须是 `graph`：当前 Image 没有官方模板里
 
 `workflow` / `lock` 必须是仓库内相对路径，不能 `..`。
 
-CLI 批量出图仍可用（同一份 Z-Image 契约）：
+CLI 批量出图仍可用（同一份 Z-Image 契约）。在仓库根目录：
 
 ```bash
+python3 -m workflow_queue --catalog z-image-turbo --base-url https://<your>.modal.run \
+  --prompt "karst peaks in morning fog" --seed 1017
 python3 scripts/run_z_image_prompts.py --base-url https://<your>.modal.run
 ```
+
+`python3 scripts/*.py` 会把脚本目录放进 `sys.path[0]`，不是仓库根；这些脚本会自己插入仓库根。不要把可执行 runner 丢进 `artifacts/` 再靠 `PYTHONPATH=/workspace`。
 
 图生配方在无 UI 时走通用适配：
 

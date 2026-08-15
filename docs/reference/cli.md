@@ -70,16 +70,22 @@ python3 -m benchmarks --write
 
 ## 通用排队
 
+在**仓库根目录**跑 `python -m`。`-m` 把当前工作目录放进 `sys.path`，所以能 `import catalog`。不要 `python3 artifacts/.../run.py`，也不要靠 `PYTHONPATH=/workspace` 补救——那是脚本不在包根时的症状，不是环境缺变量。
+
 ```bash
 python3 -m workflow_queue --inspect --workflow examples/z-image-base.json
+python3 -m workflow_queue --inspect --catalog z-image-turbo
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/z-image-base.json --prompt "a celadon teapot"
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --catalog z-image-turbo --prompt "karst peaks in morning fog" \
+  --seed 1017 --width 1280 --height 768 --out artifacts/z-image-turbo
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/triposplat-image-to-gaussian-splat.json \
   --enable-glb --images photo.png --out artifacts/triposplat
 ```
 
-把官方 UI JSON 交给正在跑的 ComfyUI 做 `graphToPrompt()`，再 `POST /prompt`。TripoSplat 官方模板把 mesh/GLB 设成 bypass，加 `--enable-glb`。见 [工作流与锁文件](../guide/workflows.md)。`scripts/queue_ltx25.py` 仍要保留（Ashley 0.32.0 缺官方节点）。
+`--catalog` 读 `catalog/<id>.json`：`mode=graph`（Z-Image / Turbo）走内嵌 API prompt 的 `$placeholder`；其余配方仍把官方 UI JSON 交给正在跑的 ComfyUI 做 `graphToPrompt()`，再 `POST /prompt`。TripoSplat 官方模板把 mesh/GLB 设成 bypass，加 `--enable-glb`。见 [工作流与锁文件](../guide/workflows.md)。`scripts/queue_ltx25.py` 仍要保留（Ashley 0.32.0 缺官方节点）。文件脚本自己把仓库根插进 `sys.path`（与 LTX 脚本相同），不要 export `PYTHONPATH`。
 
 ## 官方模板分析
 

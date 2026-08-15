@@ -1115,15 +1115,67 @@ def run_jobs(
     return records
 
 
+def catalog_bind_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    overrides: dict[str, Any] = {}
+    for key in ("prompt", "negative", "seed", "width", "height", "steps", "filename_prefix"):
+        value = getattr(args, key, None)
+        if value is not None and value != "":
+            overrides[key] = value
+    return overrides
+
+
+def resolve_queue_payload(
+    *,
+    catalog: str = "",
+    workflow: str = "",
+    inspect: bool = False,
+    overrides: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], bool]:
+    """Load a UI JSON, API prompt, or Studio catalog graph.
+
+    Returns ``(payload, already_bound)``. Graph catalogs are bound here so
+    ``$prompt`` / ``$seed`` never reach ``/prompt``. Call from repo root with
+    ``python -m workflow_queue`` — do not ``PYTHONPATH=`` around a file under
+    ``artifacts/``.
+    """
+    catalog_id = catalog.strip()
+    workflow_file = workflow.strip()
+    if catalog_id and workflow_file:
+        raise SystemExit("use --catalog or --workflow, not both")
+    if not catalog_id and not workflow_file:
+        raise SystemExit("need --catalog or --workflow")
+    if workflow_file:
+        return json.loads(Path(workflow_file).read_text(encoding="utf-8")), False
+    from catalog import bind_graph, catalog_mode, load_catalog, workflow_path
+
+    recipe = load_catalog(catalog_id)
+    binds = dict(overrides or {})
+    if catalog_mode(recipe) == "graph":
+        if inspect and not binds:
+            graph = recipe.get("graph")
+            if not isinstance(graph, dict):
+                raise ValueError(f"catalog {catalog_id!r} has no prompt graph")
+            return graph, False
+        graph, _values = bind_graph(recipe, binds or None)
+        return graph, True
+    return json.loads(workflow_path(recipe).read_text(encoding="utf-8")), False
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Convert any ComfyUI UI workflow via graphToPrompt and queue it.",
     )
-    parser.add_argument("--workflow", required=True, help="UI JSON or API prompt JSON")
+    parser.add_argument("--catalog", default="", help="Studio catalog id, e.g. z-image-turbo")
+    parser.add_argument("--workflow", default="", help="UI JSON or API prompt JSON")
     parser.add_argument("--base-url", default="", help="running ComfyUI *.modal.run")
     parser.add_argument("--images", nargs="*", default=[], help="bind LoadImage, one job each")
     parser.add_argument("--prompt", default=None)
     parser.add_argument("--negative", default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--width", type=int, default=None)
+    parser.add_argument("--height", type=int, default=None)
+    parser.add_argument("--steps", type=int, default=None)
+    parser.add_argument("--filename-prefix", default=None, dest="filename_prefix")
     parser.add_argument("--out", default="artifacts/workflow")
     parser.add_argument("--client-id", default="workflow-queue")
     parser.add_argument("--ready-timeout", type=int, default=900)
@@ -1139,20 +1191,30 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--no-glb", action="store_true")
     args = parser.parse_args(argv)
-    payload = json.loads(Path(args.workflow).read_text(encoding="utf-8"))
+    payload, already_bound = resolve_queue_payload(
+        catalog=args.catalog,
+        workflow=args.workflow,
+        inspect=args.inspect,
+        overrides=catalog_bind_overrides(args),
+    )
     if args.inspect:
         print(json.dumps(inspect_workflow(payload), indent=2, ensure_ascii=False))
         return
     if not args.base_url:
         raise SystemExit("queueing needs --base-url (omit it only with --inspect)")
+    client_id = args.client_id
+    if args.catalog.strip() and client_id == "workflow-queue":
+        from catalog import load_catalog
+
+        client_id = str(load_catalog(args.catalog.strip()).get("client_id") or client_id)
     run_jobs(
         base=args.base_url.rstrip("/"),
         workflow=payload,
         out=Path(args.out),
         images=[Path(item) for item in args.images],
-        prompt=args.prompt,
-        negative=args.negative,
-        client_id=args.client_id,
+        prompt=None if already_bound else args.prompt,
+        negative=None if already_bound else args.negative,
+        client_id=client_id,
         ready_timeout=args.ready_timeout,
         enable_glb=bool(args.enable_glb) and not args.no_glb,
     )
