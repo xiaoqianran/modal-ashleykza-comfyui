@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import gallery_hub
 from gallery_hub import bucket_for_kind, build_index, collection_dir, slug
 from gallery_hub.build_pages import build_pages
 from gallery_hub.report import report
@@ -28,6 +29,7 @@ class GalleryHubTests(unittest.TestCase):
         self.assertEqual(bucket_for_kind("i23d"), "mesh3d")
         with self.assertRaises(ValueError):
             bucket_for_kind("other")
+        self.assertFalse(hasattr(gallery_hub, "media_kind_from_name"))
 
     def test_slug_and_paths(self):
         self.assertEqual(slug("FLUX.2 Dev"), "flux.2-dev")

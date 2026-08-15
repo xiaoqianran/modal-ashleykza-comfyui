@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any
 
 from catalog import load_catalog, workflow_path
+from modal_config import ModalSettings
 from studio.keys import ROOT, load_keys, subprocess_env
 
 STATE_DIR = ROOT / ".studio"
 STATE_PATH = STATE_DIR / "state.json"
 CREDS_ENV = STATE_DIR / "comfyui-creds.env"
 URL_RE = re.compile(r"https://[a-z0-9.-]+\.modal\.run", re.I)
-GPU_APP_NAME = "comfyui-ashleykza-cu128"
 GPU_MODE_ENV = "STUDIO_GPU_MODE"
 DEFAULT_GPU_MODE = "deploy"
 DEPLOY_STARTUP_TIMEOUT = "3600"
@@ -86,11 +86,19 @@ def gpu_mode() -> str:
     return "serve" if raw == "serve" else "deploy"
 
 
+def gpu_settings() -> ModalSettings:
+    return ModalSettings.from_env(os.environ)
+
+
+def gpu_app_name() -> str:
+    return gpu_settings().app_name
+
+
 def serve_url(workspace: str, *, dev: bool | None = None) -> str:
     if dev is None:
         dev = gpu_mode() == "serve"
     suffix = "-dev" if dev else ""
-    return f"https://{workspace}--comfyui-ashleykza-cu128-ui-ui{suffix}.modal.run"
+    return f"https://{workspace}--{gpu_app_name()}-ui-ui{suffix}.modal.run"
 
 
 def _first_app_url(text: str, *, prefer_prod: bool = True) -> str | None:
@@ -207,7 +215,7 @@ def is_billable_gpu_app(name: str) -> bool:
     text = name.lower()
     if "hydrate" in text:
         return False
-    return GPU_APP_NAME in text
+    return gpu_app_name().lower() in text
 
 
 def stop_gpu_containers(log: Any | None = None) -> list[str]:

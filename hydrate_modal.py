@@ -23,6 +23,7 @@ import modal
 from comfy_engine import sync_profile_models, sync_workflow_models
 from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
+from shipped_modules import HYDRATE_PYTHON_SOURCES
 from storage import list_output_files, repair_storage_layout, repair_workspace_layout
 from workflow_resolver import dump_workflow_lock, select_workflow_lock, write_workflow_lock
 
@@ -48,17 +49,7 @@ sync_image = (
     .apt_install("aria2", "ca-certificates")
     .uv_pip_install("huggingface_hub[hf_xet]==1.27.0")
     .env({"HF_XET_HIGH_PERFORMANCE": "1"})
-    .add_local_python_source(
-        "recipes",
-        "workflow_resolver",
-        "comfy_engine",
-        "comfy_env_contract",
-        "sparse_3d_runtime",
-        "uv_runtime",
-        "sam3d_runtime",
-        "modal_config",
-        "storage",
-    )
+    .add_local_python_source(*HYDRATE_PYTHON_SOURCES)
 )
 
 SYNC_RETRIES = modal.Retries(

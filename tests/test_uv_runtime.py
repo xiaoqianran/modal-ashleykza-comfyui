@@ -6,16 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import uv_runtime
+from shipped_modules import GPU_PYTHON_SOURCES
 
-CONTAINER_FILES = (
-    "base_nodes.py",
-    "comfy_engine.py",
+CONTAINER_FILES = tuple(f"{name}.py" for name in GPU_PYTHON_SOURCES) + (
     "comfyui_modal.py",
     "hydrate_modal.py",
-    "sparse_3d_runtime.py",
-    "uv_runtime.py",
-    "sam3d_runtime.py",
-    "comfy_env_contract.py",
 )
 
 
@@ -106,6 +101,7 @@ class UvRuntimeTests(unittest.TestCase):
             uninstall,
         )
         self.assertNotIn("-m pip", install + upgrade + uninstall)
+        self.assertFalse(hasattr(uv_runtime, "pip_uninstall_cmd"))
 
     def test_install_uv_tarball_copies_uv_and_uvx(self):
         with tempfile.TemporaryDirectory() as directory:

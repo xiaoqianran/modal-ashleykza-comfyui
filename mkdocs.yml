@@ -83,10 +83,14 @@ extra:
 exclude_docs: |
   gallery/_generated.md
   guide/_generated_studio_recipes.md
+  guide/_generated_workflow_gates.md
+  guide/_generated_legacy_profiles.md
 
 not_in_nav: |
   gallery/_generated.md
   guide/_generated_studio_recipes.md
+  guide/_generated_workflow_gates.md
+  guide/_generated_legacy_profiles.md
 
 validation:
   omitted_files: warn

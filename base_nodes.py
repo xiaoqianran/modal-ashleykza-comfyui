@@ -500,23 +500,6 @@ def build_base_nodes_commands(
     ]
 
 
-def build_base_nodes_command(
-    *,
-    comfy_root: str = "/ComfyUI",
-    python_bin: str = "/ComfyUI/venv/bin/python3",
-    installer_path: str = INSTALLER_REMOTE_PATH,
-) -> str:
-    """Join Modal-safe steps for tests / inspection (prefer ``build_base_nodes_commands``)."""
-
-    return "\n".join(
-        build_base_nodes_commands(
-            comfy_root=comfy_root,
-            python_bin=python_bin,
-            installer_path=installer_path,
-        )
-    )
-
-
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Install pinned CNB base custom nodes.")
     parser.add_argument("--comfy-root", default="/ComfyUI")

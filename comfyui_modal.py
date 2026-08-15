@@ -29,7 +29,8 @@ from comfy_engine import (
     stop_comfyui,
 )
 from modal_config import ModalSettings, idle_release_kwargs
-from recipes import get_profile
+from recipes import profile_node_packs
+from shipped_modules import GPU_PYTHON_SOURCES
 from storage import workspace_dir
 from uv_runtime import image_install_uv_command, image_uv_pip_command, image_uv_uninstall_command
 
@@ -42,7 +43,6 @@ STORAGE_ROOT = Path(SETTINGS.storage_root)
 COMFY_PORT = 3001
 
 PROFILE_NAME = SETTINGS.profile_name
-PROFILE = get_profile(PROFILE_NAME)
 FORCE_LATEST = SETTINGS.latest_dependencies
 BASE_NODES_ENABLED = SETTINGS.base_nodes_enabled
 INSTALL_LOCK_NODES = SETTINGS.install_lock_nodes
@@ -73,7 +73,7 @@ APP_VOLUMES = {
 
 # Profile extras stay opt-in Image layers. Workflow-lock CNR is Volume-backed.
 node_commands = (
-    build_node_commands(PROFILE.node_packs) if INSTALL_NODES else ()
+    build_node_commands(profile_node_packs(PROFILE_NAME)) if INSTALL_NODES else ()
 )
 
 runtime_image = (
@@ -162,18 +162,7 @@ runtime_image = (
         }
     )
     # Modal 1.x no longer automounts arbitrary imported local modules.
-    .add_local_python_source(
-        "base_nodes",
-        "recipes",
-        "workflow_resolver",
-        "comfy_engine",
-        "comfy_env_contract",
-        "sparse_3d_runtime",
-        "uv_runtime",
-        "sam3d_runtime",
-        "modal_config",
-        "storage",
-    )
+    .add_local_python_source(*GPU_PYTHON_SOURCES)
 )
 
 

@@ -17,11 +17,18 @@ from pathlib import Path
 from typing import Any
 
 from catalog import ROOT, list_catalogs, load_catalog
-from catalog.gates import render_studio_recipe_table
+from catalog.gates import (
+    render_studio_recipe_table,
+    render_workflow_exception_table,
+    write_workflow_exception_docs,
+)
+from recipes import render_legacy_profiles_table, write_legacy_profiles_docs
 
 OVERLAY_PATH = ROOT / "benchmarks" / "models.json"
 DOCS_PATH = ROOT / "docs" / "guide" / "models.md"
 STUDIO_SNIPPET_PATH = ROOT / "docs" / "guide" / "_generated_studio_recipes.md"
+WORKFLOW_GATES_PATH = ROOT / "docs" / "guide" / "_generated_workflow_gates.md"
+LEGACY_PROFILES_PATH = ROOT / "docs" / "guide" / "_generated_legacy_profiles.md"
 SCHEMA = 1
 SMOKE_STATUSES = {"recorded", "pending", "hydrated"}
 KIND_SECTIONS = (
@@ -301,6 +308,8 @@ def write_docs(path: Path | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_models_markdown(), encoding="utf-8")
     write_studio_snippet()
+    write_workflow_exception_docs()
+    write_legacy_profiles_docs()
     return target
 
 
@@ -309,7 +318,16 @@ def docs_are_current() -> bool:
     snippet = (
         STUDIO_SNIPPET_PATH.read_text(encoding="utf-8") if STUDIO_SNIPPET_PATH.is_file() else ""
     )
-    return models == render_models_markdown() and snippet == render_studio_snippet()
+    gates = WORKFLOW_GATES_PATH.read_text(encoding="utf-8") if WORKFLOW_GATES_PATH.is_file() else ""
+    profiles = (
+        LEGACY_PROFILES_PATH.read_text(encoding="utf-8") if LEGACY_PROFILES_PATH.is_file() else ""
+    )
+    return (
+        models == render_models_markdown()
+        and snippet == render_studio_snippet()
+        and gates == render_workflow_exception_table()
+        and profiles == render_legacy_profiles_table()
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -322,6 +340,8 @@ def main(argv: list[str] | None = None) -> int:
         write_docs()
         print(f"wrote {DOCS_PATH}", flush=True)
         print(f"wrote {STUDIO_SNIPPET_PATH}", flush=True)
+        print(f"wrote {WORKFLOW_GATES_PATH}", flush=True)
+        print(f"wrote {LEGACY_PROFILES_PATH}", flush=True)
         return 0
     if args.check:
         if not docs_are_current():

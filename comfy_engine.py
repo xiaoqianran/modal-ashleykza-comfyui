@@ -1,32 +1,90 @@
+"""GPU launch facade.
+
+Download / CNR / process helpers live in ``asset_sync``, ``node_install``,
+and ``engine_util``. This module re-exports them so tests and runtime hooks
+can keep patching ``comfy_engine.ensure_*`` / ``_run``.
+"""
+
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shlex
 import shutil
 import subprocess
-import tarfile
-import threading
+import sys
 import time
 import urllib.error
 import urllib.request
-import zipfile
-from collections.abc import Callable, Iterable, Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from comfy_env_contract import (
-    SITE_MARK as COMFY_ENV_SITE_MARK,
+from asset_sync import (  # noqa: F401
+    LAUNCH_STATE_FILE,
+    LAUNCH_STATE_SCHEMA,
+    LOCK_SCHEMA,
+    WORKFLOW_LOCK_STATE_FILE,
+    _asset_lock_entry,
+    _download_with_aria2,
+    _download_with_hf_cli,
+    _extract_archive,
+    _hf_auth_header,
+    _hydrate_assets_parallel,
+    _hydrate_one_asset,
+    _is_asset_current,
+    _load_lock,
+    _lock_path,
+    _parse_hf_url,
+    _promote_legacy_if_needed,
+    _safe_member_path,
+    _save_lock,
+    _sha256,
+    _with_civitai_token,
+    _write_json,
+    asset_filename,
+    download_asset,
+    launch_fingerprint,
+    load_launch_state,
+    normalize_huggingface_url,
+    output_manifest,
+    persist_launch_state,
+    redact_url,
+    sync_profile_models,
+    sync_workflow_models,
+    verify_workflow_models,
 )
-from comfy_env_contract import (
-    SKIP_PACKAGES as NODE_REQS_SKIP_PACKAGES,
+from engine_util import (  # noqa: F401
+    _comfy_python,
+    _module_available,
+    _module_import_error,
+    _python_text,
+    _quote,
+    _run,
+    _site_packages,
 )
-from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
-from sam3d_runtime import (
-    _lock_has_sam3d,
+from node_install import (  # noqa: F401
+    NODE_REQS_PTH_NAME,
+    NODE_REQS_SITE_MARK,
+    NODE_REQS_SKIP_PACKAGES,
+    _cnr_marker_path,
+    _dir_names,
+    _github_repo_dir_name,
+    _hash_requirements,
+    _install_github_node,
+    _install_node_requirements,
+    _link_node_reqs_site,
+    _node_req_marker,
+    _registry_install_one,
+    _remember_node_reqs,
+    build_node_commands,
+    build_registry_node_commands,
+    ensure_node_reqs_site,
+    install_registry_nodes,
+    node_reqs_volume_path,
+)
+from recipes import MODEL_PACKS, get_profile, profile_comfy_args  # noqa: F401
+from runtime_hooks import append_site_marks, matched_hooks, run_prepare, run_runtimes, run_wheels
+from sam3d_runtime import (  # noqa: F401
     apply_comfy_env_root,
     ensure_sam3d_runtime,
 )
@@ -65,245 +123,12 @@ from sparse_3d_runtime import (  # noqa: F401
 )
 from storage import (
     DEFAULT_STORAGE_ROOT,
-    canonical_relpath,
-    download_target,
     ensure_storage_layout,
     ensure_workspace_layout,
     extra_model_paths_yaml,
-    legacy_model_path,
     repair_storage_layout,
     repair_workspace_layout,
-    resolve_model_file,
-    storage_model_path,
 )
-from uv_runtime import pip_install_cmd, shell_resolve_uv
-from workflow_resolver import validate_workflow_lock
-
-LOCK_SCHEMA = 1
-LAUNCH_STATE_SCHEMA = 1
-LAUNCH_STATE_FILE = "launch.json"
-WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
-# Ephemeral Image venv dies on scaledown. Persist CNR/GitHub requirements.txt
-# on the workspace Volume and point site-packages at them with a venv-local .pth.
-NODE_REQS_SITE_MARK = "node-reqs-site"
-NODE_REQS_PTH_NAME = "comfy_node_reqs.pth"
-# Host isolation library. Pin and layout live in comfy_env_contract.
-# Do not let node-reqs overwrite the pin with an unpinned comfy-env.
-
-
-def _quote(value: str | Path) -> str:
-    return shlex.quote(str(value))
-
-
-def _run(
-    cmd: list[str],
-    *,
-    cwd: Path | None = None,
-    env: dict[str, str] | None = None,
-    display_cmd: list[str] | None = None,
-) -> None:
-    printable = " ".join(_quote(part) for part in (display_cmd or cmd))
-    print(f"$ {printable}", flush=True)
-    subprocess.run(cmd, cwd=cwd, env=env, check=True)
-
-
-def normalize_huggingface_url(url: str) -> str:
-    parsed = urlparse(url)
-    if "huggingface.co" in parsed.netloc and "/blob/" in parsed.path:
-        parsed = parsed._replace(path=parsed.path.replace("/blob/", "/resolve/"))
-    return urlunparse(parsed)
-
-
-def redact_url(url: str) -> str:
-    parsed = urlparse(url)
-    query = parse_qs(parsed.query, keep_blank_values=True)
-    for key in tuple(query):
-        if key.lower() in {
-            "access_token",
-            "api_key",
-            "apikey",
-            "auth",
-            "authorization",
-            "key",
-            "token",
-        }:
-            query[key] = ["***"]
-    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
-
-
-def _with_civitai_token(url: str) -> str:
-    token = os.environ.get("CIVITAI_TOKEN", "").strip()
-    if not token or "civitai.com" not in url:
-        return url
-    parsed = urlparse(url)
-    query = parse_qs(parsed.query, keep_blank_values=True)
-    query.setdefault("token", [token])
-    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
-
-
-def asset_filename(asset: ModelAsset) -> str:
-    if asset.filename:
-        return asset.filename
-    parsed = urlparse(normalize_huggingface_url(asset.url))
-    name = Path(parsed.path).name
-    return name or "download"
-
-
-def _sha256(path: Path, block_size: int = 8 * 1024 * 1024) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        while chunk := f.read(block_size):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _safe_member_path(base: Path, name: str) -> Path:
-    target = (base / name).resolve()
-    base = base.resolve()
-    if os.path.commonpath([str(base), str(target)]) != str(base):
-        raise RuntimeError(f"Unsafe archive member path: {name}")
-    return target
-
-
-def _extract_archive(path: Path) -> None:
-    lower = path.name.lower()
-    target_dir = path.parent
-
-    if lower.endswith(".zip"):
-        with zipfile.ZipFile(path) as archive:
-            for item in archive.infolist():
-                _safe_member_path(target_dir, item.filename)
-                unix_mode = item.external_attr >> 16
-                if unix_mode and (unix_mode & 0o170000) == 0o120000:
-                    raise RuntimeError(f"Archive symlinks are not allowed: {item.filename}")
-            archive.extractall(target_dir)
-        path.unlink()
-        return
-
-    tar_suffixes = (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz")
-    if lower.endswith(tar_suffixes):
-        with tarfile.open(path, "r:*") as archive:
-            for item in archive.getmembers():
-                _safe_member_path(target_dir, item.name)
-            archive.extractall(target_dir, filter="data")
-        path.unlink()
-
-
-def _lock_path(state_dir: Path) -> Path:
-    return state_dir / "comfy.lock.json"
-
-
-def _load_lock(state_dir: Path) -> dict:
-    lock_path = _lock_path(state_dir)
-    if not lock_path.exists():
-        return {"schema": LOCK_SCHEMA, "assets": {}}
-    try:
-        data = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {"schema": LOCK_SCHEMA, "assets": {}}
-    if data.get("schema") != LOCK_SCHEMA:
-        return {"schema": LOCK_SCHEMA, "assets": {}}
-    data.setdefault("assets", {})
-    return data
-
-
-def _save_lock(state_dir: Path, lock: dict) -> None:
-    state_dir.mkdir(parents=True, exist_ok=True)
-    path = _lock_path(state_dir)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    tmp.replace(path)
-
-
-def persist_launch_state(
-    storage_root: str | Path,
-    *,
-    mode: str,
-    profile: str = "base",
-    workflow: str = "",
-    lock_source: str = "",
-    install_lock_nodes: bool = True,
-    workflow_lock: Mapping[str, Any] | None = None,
-) -> dict:
-    """Write the active workflow/profile onto the models Volume.
-
-    GPU start reads this instead of baking the lock into the Image, so every
-    workflow shares the same cached Image layers.
-    """
-    storage_root = ensure_storage_layout(storage_root)
-    state_dir = storage_root / ".state"
-    lock_payload = dict(workflow_lock) if workflow_lock is not None else None
-    if lock_payload is not None:
-        validate_workflow_lock(lock_payload, require_resolved=True)
-        _write_json(state_dir / WORKFLOW_LOCK_STATE_FILE, lock_payload)
-    else:
-        stale = state_dir / WORKFLOW_LOCK_STATE_FILE
-        if stale.exists():
-            stale.unlink()
-
-    payload = {
-        "schema": LAUNCH_STATE_SCHEMA,
-        "mode": mode,
-        "profile": profile or "base",
-        "workflow": workflow,
-        "lock_source": lock_source,
-        "install_lock_nodes": bool(install_lock_nodes),
-        "workflow_lock": lock_payload,
-    }
-    _write_json(state_dir / LAUNCH_STATE_FILE, payload)
-    return payload
-
-
-def load_launch_state(storage_root: str | Path) -> dict | None:
-    path = Path(storage_root) / ".state" / LAUNCH_STATE_FILE
-    if not path.is_file():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    return data
-
-
-def launch_fingerprint(
-    launch: Mapping[str, Any] | None,
-    *,
-    profile_name: str,
-    install_lock_nodes: bool,
-) -> str:
-    """Identity of Volume launch state that requires a ComfyUI process restart.
-
-    Model files can appear after ``Volume.reload()`` without restarting.
-    Custom nodes and profile ``comfy_args`` cannot.
-    """
-    payload = launch or {}
-    lock = payload.get("workflow_lock") if isinstance(payload.get("workflow_lock"), Mapping) else {}
-    nodes = []
-    for node in lock.get("custom_nodes") or ():
-        if isinstance(node, Mapping) and node.get("id"):
-            nodes.append(f"{node.get('id')}@{node.get('version') or ''}")
-    return json.dumps(
-        {
-            "custom_nodes": sorted(nodes),
-            "install_lock_nodes": bool(
-                payload.get("install_lock_nodes", install_lock_nodes)
-            ),
-            "profile": str(payload.get("profile") or profile_name or "base"),
-        },
-        sort_keys=True,
-    )
 
 
 def stop_comfyui(process: subprocess.Popen | None, *, timeout: float = 15.0) -> None:
@@ -317,924 +142,6 @@ def stop_comfyui(process: subprocess.Popen | None, *, timeout: float = 15.0) -> 
             process.kill()
         except OSError:
             return
-
-
-def _asset_lock_entry(lock: Mapping[str, Any], category: str, filename: str) -> dict | None:
-    assets = lock.get("assets", {})
-    return assets.get(f"{category}/{filename}") or assets.get(f"models/{category}/{filename}")
-
-
-def _promote_legacy_if_needed(legacy: Path, primary: Path) -> bool:
-    """Copy a previously downloaded workspace model into Modal Storage."""
-    if primary.is_file() and primary.stat().st_size > 0:
-        return False
-    if not (legacy.is_file() and legacy.stat().st_size > 0):
-        return False
-    primary.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(legacy, primary)
-    print(f"[PROMOTE] {legacy} -> {primary}", flush=True)
-    return True
-
-
-def output_manifest(output_dir: str | Path) -> tuple[tuple[str, int, int], ...]:
-    """Filename, mtime_ns, size for every file under ComfyUI ``output/``."""
-    root = Path(output_dir)
-    if not root.is_dir():
-        return ()
-    entries = []
-    for path in root.rglob("*"):
-        if path.is_file():
-            stat = path.stat()
-            entries.append(
-                (str(path.relative_to(root)), int(stat.st_mtime_ns), int(stat.st_size))
-            )
-    return tuple(sorted(entries))
-
-
-def _is_asset_current(path: Path, asset: ModelAsset, lock_entry: dict | None) -> bool:
-    if not path.is_file() or path.stat().st_size <= 0:
-        return False
-    if asset.sha256:
-        return _sha256(path).lower() == asset.sha256.lower()
-    if not lock_entry:
-        return False
-    return (
-        lock_entry.get("url") == normalize_huggingface_url(asset.url)
-        and lock_entry.get("size") == path.stat().st_size
-    )
-
-
-def _parse_hf_url(url: str) -> tuple[str, str, str] | None:
-    """Return repo_id, revision, file path for a huggingface.co /resolve/ URL."""
-    parsed = urlparse(normalize_huggingface_url(url))
-    if "huggingface.co" not in parsed.netloc:
-        return None
-
-    parts = [p for p in parsed.path.split("/") if p]
-    if len(parts) < 4:
-        return None
-
-    repo_id = "/".join(parts[:2])
-    try:
-        marker = parts.index("resolve", 2)
-    except ValueError:
-        return None
-
-    if marker + 1 >= len(parts):
-        return None
-    revision = parts[marker + 1]
-    file_path = "/".join(parts[marker + 2 :])
-    if not file_path:
-        return None
-    return repo_id, revision, file_path
-
-
-def _download_with_hf_cli(asset: ModelAsset, target_dir: Path, target: Path) -> None:
-    """Download a Hugging Face asset through huggingface_hub/hf_xet.
-
-    Modern huggingface_hub installs hf_xet automatically. The Modal sync Image
-    enables HF_XET_HIGH_PERFORMANCE=1, so this is the preferred path for HF.
-
-    Downloads into /tmp first. ``--local-dir <category>`` plus a repo path of
-    ``<category>/<file>`` would nest directories on the Volume and break.
-    """
-    parsed = _parse_hf_url(asset.url)
-    hf = shutil.which("hf") or shutil.which("huggingface-cli")
-    if not parsed or not hf:
-        raise RuntimeError("Hugging Face CLI/Xet downloader is unavailable for this URL.")
-
-    repo_id, revision, file_path = parsed
-    tmp_root = Path("/tmp/hf-download") / hashlib.sha256(
-        f"{repo_id}:{revision}:{file_path}".encode()
-    ).hexdigest()[:16]
-    if tmp_root.exists():
-        shutil.rmtree(tmp_root)
-    tmp_root.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        hf,
-        "download",
-        repo_id,
-        file_path,
-        "--revision",
-        revision,
-        "--repo-type",
-        "model",
-        "--local-dir",
-        str(tmp_root),
-    ]
-    env = os.environ.copy()
-    env.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-    token = (env.get("HF_TOKEN") or env.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
-    if token:
-        env.setdefault("HF_TOKEN", token)
-        env.setdefault("HUGGING_FACE_HUB_TOKEN", token)
-    _run(cmd, env=env)
-
-    expected = tmp_root / file_path
-    if not expected.is_file():
-        named = tmp_root / Path(file_path).name
-        if named.is_file():
-            expected = named
-        else:
-            matches = [
-                path
-                for path in tmp_root.rglob("*")
-                if path.is_file() and path.name == Path(file_path).name
-                and ".cache" not in path.parts
-            ]
-            if len(matches) != 1:
-                raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
-            expected = matches[0]
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        target.unlink()
-    shutil.move(str(expected), str(target))
-    shutil.rmtree(tmp_root, ignore_errors=True)
-
-    if not target.exists():
-        raise RuntimeError(f"HF CLI completed but expected file was not found: {target}")
-
-
-def _hf_auth_header() -> str | None:
-    token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
-    if not token:
-        return None
-    return f"Authorization: Bearer {token}"
-
-
-def _download_with_aria2(asset: ModelAsset, target_dir: Path, target: Path) -> None:
-    """Fast generic HTTP downloader used for Civitai and other direct URLs."""
-    url = _with_civitai_token(normalize_huggingface_url(asset.url))
-    aria = shutil.which("aria2c")
-    if not aria:
-        raise RuntimeError("aria2c is not installed in the sync image.")
-
-    cmd = [
-        aria,
-        "-x", "16",
-        "-s", "16",
-        "-c",
-        "-k", "1M",
-        "--file-allocation=none",
-        "--summary-interval=1",
-        "--console-log-level=notice",
-        "-d", str(target.parent),
-        "-o", target.name,
-    ]
-    header = _hf_auth_header() if "huggingface.co" in url else None
-    if header:
-        cmd.extend(["--header", header])
-    cmd.append(url)
-    display_cmd = list(cmd)
-    if header:
-        display_cmd[display_cmd.index(header)] = "Authorization: Bearer ***"
-    display_cmd[-1] = redact_url(url)
-    _run(cmd, display_cmd=display_cmd)
-
-
-def download_asset(asset: ModelAsset, target_dir: Path, *, lock_entry: dict | None = None) -> dict:
-    target = download_target(target_dir, asset_filename(asset))
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    if _is_asset_current(target, asset, lock_entry):
-        print(f"[SKIP] {target}")
-        return lock_entry or {}
-
-    normalized = normalize_huggingface_url(asset.url)
-    print(f"[DOWNLOAD] {redact_url(_with_civitai_token(normalized))}")
-    print(f"           -> {target}")
-
-    if _parse_hf_url(normalized):
-        try:
-            _download_with_hf_cli(asset, target_dir, target)
-        except (RuntimeError, subprocess.CalledProcessError) as exc:
-            print(f"[WARN] HF Xet download failed ({exc}); falling back to aria2c.")
-            _download_with_aria2(asset, target_dir, target)
-    else:
-        _download_with_aria2(asset, target_dir, target)
-
-    if not target.exists() or target.stat().st_size <= 0:
-        raise RuntimeError(f"Download did not produce a non-empty file: {target}")
-
-    if asset.sha256:
-        actual = _sha256(target)
-        if actual.lower() != asset.sha256.lower():
-            raise RuntimeError(
-                f"SHA256 mismatch for {target.name}: expected {asset.sha256}, got {actual}"
-            )
-
-    if asset.extract:
-        _extract_archive(target)
-
-    return {
-        "url": normalized,
-        "path": str(target),
-        "size": target.stat().st_size if target.exists() else None,
-        "sha256": asset.sha256,
-        "synced_at": int(time.time()),
-    }
-
-
-def _hydrate_one_asset(
-    asset: ModelAsset,
-    category: str,
-    *,
-    workspace: Path,
-    storage_root: Path,
-    lock_entry: dict | None,
-) -> tuple[dict, str]:
-    filename = canonical_relpath(asset_filename(asset), category=category)
-    asset = ModelAsset(
-        url=asset.url,
-        filename=filename,
-        sha256=asset.sha256,
-        extract=asset.extract,
-    )
-    primary = storage_model_path(storage_root, category, filename)
-    legacy = legacy_model_path(workspace, category, filename)
-    promoted = _promote_legacy_if_needed(legacy, primary)
-    if promoted and not lock_entry:
-        lock_entry = {
-            "url": normalize_huggingface_url(asset.url),
-            "size": primary.stat().st_size,
-        }
-    existed = _is_asset_current(primary, asset, lock_entry)
-    new_entry = dict(
-        download_asset(
-            asset,
-            storage_root / category,
-            lock_entry=lock_entry,
-        )
-    )
-    new_entry["path"] = str(primary)
-    if existed and promoted:
-        status = "promote"
-    elif existed:
-        status = "skip"
-    else:
-        status = "download"
-    return new_entry, status
-
-
-def _hydrate_assets_parallel(
-    jobs: list[tuple[str, str, ModelAsset, dict]],
-    *,
-    workspace: Path,
-    storage_root: Path,
-    state_dir: Path,
-    lock: dict,
-    workers: int,
-) -> dict[str, int]:
-    """Download independent model files concurrently into Modal Storage.
-
-    ``jobs`` items are ``(rel_key, category, asset, extra_metadata)``.
-    Extra metadata is merged into the persisted lock entry after download.
-    """
-    counts = {"download": 0, "skip": 0, "promote": 0}
-    guard = threading.Lock()
-
-    def run_job(rel_key: str, category: str, asset: ModelAsset, extra: dict) -> None:
-        entry = _asset_lock_entry(lock, category, asset_filename(asset))
-        new_entry, status = _hydrate_one_asset(
-            asset,
-            category,
-            workspace=workspace,
-            storage_root=storage_root,
-            lock_entry=entry,
-        )
-        with guard:
-            previous = lock["assets"].get(rel_key, {})
-            packs = set(previous.get("packs", [])) | set(extra.get("packs", []))
-            workflows = set(previous.get("workflows", [])) | set(extra.get("workflows", []))
-            if packs:
-                new_entry["packs"] = sorted(packs)
-            if workflows:
-                new_entry["workflows"] = sorted(workflows)
-            lock["assets"][rel_key] = new_entry
-            _save_lock(state_dir, lock)
-            counts[status] += 1
-
-    worker_count = max(1, min(workers, len(jobs)))
-    with ThreadPoolExecutor(max_workers=worker_count) as pool:
-        futures = [
-            pool.submit(run_job, rel_key, category, asset, extra)
-            for rel_key, category, asset, extra in jobs
-        ]
-        for future in as_completed(futures):
-            future.result()
-    return counts
-
-
-def sync_profile_models(
-    profile_name: str,
-    workspace: str | Path = "/workspace",
-    *,
-    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
-    workers: int = 4,
-) -> dict:
-    workspace = Path(workspace)
-    storage_root = ensure_storage_layout(storage_root)
-    ensure_workspace_layout(workspace)
-    repair_storage_layout(storage_root)
-    repair_workspace_layout(workspace)
-    state_dir = storage_root / ".state"
-    profile = get_profile(profile_name)
-    lock = _load_lock(state_dir)
-
-    wanted: list[tuple[str, str, ModelAsset, dict]] = []
-    seen: set[tuple[str, str]] = set()
-    for pack_name in profile.model_packs:
-        pack = MODEL_PACKS[pack_name]
-        for category, assets in pack.items():
-            for asset in assets:
-                filename = asset_filename(asset)
-                key = (category, filename)
-                if key in seen:
-                    continue
-                seen.add(key)
-                wanted.append(
-                    (
-                        f"{category}/{filename}",
-                        category,
-                        asset,
-                        {"packs": [pack_name]},
-                    )
-                )
-
-    persist_launch_state(
-        storage_root,
-        mode="profile",
-        profile=profile_name,
-        install_lock_nodes=False,
-    )
-
-    if not wanted:
-        print(f"Profile {profile_name!r} has no model assets.")
-        return {
-            "profile": profile_name,
-            "downloaded": 0,
-            "skipped": 0,
-            "promoted": 0,
-            "total": 0,
-            "storage_root": str(storage_root),
-        }
-
-    counts = _hydrate_assets_parallel(
-        wanted,
-        workspace=workspace,
-        storage_root=storage_root,
-        state_dir=state_dir,
-        lock=lock,
-        workers=workers,
-    )
-    return {
-        "profile": profile_name,
-        "downloaded": counts["download"],
-        "skipped": counts["skip"],
-        "promoted": counts["promote"],
-        "total": len(wanted),
-        "storage_root": str(storage_root),
-    }
-
-
-def sync_workflow_models(
-    workflow_lock: Mapping[str, Any],
-    workspace: str | Path = "/workspace",
-    *,
-    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
-    workers: int = 4,
-    install_lock_nodes: bool = True,
-    workflow_source: str = "",
-    lock_source: str = "",
-    profile_name: str = "base",
-) -> dict:
-    """Download every resolved workflow model into the Modal models Volume.
-
-    The lock is produced locally and serialized into the CPU-only Modal Function,
-    so arbitrary local workflow files never need to be mounted in a GPU container.
-    The active lock is also written to Volume ``.state/`` so the GPU Image can
-    stay workflow-agnostic.
-    """
-    validate_workflow_lock(workflow_lock, require_resolved=True)
-    workspace = Path(workspace)
-    storage_root = ensure_storage_layout(storage_root)
-    ensure_workspace_layout(workspace)
-    repair_storage_layout(storage_root)
-    repair_workspace_layout(workspace)
-    state_dir = storage_root / ".state"
-    state_lock = _load_lock(state_dir)
-    workflow = workflow_lock.get("workflow", {})
-    workflow_name = str(workflow.get("name", "workflow"))
-    workflow_sha256 = str(workflow.get("sha256", ""))
-    persist_launch_state(
-        storage_root,
-        mode="workflow",
-        profile=profile_name,
-        workflow=workflow_source or workflow_name,
-        lock_source=lock_source,
-        install_lock_nodes=install_lock_nodes,
-        workflow_lock=workflow_lock,
-    )
-
-    jobs: list[tuple[str, str, ModelAsset, dict]] = []
-    for model in workflow_lock["models"]:
-        category = model["category"]
-        filename = model["filename"]
-        jobs.append(
-            (
-                f"{category}/{filename}",
-                category,
-                ModelAsset(
-                    url=model["url"],
-                    filename=filename,
-                    sha256=model.get("sha256"),
-                ),
-                {"workflows": [workflow_sha256 or workflow_name]},
-            )
-        )
-
-    counts = {"download": 0, "skip": 0, "promote": 0}
-    if jobs:
-        counts = _hydrate_assets_parallel(
-            jobs,
-            workspace=workspace,
-            storage_root=storage_root,
-            state_dir=state_dir,
-            lock=state_lock,
-            workers=workers,
-        )
-
-    return {
-        "workflow": workflow_name,
-        "workflow_sha256": workflow_sha256,
-        "synced": len(jobs),
-        "downloaded": counts["download"],
-        "skipped": counts["skip"],
-        "promoted": counts["promote"],
-        "total": len(workflow_lock["models"]),
-        "storage_root": str(storage_root),
-    }
-
-
-def verify_workflow_models(
-    workflow_lock: Mapping[str, Any],
-    workspace: str | Path = "/workspace",
-    *,
-    storage_root: str | Path = DEFAULT_STORAGE_ROOT,
-) -> dict:
-    """Fail fast when a GPU runtime is missing CPU-prefetched workflow models."""
-    validate_workflow_lock(workflow_lock, require_resolved=True)
-    workspace = Path(workspace)
-    storage_root = Path(storage_root)
-    missing = []
-    for model in workflow_lock["models"]:
-        target = resolve_model_file(
-            storage_root=storage_root,
-            workspace=workspace,
-            category=model["category"],
-            filename=model["filename"],
-        )
-        if not target.is_file() or target.stat().st_size <= 0:
-            missing.append(f"{model['category']}/{model['filename']}")
-    if missing:
-        joined = ", ".join(missing)
-        raise RuntimeError(
-            "Workflow models were not prefetched into Modal Storage "
-            f"({storage_root}): {joined}. Run action=hydrate or "
-            "action=workflow-sync before starting the GPU endpoint."
-        )
-    return {"verified": len(workflow_lock["models"]), "missing": []}
-
-
-def build_node_commands(node_pack_names: tuple[str, ...] | list[str]) -> list[str]:
-    """Translate declarative node recipes into idempotent image-build shell commands."""
-    recipes: list[NodeRecipe] = []
-    seen_names: set[str] = set()
-
-    for pack_name in node_pack_names:
-        for recipe in NODE_PACKS[pack_name]:
-            assert recipe.name
-            if recipe.name in seen_names:
-                continue
-            seen_names.add(recipe.name)
-            recipes.append(recipe)
-
-    commands: list[str] = []
-    for recipe in recipes:
-        assert recipe.name
-        qrepo = _quote(recipe.repo)
-        qname = _quote(recipe.name)
-
-        clone_flags = ["--depth=1"]
-        if recipe.ref:
-            clone_flags.extend(["--branch", _quote(recipe.ref)])
-        if recipe.recursive:
-            clone_flags.extend(["--recursive", "--shallow-submodules"])
-
-        steps = [
-            # Do not enable xtrace before secret handling: `set -x` would print
-            # the expanded GITHUB_TOKEN in build logs.
-            "set -eu",
-            'if [ -n "${GITHUB_TOKEN:-}" ]; then printf \'%s\\n\' \'#!/bin/sh\' \'case "$1" in *Username*) echo x-access-token ;; *) echo "$GITHUB_TOKEN" ;; esac\' > /tmp/comfy-git-askpass && chmod 700 /tmp/comfy-git-askpass && export GIT_ASKPASS=/tmp/comfy-git-askpass GIT_TERMINAL_PROMPT=0; fi',
-            "set -x",
-            "mkdir -p /ComfyUI/custom_nodes",
-            "cd /ComfyUI/custom_nodes",
-            (
-                f"if [ ! -d {qname} ]; then "
-                f"git clone {' '.join(clone_flags)} {qrepo} {qname}; "
-                f"fi"
-            ),
-            f"cd {qname}",
-            'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
-            '[ -x "$PY" ] || PY=python3',
-            shell_resolve_uv(),
-        ]
-
-        for command in recipe.pre_commands:
-            steps.append(command)
-
-        for req in recipe.requirements:
-            qreq = _quote(req)
-            steps.append(
-                f'if [ -f {qreq} ]; then "$UV" pip install --python "$PY" --no-cache -r {qreq}; fi'
-            )
-
-        if recipe.pip:
-            steps.append(
-                '"$UV" pip install --python "$PY" --no-cache '
-                + " ".join(_quote(package) for package in recipe.pip)
-            )
-
-        for command in recipe.commands:
-            steps.append(command)
-
-        steps.append("rm -f /tmp/comfy-git-askpass")
-        commands.append("; ".join(steps))
-
-    return commands
-
-
-def build_registry_node_commands(
-    custom_nodes: Iterable[Mapping[str, Any]],
-    *,
-    comfy_cli_version: str | None = "1.16.0",
-) -> list[str]:
-    """Shell layers for optional Image-time CNR installs (tests / opt-in packs).
-
-    Default GPU runtime does **not** use this. Workflow lock nodes go onto the
-    workspace Volume via ``install_registry_nodes`` so the Image cache stays shared.
-    """
-    nodes = list(custom_nodes)
-    if not nodes:
-        return []
-
-    comfy_cli_spec = f"comfy-cli=={comfy_cli_version}" if comfy_cli_version else "comfy-cli"
-    bootstrap = "; ".join(
-        (
-            "set -eux",
-            'PY=/ComfyUI/venv/bin/python3; [ -x "$PY" ] || PY=/ComfyUI/venv/bin/python; '
-            '[ -x "$PY" ] || PY=python3',
-            shell_resolve_uv(),
-            f'"$UV" pip install --python "$PY" --no-cache {_quote(comfy_cli_spec)}',
-        )
-    )
-    commands = [bootstrap]
-
-    for node in nodes:
-        node_id = str(node["id"])
-        version = node.get("version")
-        install = [
-            'COMFY=/ComfyUI/venv/bin/comfy; [ -x "$COMFY" ] || COMFY=comfy',
-            f'"$COMFY" --workspace=/ComfyUI node registry-install {_quote(node_id)}',
-        ]
-        if version:
-            install[-1] += f" --version {_quote(str(version))}"
-        qnode = _quote(node_id)
-        commands.append(
-            "; ".join(
-                (
-                    "set -eux",
-                    "mkdir -p /ComfyUI/custom_nodes",
-                    (
-                        "if ! find /ComfyUI/custom_nodes -mindepth 1 -maxdepth 1 "
-                        f"-type d -iname {qnode} -print -quit | grep -q .; then "
-                        + "; ".join(install)
-                        + "; fi"
-                    ),
-                )
-            )
-        )
-    return commands
-
-
-def _cnr_marker_path(marker_dir: Path, node_id: str) -> Path:
-    safe_id = node_id.replace("/", "_")
-    return marker_dir / safe_id
-
-
-def _dir_names(path: Path) -> set[str]:
-    if not path.is_dir():
-        return set()
-    return {item.name for item in path.iterdir() if item.is_dir() and not item.name.startswith(".")}
-
-
-def _registry_install_one(node: Mapping[str, Any], *, comfy_root: Path) -> None:
-    node_id = str(node["id"])
-    version = node.get("version")
-    comfy = comfy_root / "venv" / "bin" / "comfy"
-    binary = str(comfy) if comfy.is_file() else "comfy"
-    cmd = [binary, f"--workspace={comfy_root}", "node", "registry-install", node_id]
-    if version:
-        cmd.extend(["--version", str(version)])
-    _run(cmd)
-
-
-def install_registry_nodes(
-    custom_nodes: Iterable[Mapping[str, Any]],
-    *,
-    comfy_root: str | Path = "/ComfyUI",
-    custom_nodes_dir: str | Path = "/workspace/custom_nodes",
-    marker_dir: str | Path | None = None,
-    skip_existing: bool = True,
-    installer: Callable[..., None] | None = None,
-) -> list[str]:
-    """Install CNR nodes into a Volume-backed ``custom_nodes`` directory.
-
-    ``comfy node registry-install`` writes under ``<comfy_root>/custom_nodes``.
-    Newly created folders are moved onto the Volume so they survive scaledown
-    and do not bust the GPU Image cache. Existing Volume installs are skipped.
-    ``requirements.txt`` is installed into ``<workspace>/.python/node-reqs``
-    and reused across cold starts when the file hash matches.
-    Markers live under ``/workspace/state/cnr`` so ComfyUI does not scan them.
-    """
-    nodes = list(custom_nodes)
-    if not nodes:
-        return []
-
-    comfy_root = Path(comfy_root)
-    image_custom = comfy_root / "custom_nodes"
-    volume_custom = Path(custom_nodes_dir)
-    volume_custom.mkdir(parents=True, exist_ok=True)
-    markers = Path(marker_dir) if marker_dir is not None else volume_custom.parent / "state" / "cnr"
-    markers.mkdir(parents=True, exist_ok=True)
-    image_custom.mkdir(parents=True, exist_ok=True)
-    run_install = installer or _registry_install_one
-
-    installed: list[str] = []
-    for node in nodes:
-        node_id = str(node["id"])
-        version = str(node.get("version") or "")
-        marker = _cnr_marker_path(markers, node_id)
-        previous = {}
-        if marker.is_file():
-            try:
-                loaded = json.loads(marker.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                loaded = {}
-            if isinstance(loaded, dict):
-                previous = loaded
-        url = str(node.get("url") or "").strip()
-        if skip_existing and previous.get("version") == version and previous.get("dirs"):
-            missing = [
-                name
-                for name in previous["dirs"]
-                if not (volume_custom / str(name)).is_dir()
-            ]
-            if not missing:
-                print(f"[SKIP] CNR {node_id}@{version} already on Volume", flush=True)
-                # Clone lives on the Volume. requirements.txt is installed into
-                # /workspace/.python/node-reqs and skipped when the hash matches.
-                python = _comfy_python(comfy_root)
-                reqs_changed = False
-                for name in previous["dirs"]:
-                    reqs_changed = (
-                        _install_node_requirements(volume_custom / str(name), python)
-                        or reqs_changed
-                    )
-                _remember_node_reqs(installed, reqs_changed)
-                continue
-
-        for name in previous.get("dirs") or ():
-            stale = volume_custom / str(name)
-            if stale.is_dir():
-                shutil.rmtree(stale)
-
-        if url:
-            moved = _install_github_node(node, volume_custom)
-        else:
-            before = _dir_names(image_custom)
-            run_install(node, comfy_root=comfy_root)
-            new_names = sorted(_dir_names(image_custom) - before)
-            moved = []
-            for name in new_names:
-                src = image_custom / name
-                dest = volume_custom / name
-                if dest.exists():
-                    if dest.is_dir():
-                        shutil.rmtree(dest)
-                    else:
-                        dest.unlink()
-                shutil.move(str(src), str(dest))
-                moved.append(name)
-        marker.write_text(
-            json.dumps({"id": node_id, "version": version, "dirs": moved}, indent=2)
-            + "\n",
-            encoding="utf-8",
-        )
-        python = _comfy_python(comfy_root)
-        reqs_changed = False
-        for name in moved:
-            reqs_changed = (
-                _install_node_requirements(volume_custom / str(name), python)
-                or reqs_changed
-            )
-        kind = "git" if url else "CNR"
-        print(
-            f"[INSTALL] {kind} {node_id}@{version} -> {volume_custom} ({', '.join(moved) or 'no new dirs'})",
-            flush=True,
-        )
-        installed.append(node_id)
-        _remember_node_reqs(installed, reqs_changed)
-    return installed
-
-
-def _github_repo_dir_name(url: str) -> str:
-    name = url.rstrip("/").split("/")[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
-    return name
-
-
-def node_reqs_volume_path(workspace: str | Path) -> Path:
-    return Path(workspace) / ".python" / "node-reqs"
-
-
-def _node_req_marker(site_dir: Path, dest: Path) -> Path:
-    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in dest.name)
-    return site_dir / ".markers" / f"{safe}.sha256"
-
-
-def _hash_requirements(req_file: Path) -> str:
-    return hashlib.sha256(req_file.read_bytes()).hexdigest()
-
-
-def _remember_node_reqs(installed: list[str], changed: bool) -> None:
-    if changed and NODE_REQS_SITE_MARK not in installed:
-        installed.append(NODE_REQS_SITE_MARK)
-
-
-def _link_node_reqs_site(python: str, site_dir: str | Path) -> bool:
-    """Write a venv .pth so ComfyUI can import Volume-installed node deps.
-
-    The .pth lives in the ephemeral Image venv; rewriting it is not a Volume change.
-    Skip when ``python`` is not a real venv path (unit tests / hydrate CPU).
-    """
-    if not Path(python).is_file():
-        return False
-    purelib = _site_packages(python)
-    if purelib is None:
-        print("[NODE-REQS] cannot link Volume site (no site-packages)", flush=True)
-        return False
-    site_dir = Path(site_dir)
-    site_dir.mkdir(parents=True, exist_ok=True)
-    (site_dir / ".markers").mkdir(parents=True, exist_ok=True)
-    pth = purelib / NODE_REQS_PTH_NAME
-    marker = f"{site_dir}\n"
-    if not pth.is_file() or pth.read_text(encoding="utf-8") != marker:
-        pth.write_text(marker, encoding="utf-8")
-        print(f"[NODE-REQS] linked Volume site {site_dir}", flush=True)
-    return False
-
-
-def ensure_node_reqs_site(comfy_root: str | Path, workspace: str | Path) -> None:
-    """Point the Image venv at Volume-backed CNR/GitHub node site-packages."""
-    python = _comfy_python(Path(comfy_root))
-    _link_node_reqs_site(python, node_reqs_volume_path(workspace))
-
-
-def _install_node_requirements(
-    dest: Path,
-    python: str | None,
-    *,
-    site_dir: str | Path | None = None,
-) -> bool:
-    """Install ``requirements.txt`` onto the Volume site. Skip when the hash matches.
-
-    Returns True if ``uv pip`` ran (Volume changed; caller should commit).
-    """
-    requirements = dest / "requirements.txt"
-    if not python or not requirements.is_file():
-        return False
-    if site_dir is None:
-        site_dir = dest.parent.parent / ".python" / "node-reqs"
-    site_dir = Path(site_dir)
-    site_dir.mkdir(parents=True, exist_ok=True)
-    (site_dir / ".markers").mkdir(parents=True, exist_ok=True)
-    marker = _node_req_marker(site_dir, dest)
-    digest = _hash_requirements(requirements)
-    if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest:
-        print(f"[SKIP] node reqs {dest.name} already on Volume", flush=True)
-        return False
-    filtered = requirements_without_packages(
-        requirements.read_text(encoding="utf-8"),
-        NODE_REQS_SKIP_PACKAGES,
-    )
-    req_file = requirements
-    if filtered != requirements.read_text(encoding="utf-8"):
-        req_file = site_dir / ".markers" / f"{dest.name}.requirements.txt"
-        req_file.write_text(filtered, encoding="utf-8")
-        print(f"[NODE-REQS] skip Image-only packages {sorted(NODE_REQS_SKIP_PACKAGES)}", flush=True)
-    _run(pip_install_cmd(python, "-r", str(req_file), site_dir=site_dir))
-    marker.write_text(digest + "\n", encoding="utf-8")
-    print(f"[INSTALL] node reqs {dest.name} -> {site_dir}", flush=True)
-    return True
-
-
-def _install_github_node(
-    node: Mapping[str, Any],
-    volume_custom: Path,
-) -> list[str]:
-    url = str(node["url"]).strip()
-    name = _github_repo_dir_name(url)
-    dest = volume_custom / name
-    if dest.exists():
-        shutil.rmtree(dest)
-    clone = ["git", "clone", "--depth=1"]
-    version = str(node.get("version") or "").strip()
-    if version:
-        clone.extend(["--branch", version])
-    clone.extend([url, str(dest)])
-    try:
-        _run(clone)
-    except subprocess.CalledProcessError:
-        if not version:
-            raise
-        print(f"[WARN] git clone --branch {version} failed; using default branch", flush=True)
-        if dest.exists():
-            shutil.rmtree(dest)
-        _run(["git", "clone", "--depth=1", url, str(dest)])
-    return [name]
-
-
-def _comfy_python(comfy_root: Path) -> str:
-    for name in ("python3", "python"):
-        path = comfy_root / "venv" / "bin" / name
-        if path.is_file():
-            return str(path)
-    return "python3"
-
-
-def _module_import_error(name: str, python: str) -> str | None:
-    try:
-        result = subprocess.run(
-            [python, "-c", f"import {name}"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return str(exc)
-    if result.returncode == 0:
-        return None
-    text = (result.stderr or result.stdout or "").strip()
-    return text[-2000:] if text else f"exit {result.returncode}"
-
-
-def _module_available(name: str, python: str) -> bool:
-    return _module_import_error(name, python) is None
-
-
-
-def _python_text(python: str, code: str) -> str:
-    result = subprocess.run(
-        [python, "-c", code],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    if not lines:
-        raise RuntimeError(f"{python} -c produced no stdout")
-    return lines[-1]
-
-
-def _site_packages(python: str) -> Path | None:
-    try:
-        text = _python_text(
-            python, "import sysconfig; print(sysconfig.get_paths()['purelib'])"
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
-        print(f"[TRELLIS2] cannot locate site-packages ({exc})", flush=True)
-        return None
-    path = Path(text)
-    if not path.is_dir():
-        print(f"[TRELLIS2] site-packages is not a directory: {path}", flush=True)
-        return None
-    return path
-
-
 
 
 def write_extra_model_paths(
@@ -1339,47 +246,35 @@ def apply_volume_launch(
     newly: list[str] = []
     nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
     installer = install_nodes or install_registry_nodes
-    include_pixal3d = _lock_has_pixal3d(nodes)
-    include_trellis2 = _lock_has_trellis2(nodes)
-    include_sam3d = _lock_has_sam3d(nodes)
-    if include_sam3d:
-        apply_comfy_env_root(workspace)
+    hooks = matched_hooks(nodes)
+    # Look up ensure_* on this module so tests can patch comfy_engine.ensure_*.
+    engine = sys.modules[__name__]
+    # Env-root prepare is cheap and must run even when CNR install is skipped.
+    run_prepare(engine, hooks, workspace)
     wheels_changed = False
-    if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
-        # Wheel first so CNR / TRELLIS.2 do not compile CUDA sdists.
-        wheels_changed = ensure_pixal3d_prebuilt_wheels(
-            comfy_root,
-            include_attention=include_pixal3d,
-            include_sparse=True,
-            include_drtk=include_pixal3d,
-            include_nvdiffrast=include_trellis2,
-            workspace=workspace,
-        )
-    if install_lock_nodes and nodes:
-        ensure_node_reqs_site(comfy_root, workspace)
-        newly = installer(
-            nodes,
-            comfy_root=comfy_root,
-            custom_nodes_dir=workspace / "custom_nodes",
-        )
     runtime_changed = False
-    if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
-        runtime_changed = ensure_pixal3d_runtime(
-            comfy_root,
-            workspace / "custom_nodes",
-            include_pixal3d=include_pixal3d,
-            include_trellis2=include_trellis2,
-            allow_source_compile=False,
+    if install_lock_nodes:
+        # Wheels first so CNR / TRELLIS.2 do not compile CUDA sdists.
+        wheels_changed = run_wheels(
+            engine,
+            hooks,
+            comfy_root=comfy_root,
             workspace=workspace,
+            nodes=nodes,
         )
-    if install_lock_nodes and include_sam3d:
-        runtime_changed = (
-            ensure_sam3d_runtime(
-                comfy_root,
-                workspace / "custom_nodes",
-                workspace=workspace,
+        if nodes:
+            ensure_node_reqs_site(comfy_root, workspace)
+            newly = installer(
+                nodes,
+                comfy_root=comfy_root,
+                custom_nodes_dir=workspace / "custom_nodes",
             )
-            or runtime_changed
+        runtime_changed = run_runtimes(
+            engine,
+            hooks,
+            comfy_root=comfy_root,
+            workspace=workspace,
+            nodes=nodes,
         )
     fingerprint = launch_fingerprint(
         launch,
@@ -1407,13 +302,11 @@ def apply_volume_launch(
         )
         wait(port=port, timeout=startup_timeout)
     assert process is not None
-    if wheels_changed or runtime_changed:
-        if _lock_needs_sparse_3d_runtime(nodes) and SPARSE_3D_SITE_MARK not in newly:
-            newly.append(SPARSE_3D_SITE_MARK)
-        if include_sam3d and COMFY_ENV_SITE_MARK not in newly:
-            newly.append(COMFY_ENV_SITE_MARK)
-        if not newly:
-            newly.append(SPARSE_3D_SITE_MARK)
+    newly = append_site_marks(
+        newly,
+        hooks,
+        changed=wheels_changed or runtime_changed,
+    )
     return process, fingerprint, newly
 
 
@@ -1457,8 +350,6 @@ def start_comfyui(
 ) -> subprocess.Popen:
     comfy_root = Path(comfy_root)
     workspace = Path(workspace)
-    profile = get_profile(profile_name)
-
     python = comfy_root / "venv" / "bin" / "python3"
     if not python.exists():
         python = comfy_root / "venv" / "bin" / "python"
@@ -1473,7 +364,7 @@ def start_comfyui(
         "--input-directory", str(workspace / "input"),
         "--output-directory", str(workspace / "output"),
         "--user-directory", str(workspace / "user"),
-        *profile.comfy_args,
+        *profile_comfy_args(profile_name),
         *extra_args,
     ]
 

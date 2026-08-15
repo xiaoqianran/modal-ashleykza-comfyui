@@ -17,18 +17,9 @@ modal deploy comfyui_modal.py
 
 ## 当前旧 pack
 
-| 名称 | 模型包 | 额外节点 | 说明 |
-|---|---|---|---|
-| `base` | — | — | 仅 Ashley runtime（130 个基础节点需 `COMFY_BASE_NODES=1`） |
-| `ltx23` | `ltx23` | — | LTX 2.3 |
-| `nordy-kontext-views` | `nordy-kontext-views` | `flux-kontext-extra` | FLUX Kontext 多视图 |
-| `nordy-clothes` | `nordy-clothes` | `nordy-clothes-extra` | 服装 / inpaint |
-| `qwen-image` | `qwen-image` | `qwen-image-extra` | Qwen Image |
-| `flux-krea` | `flux-krea` | — | FLUX.1 Krea |
-| `flux-kontext` | `flux-kontext` | `flux-kontext-extra` | FLUX Kontext + omini-kontext |
-| `wan22` | `wan22` | — | Wan 2.2 模型（Wan/KJ/VHS/GGUF 节点需 `COMFY_BASE_NODES=1`） |
-| `wan22-notebook-full` | `wan22` | `wan-notebook-extra` | Wan 2.2 + notebook 额外节点 |
-| `nunchaku` | — | `nunchaku` | Nunchaku 节点 |
+表由 `recipes.PROFILES` 生成，不要手改。加新 Studio 配方请写 `catalog/*.json`。
+
+--8<-- "guide/_generated_legacy_profiles.md"
 
 Z-Image 走 catalog，不要用 profile：
 
