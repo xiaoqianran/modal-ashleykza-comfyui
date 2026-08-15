@@ -137,7 +137,7 @@ def build_overlay_stub(recipe_id: str, *, family: str = "") -> dict[str, Any]:
         "output": "",
         "smoke": {
             "status": "pending",
-            "note": "scaffold; not timed. Stop modal serve after smoke.",
+            "note": "scaffold; not timed. Smoke with modal deploy; do not leave modal serve running.",
         },
     }
 

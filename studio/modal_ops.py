@@ -1,4 +1,9 @@
-"""Hydrate / serve / stop the GPU App using the local Modal CLI."""
+"""Hydrate / deploy / stop GPU containers using the local Modal CLI.
+
+Default is ``modal deploy``: idle 5s scaledown actually works, and snapshots
+make the next cold start cheaper. ``modal serve`` is opt-in
+(``STUDIO_GPU_MODE=serve``) for live GPU-process ``.py`` edits.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +25,9 @@ STATE_PATH = STATE_DIR / "state.json"
 CREDS_ENV = STATE_DIR / "comfyui-creds.env"
 URL_RE = re.compile(r"https://[a-z0-9.-]+\.modal\.run", re.I)
 GPU_APP_NAME = "comfyui-ashleykza-cu128"
+GPU_MODE_ENV = "STUDIO_GPU_MODE"
+DEFAULT_GPU_MODE = "deploy"
+DEPLOY_STARTUP_TIMEOUT = "3600"
 
 _SERVE_LOCK = threading.Lock()
 _SERVE_PROC: subprocess.Popen[str] | None = None
@@ -73,9 +81,27 @@ def current_workspace(env: dict[str, str] | None = None) -> str:
     return name.splitlines()[-1].strip()
 
 
-def serve_url(workspace: str, *, dev: bool = True) -> str:
+def gpu_mode() -> str:
+    raw = os.environ.get(GPU_MODE_ENV, DEFAULT_GPU_MODE).strip().lower()
+    return "serve" if raw == "serve" else "deploy"
+
+
+def serve_url(workspace: str, *, dev: bool | None = None) -> str:
+    if dev is None:
+        dev = gpu_mode() == "serve"
     suffix = "-dev" if dev else ""
     return f"https://{workspace}--comfyui-ashleykza-cu128-ui-ui{suffix}.modal.run"
+
+
+def _first_app_url(text: str, *, prefer_prod: bool = True) -> str | None:
+    found = [match.rstrip("/") for match in URL_RE.findall(text or "")]
+    if not found:
+        return None
+    if prefer_prod:
+        for url in found:
+            if "-dev" not in url:
+                return url
+    return found[0]
 
 
 def load_state() -> dict[str, Any]:
@@ -185,7 +211,7 @@ def is_billable_gpu_app(name: str) -> bool:
 
 
 def stop_gpu_containers(log: Any | None = None) -> list[str]:
-    """Stop leftover GPU containers. SIGINT on modal serve is not enough."""
+    """Stop leftover GPU containers. Do not ``modal app stop`` — keep the snapshot."""
     env = subprocess_env()
     listed = _run([modal_bin(), "container", "list", "--json"], env=env, timeout=30)
     stopped: list[str] = []
@@ -210,13 +236,67 @@ def stop_gpu_containers(log: Any | None = None) -> list[str]:
     return stopped
 
 
-def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, Any]:
-    global _SERVE_PROC
+def _chosen_gpu(recipe_id: str, gpu: str) -> str:
     catalog = load_catalog(recipe_id)
     chosen = gpu or str(catalog.get("gpu") or "L40S")
     allowed = set(catalog.get("gpu_choices") or (chosen,))
     if chosen not in allowed:
         raise ValueError(f"gpu {chosen!r} not in {sorted(allowed)}")
+    return chosen
+
+
+def start_gpu(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, Any]:
+    if gpu_mode() == "serve":
+        return start_serve(recipe_id, gpu, log=log)
+    return start_deploy(recipe_id, gpu, log=log)
+
+
+def start_deploy(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, Any]:
+    """Publish the GPU app. Containers start on the first HTTP request, not here."""
+    chosen = _chosen_gpu(recipe_id, gpu)
+    _stop_local_serve(log)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    env = subprocess_env()
+    env["MODAL_GPU"] = chosen
+    env["COMFY_STARTUP_TIMEOUT_SECONDS"] = DEPLOY_STARTUP_TIMEOUT
+    if log:
+        log(f"modal deploy gpu={chosen} (GPU 要等第一次请求才起；空闲 5 秒缩到 0)")
+    result = _run(
+        [modal_bin(), "deploy", "comfyui_modal.py"],
+        env=env,
+        log=log,
+        timeout=30 * 60,
+    )
+    workspace = current_workspace(env)
+    guessed = serve_url(workspace, dev=False)
+    printed = _first_app_url(f"{result.stdout or ''}\n{result.stderr or ''}")
+    base_url = printed or guessed
+    save_state(
+        {
+            "catalog": recipe_id,
+            "gpu": chosen,
+            "gpu_mode": "deploy",
+            "serve_pid": None,
+            "workspace": workspace,
+            "base_url": base_url,
+        }
+    )
+    if log:
+        log(f"已部署 {base_url}")
+        log("不要开着 ComfyUI 页挡缩容。队列结束会停残留容器。")
+    return {
+        "already": False,
+        "pid": None,
+        "base_url": base_url,
+        "gpu": chosen,
+        "workspace": workspace,
+        "gpu_mode": "deploy",
+    }
+
+
+def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, Any]:
+    global _SERVE_PROC
+    chosen = _chosen_gpu(recipe_id, gpu)
     with _SERVE_LOCK:
         if _SERVE_PROC is not None and _SERVE_PROC.poll() is None:
             state = load_state()
@@ -225,11 +305,12 @@ def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, A
                 "pid": _SERVE_PROC.pid,
                 "base_url": state.get("base_url"),
                 "gpu": state.get("gpu") or chosen,
+                "gpu_mode": "serve",
             }
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         env = subprocess_env()
         env["MODAL_GPU"] = chosen
-        env["COMFY_STARTUP_TIMEOUT_SECONDS"] = "900"
+        env["COMFY_STARTUP_TIMEOUT_SECONDS"] = DEPLOY_STARTUP_TIMEOUT
         proc = subprocess.Popen(
             [modal_bin(), "serve", "comfyui_modal.py"],
             cwd=ROOT,
@@ -251,13 +332,14 @@ def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, A
             {
                 "catalog": recipe_id,
                 "gpu": chosen,
+                "gpu_mode": "serve",
                 "serve_pid": proc.pid,
                 "workspace": workspace,
                 "base_url": guessed,
             }
         )
         if log:
-            log(f"modal serve pid={proc.pid} gpu={chosen}")
+            log(f"modal serve pid={proc.pid} gpu={chosen}（会挡住 5 秒缩容）")
             log(f"预期地址 {guessed}")
         return {
             "already": False,
@@ -265,35 +347,47 @@ def start_serve(recipe_id: str, gpu: str, log: Any | None = None) -> dict[str, A
             "base_url": guessed,
             "gpu": chosen,
             "workspace": workspace,
+            "gpu_mode": "serve",
         }
 
 
-def stop_serve(log: Any | None = None) -> dict[str, Any]:
+def _stop_local_serve(log: Any | None = None) -> int | None:
     global _SERVE_PROC
     with _SERVE_LOCK:
         proc = _SERVE_PROC
         _SERVE_PROC = None
-    if proc is None or proc.poll() is not None:
+    pid = None
+    if proc is not None and proc.poll() is None:
+        if log:
+            log(f"stopping leftover modal serve pid={proc.pid}")
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        pid = proc.pid
+    else:
         state = load_state()
-        pid = state.get("serve_pid")
-        if pid:
+        leftover = state.get("serve_pid")
+        if leftover:
             try:
-                os.kill(int(pid), signal.SIGTERM)
-            except (ProcessLookupError, ValueError, PermissionError):
+                os.kill(int(leftover), signal.SIGTERM)
+                pid = int(leftover)
+            except (ProcessLookupError, ValueError, PermissionError, TypeError):
                 pass
-        save_state({"serve_pid": None})
-        leftover = _safe_stop_gpu_containers(log)
-        return {"stopped": True, "pid": pid, "containers": leftover}
-    if log:
-        log(f"stopping modal serve pid={proc.pid}")
-    proc.send_signal(signal.SIGINT)
-    try:
-        proc.wait(timeout=20)
-    except subprocess.TimeoutExpired:
-        proc.kill()
     save_state({"serve_pid": None})
+    return pid
+
+
+def stop_gpu(log: Any | None = None) -> dict[str, Any]:
+    """Stop leftover serve + GPU containers. Keep the deployed app (snapshot)."""
+    pid = _stop_local_serve(log)
     leftover = _safe_stop_gpu_containers(log)
-    return {"stopped": True, "pid": proc.pid, "containers": leftover}
+    return {"stopped": True, "pid": pid, "containers": leftover, "gpu_mode": gpu_mode()}
+
+
+def stop_serve(log: Any | None = None) -> dict[str, Any]:
+    return stop_gpu(log)
 
 
 def _safe_stop_gpu_containers(log: Any | None = None) -> list[str]:
@@ -315,10 +409,13 @@ def runtime_status() -> dict[str, Any]:
             try:
                 os.kill(int(pid), 0)
                 running = True
-            except (ProcessLookupError, PermissionError, ValueError):
+            except (ProcessLookupError, PermissionError, ValueError, TypeError):
                 running = False
+    mode = str(state.get("gpu_mode") or gpu_mode())
     return {
         "serve_running": running,
+        "gpu_mode": mode,
+        "deployed": mode == "deploy" and bool(state.get("base_url")),
         "base_url": state.get("base_url"),
         "gpu": state.get("gpu"),
         "catalog": state.get("catalog"),

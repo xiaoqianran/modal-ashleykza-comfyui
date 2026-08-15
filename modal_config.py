@@ -21,7 +21,7 @@ ASHLEY_DOCKER_TAGS_URL = (
 _ASHLEY_VERSION_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 GPU_IDLE_REMINDER = (
     "任务已结束。scaledown_window=5s 只在没有 HTTP/WebSocket、也没有 modal serve "
-    "保活时生效。测完请停掉 serve；浏览器开着 ComfyUI 或继续轮询 /system_stats "
+    "保活时生效。冒烟用 modal deploy；浏览器开着 ComfyUI 或继续轮询 /system_stats "
     "会一直占 GPU。默认 GPU 是 L40S，RTX-PRO-6000 必须显式设置 MODAL_GPU。"
 )
 

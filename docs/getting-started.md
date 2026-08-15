@@ -18,10 +18,10 @@ modal secret create comfyui-creds --from-dotenv .env --force
 ```bash
 modal run hydrate_modal.py --catalog z-image
 # 或 modal run hydrate_modal.py --workflow examples/z-image-base.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
-默认 GPU 是 L40S，不要用 T4。测完 **Ctrl+C** 停掉 serve；只把页面开着会阻止 5 秒缩容。
+默认 GPU 是 L40S，不要用 T4。冒烟用 **deploy**：第一次请求才起 GPU，空闲 5 秒缩到 0。不要用 `modal serve` 挡着缩容；也不要把 ComfyUI 页开着。
 
 ## 2b. 旧 Profile
 
@@ -29,15 +29,15 @@ Studio 不用 `recipes.PROFILES`。只有下载 nordy / wan / ltx23 这类旧模
 
 ```bash
 modal run hydrate_modal.py --profile qwen-image
-modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 `--action profiles` 会说明这一点，并同时列出 Studio catalog id。
 
 ## 3. 验证
 
-打开 `modal serve` 打印的 `*.modal.run`，加载同一份工作流，Queue Prompt。也可以 `python -m studio` 或双击 `open-studio.bat`：打开后默认 Z-Image 表单，顶栏可换配方（见 [Studio](guide/studio.md)）。没有 Python 的 Windows 机器下载 Releases 里的这一个 `Studio.exe`，双击即可。
+打开 `modal deploy` 打印的 `*.modal.run`（没有 `-dev`），加载同一份工作流，Queue Prompt。也可以 `python -m studio` 或双击 `open-studio.bat`：打开后默认 Z-Image 表单，顶栏可换配方（见 [Studio](guide/studio.md)）。没有 Python 的 Windows 机器下载 Releases 里的这一个 `Studio.exe`，双击即可。
 
-生产用 `modal deploy`（才会保存 memory snapshot）。`modal serve` 不保存快照。
+默认 **`modal deploy`**（才会保存 memory snapshot，空闲 5 秒缩到 0）。只有改 GPU 端 `.py` 才用 `modal serve`。
 
 插件：锁文件 `custom_nodes` 在 GPU **启动时**装进 `/workspace/custom_nodes`（已存在则跳过）。130 个基础 GitHub 节点仍要 `COMFY_BASE_NODES=1`。配方额外包要 `COMFY_INSTALL_NODES=1`（这两项会改 Image）。

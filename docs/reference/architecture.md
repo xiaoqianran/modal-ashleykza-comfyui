@@ -109,7 +109,7 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
 | Isolation worker 进程 | 容器内拉起 | 必须再拉一次 | 进程跟容器一起死 |
 | OpenGL `apt-get`、Blackwell boot `.pth` | 每次写进当前容器 | 每次都做（便宜） | 不在 Volume 上 |
 
-`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存。serve 还在，下一次 HTTP 会再起一个 GPU 容器；空闲的 `modal deploy`（0 tasks）不计 GPU。SAM 3D 的 pixi / comfy-env 隔离在配方分支上，主线这条链不经过它。
+冒烟默认 **`modal deploy`**：0 tasks 不计 GPU，快照跨冷启动复用。`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存；serve 进程还在就会挡住缩容。只有改 GPU 端 Python 才用 serve。SAM 3D 的 pixi / comfy-env 隔离在配方分支上，主线这条链不经过它。
 
 ## Volume 路径
 

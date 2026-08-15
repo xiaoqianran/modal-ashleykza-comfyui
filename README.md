@@ -20,26 +20,26 @@ modal secret create comfyui-creds --from-dotenv .env --force
 ```bash
 python3 -m recipe_scaffold examples/你的.json --id your-recipe --title "显示名" --kind t2i --write
 modal run hydrate_modal.py --catalog z-image
-modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 **2. 工作流 JSON** — 解析 model 和插件；下载模型；锁写到 Volume。GPU Image 不随工作流变化：
 
 ```bash
 modal run hydrate_modal.py --workflow examples/z-image-base.json
-modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 **3. 旧 Profile** — `recipes.PROFILES` 只给 nordy / wan / ltx23 这类模型包；Studio 不用这张表：
 
 ```bash
 modal run hydrate_modal.py --profile qwen-image
-modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 130 个上游 GitHub 节点默认不开。需要时：`COMFY_BASE_NODES=1`。配方额外包：`COMFY_INSTALL_NODES=1`（会改 Image）。关掉锁内节点：hydrate 时 `--skip-lock-nodes`。
 
-空闲 **5 秒** 缩掉 GPU（还要求没有 `modal serve` / 浏览器 WebSocket 保活）。默认 GPU 是 **L40S**，不要用 T4。贵卡必须显式 `MODAL_GPU=…`。`modal deploy` 才保存 snapshot。`hydrate --action profiles` 会说明旧 pack 与 Studio catalog 的区别。
+空闲 **5 秒** 缩掉 GPU（还要求没有 `modal serve` / 浏览器 WebSocket 保活）。默认用 **`modal deploy`** 冒烟：有快照，空闲真能缩到 0。只有改 GPU 端 `.py` 才用 `modal serve`。默认 GPU 是 **L40S**，不要用 T4。贵卡必须显式 `MODAL_GPU=…`。`hydrate --action profiles` 会说明旧 pack 与 Studio catalog 的区别。
 
 示例工作流在 `examples/`。LTX-2.5 官方 JSON 不能直接 `POST /prompt`，见文档「工作流与锁文件」。
 

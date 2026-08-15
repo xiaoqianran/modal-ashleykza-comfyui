@@ -21,18 +21,19 @@ modal run hydrate_modal.py --action repair
 | `--profile` | 旧 hydrate pack（profile 模式，默认 `base`；Studio 不用这张表） |
 | `--lock-out` | 锁文件路径 |
 | `--skip-lock-nodes` | GPU 启动时跳过锁内 CNR |
-| `--install-nodes` | **无效**（hydrate 不构建 GPU Image）。配方额外包请在 serve/deploy 时设 `COMFY_INSTALL_NODES=1` |
+| `--install-nodes` | **无效**（hydrate 不构建 GPU Image）。配方额外包请在 deploy 时设 `COMFY_INSTALL_NODES=1` |
 | `--action` | `hydrate`（默认）、`sync` / `workflow-sync`（同 hydrate）、`resolve`、`profiles`、`info`、`outputs`、`repair` |
 
 ## comfyui_modal.py
 
 ```bash
-modal serve comfyui_modal.py
 modal deploy comfyui_modal.py
+# 只有改 GPU 端 .py 才用（会挡住 5 秒缩容）：
+modal serve comfyui_modal.py
 modal run comfyui_modal.py
 ```
 
-不要用 GPU App 做 hydrate。
+不要用 GPU App 做 hydrate。冒烟默认 **deploy**：命令本身不起 GPU，第一次打到没有 `-dev` 的 `*.modal.run` 才起卡。测完不必 `modal app stop`。
 
 ## studio
 
