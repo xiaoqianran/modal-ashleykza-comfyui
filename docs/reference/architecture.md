@@ -12,6 +12,8 @@
   sparse_3d_runtime.py  Pixal3D / TRELLIS CUDA wheels（装到 workspace Volume）
   comfy_env_contract.py comfy-env 隔离协议：钉版本、0.3 布局、启动断言
   sam3d_runtime.py      SAM 3D pixi 安装 / Modal 补丁（只执行契约）
+  runtime_hooks.py      锁 id → Volume 运行时 hook 表（GPU 不 import catalog）
+  shipped_modules.py    GPU / hydrate Image 与 Windows exe 的同一份源清单
   workflow_resolver.py  工作流 → 锁文件（只绑定 JSON 里已有的 URL / CNR）
   recipes.py            MODEL_DIRS + 旧 profile / model pack / node pack
 
@@ -73,7 +75,7 @@ Studio
 4. `COMFY_BASE_NODES=1`：约 130 个 GitHub 节点（默认关，会改 Image；依赖用 `uv pip`）
 5. `COMFY_INSTALL_NODES=1`：profile 额外 node packs（默认关，会改 Image）
 
-工作流锁里的 CNR **不在 Image 里**。hydrate 写入 `.state/launch.json`，GPU 启动时装到 `/workspace/custom_nodes`。
+工作流锁里的 CNR **不在 Image 里**。hydrate 写入 `.state/launch.json`，GPU 启动时装到 `/workspace/custom_nodes`。GPU / hydrate Image 和 Windows exe 的 Python 源清单只维护 `shipped_modules.py`。新 CUDA / pixi 运行时往 `runtime_hooks.RUNTIME_HOOKS` 加一条，不要改 `apply_volume_launch` 主路径。
 
 `COMFY_LATEST=1` 才会强制重建节点层。
 
@@ -93,13 +95,13 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
         └─ apply_volume_launch
               ├─ prepare_runtime
               ├─ verify_workflow_models
-              ├─ ensure_pixal3d_prebuilt_wheels → _prepare_sparse_3d_site → .pth
+              ├─ runtime_hooks.matched_hooks(lock CNR ids)
+              │     ├─ prepare / ensure_wheels / ensure_runtime
+              │     └─ 现表：sparse-3d（Pixal3D / TRELLIS.2）+ sam3d
               ├─ ensure_node_reqs_site          → comfy_node_reqs.pth
-              ├─ install_registry_nodes
-              │     ├─ skip clone when Volume marker matches
-              │     └─ _install_node_requirements  → uv pip --target node-reqs
-              ├─ ensure_pixal3d_runtime
-              └─ ensure_sam3d_runtime           → 契约断言 + Volume pixi + 0.3.89 补丁
+              └─ install_registry_nodes
+                    ├─ skip clone when Volume marker matches
+                    └─ _install_node_requirements  → uv pip --target node-reqs
 ```
 
 | 层 | 第一次冷启动 | 缩容后再来 | 不能复用的原因 |

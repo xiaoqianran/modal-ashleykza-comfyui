@@ -6,16 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import uv_runtime
+from shipped_modules import GPU_PYTHON_SOURCES
 
-CONTAINER_FILES = (
-    "base_nodes.py",
-    "comfy_engine.py",
+CONTAINER_FILES = tuple(f"{name}.py" for name in GPU_PYTHON_SOURCES) + (
     "comfyui_modal.py",
     "hydrate_modal.py",
-    "sparse_3d_runtime.py",
-    "uv_runtime.py",
-    "sam3d_runtime.py",
-    "comfy_env_contract.py",
 )
 
 

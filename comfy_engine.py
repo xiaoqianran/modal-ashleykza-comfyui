@@ -6,6 +6,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import threading
 import time
@@ -19,14 +20,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from comfy_env_contract import (
-    SITE_MARK as COMFY_ENV_SITE_MARK,
-)
-from comfy_env_contract import (
     SKIP_PACKAGES as NODE_REQS_SKIP_PACKAGES,
 )
 from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
-from sam3d_runtime import (
-    _lock_has_sam3d,
+from runtime_hooks import append_site_marks, matched_hooks, run_prepare, run_runtimes, run_wheels
+from sam3d_runtime import (  # noqa: F401
     apply_comfy_env_root,
     ensure_sam3d_runtime,
 )
@@ -1339,47 +1337,35 @@ def apply_volume_launch(
     newly: list[str] = []
     nodes = list((workflow_lock or {}).get("custom_nodes") or ()) if isinstance(workflow_lock, Mapping) else []
     installer = install_nodes or install_registry_nodes
-    include_pixal3d = _lock_has_pixal3d(nodes)
-    include_trellis2 = _lock_has_trellis2(nodes)
-    include_sam3d = _lock_has_sam3d(nodes)
-    if include_sam3d:
-        apply_comfy_env_root(workspace)
+    hooks = matched_hooks(nodes)
+    # Look up ensure_* on this module so tests can patch comfy_engine.ensure_*.
+    engine = sys.modules[__name__]
+    # Env-root prepare is cheap and must run even when CNR install is skipped.
+    run_prepare(engine, hooks, workspace)
     wheels_changed = False
-    if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
-        # Wheel first so CNR / TRELLIS.2 do not compile CUDA sdists.
-        wheels_changed = ensure_pixal3d_prebuilt_wheels(
-            comfy_root,
-            include_attention=include_pixal3d,
-            include_sparse=True,
-            include_drtk=include_pixal3d,
-            include_nvdiffrast=include_trellis2,
-            workspace=workspace,
-        )
-    if install_lock_nodes and nodes:
-        ensure_node_reqs_site(comfy_root, workspace)
-        newly = installer(
-            nodes,
-            comfy_root=comfy_root,
-            custom_nodes_dir=workspace / "custom_nodes",
-        )
     runtime_changed = False
-    if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
-        runtime_changed = ensure_pixal3d_runtime(
-            comfy_root,
-            workspace / "custom_nodes",
-            include_pixal3d=include_pixal3d,
-            include_trellis2=include_trellis2,
-            allow_source_compile=False,
+    if install_lock_nodes:
+        # Wheels first so CNR / TRELLIS.2 do not compile CUDA sdists.
+        wheels_changed = run_wheels(
+            engine,
+            hooks,
+            comfy_root=comfy_root,
             workspace=workspace,
+            nodes=nodes,
         )
-    if install_lock_nodes and include_sam3d:
-        runtime_changed = (
-            ensure_sam3d_runtime(
-                comfy_root,
-                workspace / "custom_nodes",
-                workspace=workspace,
+        if nodes:
+            ensure_node_reqs_site(comfy_root, workspace)
+            newly = installer(
+                nodes,
+                comfy_root=comfy_root,
+                custom_nodes_dir=workspace / "custom_nodes",
             )
-            or runtime_changed
+        runtime_changed = run_runtimes(
+            engine,
+            hooks,
+            comfy_root=comfy_root,
+            workspace=workspace,
+            nodes=nodes,
         )
     fingerprint = launch_fingerprint(
         launch,
@@ -1407,13 +1393,11 @@ def apply_volume_launch(
         )
         wait(port=port, timeout=startup_timeout)
     assert process is not None
-    if wheels_changed or runtime_changed:
-        if _lock_needs_sparse_3d_runtime(nodes) and SPARSE_3D_SITE_MARK not in newly:
-            newly.append(SPARSE_3D_SITE_MARK)
-        if include_sam3d and COMFY_ENV_SITE_MARK not in newly:
-            newly.append(COMFY_ENV_SITE_MARK)
-        if not newly:
-            newly.append(SPARSE_3D_SITE_MARK)
+    newly = append_site_marks(
+        newly,
+        hooks,
+        changed=wheels_changed or runtime_changed,
+    )
     return process, fingerprint, newly
 
 

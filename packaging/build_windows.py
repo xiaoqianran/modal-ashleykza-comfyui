@@ -13,6 +13,11 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from shipped_modules import windows_modules  # noqa: E402
+
 PYTHON_VERSION = "3.12.10"
 EMBED_URL = (
     f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
@@ -20,21 +25,7 @@ EMBED_URL = (
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 MODAL_PIP_SPEC = "modal[api-proxy-support]"
 PACKAGES = ("catalog", "studio")
-MODULES = (
-    "base_nodes.py",
-    "comfy_engine.py",
-    "comfy_env_contract.py",
-    "comfyui_modal.py",
-    "hydrate_modal.py",
-    "modal_config.py",
-    "recipes.py",
-    "sparse_3d_runtime.py",
-    "uv_runtime.py",
-    "sam3d_runtime.py",
-    "storage.py",
-    "workflow_queue.py",
-    "workflow_resolver.py",
-)
+MODULES = windows_modules()
 README = """Studio
 ======
 

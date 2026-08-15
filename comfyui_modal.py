@@ -30,6 +30,7 @@ from comfy_engine import (
 )
 from modal_config import ModalSettings, idle_release_kwargs
 from recipes import get_profile
+from shipped_modules import GPU_PYTHON_SOURCES
 from storage import workspace_dir
 from uv_runtime import image_install_uv_command, image_uv_pip_command, image_uv_uninstall_command
 
@@ -162,18 +163,7 @@ runtime_image = (
         }
     )
     # Modal 1.x no longer automounts arbitrary imported local modules.
-    .add_local_python_source(
-        "base_nodes",
-        "recipes",
-        "workflow_resolver",
-        "comfy_engine",
-        "comfy_env_contract",
-        "sparse_3d_runtime",
-        "uv_runtime",
-        "sam3d_runtime",
-        "modal_config",
-        "storage",
-    )
+    .add_local_python_source(*GPU_PYTHON_SOURCES)
 )
 
 

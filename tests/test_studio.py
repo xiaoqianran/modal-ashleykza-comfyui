@@ -109,6 +109,15 @@ class GpuReleaseTests(unittest.TestCase):
         )
         self.assertEqual(rows[0]["container_id"], "ta-1")
 
+    def test_studio_reads_modal_app_name(self):
+        with patch.dict(os.environ, {"MODAL_APP_NAME": "comfyui-other"}, clear=False):
+            self.assertTrue(is_billable_gpu_app("comfyui-other"))
+            self.assertFalse(is_billable_gpu_app("comfyui-other-hydrate"))
+            self.assertEqual(
+                serve_url("weiranzhiqian", dev=False),
+                "https://weiranzhiqian--comfyui-other-ui-ui.modal.run",
+            )
+
     def test_default_gpu_mode_is_deploy_and_url_has_no_dev_suffix(self):
         self.assertEqual(gpu_mode(), "deploy")
         self.assertNotIn("-dev", serve_url("weiranzhiqian", dev=False))

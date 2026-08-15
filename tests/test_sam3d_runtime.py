@@ -544,13 +544,69 @@ class Sam3dLaunchOrderTests(unittest.TestCase):
         self.assertIn(sam3d_runtime.COMFY_ENV_SITE_MARK, newly)
         self.assertNotIn(comfy_engine.SPARSE_3D_SITE_MARK, newly)
 
+    def test_exports_comfy_env_root_when_lock_node_install_is_skipped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            storage = root / "storage"
+            workspace = root / "workspace"
+            comfy_root = root / "ComfyUI"
+            comfy_root.mkdir()
+            (comfy_root / "main.py").write_text("#\n", encoding="utf-8")
+            target = storage / "vae" / "ae.safetensors"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"model")
+            lock = _lock()
+            lock["custom_nodes"] = [
+                {
+                    "id": "ComfyUI-SAM3DObjects",
+                    "version": "main",
+                    "url": "https://github.com/PozzettiAndrea/ComfyUI-SAM3DObjects.git",
+                }
+            ]
+            comfy_engine.persist_launch_state(
+                storage,
+                mode="workflow",
+                workflow="sam3d.json",
+                workflow_lock=lock,
+                install_lock_nodes=False,
+            )
+            def forbidden_install(*_args, **_kwargs):
+                raise AssertionError("skipped lock must not clone CNR")
+
+            with (
+                patch.dict(os.environ, {}, clear=False),
+                patch.object(
+                    comfy_engine,
+                    "ensure_sam3d_runtime",
+                    side_effect=AssertionError("skipped lock must not install pixi"),
+                ),
+            ):
+                os.environ.pop(sam3d_runtime.COMFY_ENV_ROOT_VAR, None)
+                _process, _fingerprint, newly = comfy_engine.apply_volume_launch(
+                    storage_root=storage,
+                    workspace=workspace,
+                    comfy_root=comfy_root,
+                    default_profile="base",
+                    default_install_lock_nodes=False,
+                    start_fn=lambda **_kwargs: DummyProcess(),
+                    wait_fn=lambda **_kwargs: None,
+                    install_nodes=forbidden_install,
+                )
+                self.assertEqual(
+                    os.environ.get(sam3d_runtime.COMFY_ENV_ROOT_VAR),
+                    str(workspace / ".python" / "comfy-env"),
+                )
+        self.assertEqual(newly, [])
+
 
 class ModalImageSourcesTests(unittest.TestCase):
-    def test_gpu_and_hydrate_images_include_comfy_env_contract(self):
-        root = Path(__file__).resolve().parents[1]
-        for name in ("hydrate_modal.py", "comfyui_modal.py"):
-            text = (root / name).read_text(encoding="utf-8")
-            self.assertIn('"comfy_env_contract"', text, name)
+    def test_gpu_and_hydrate_images_use_shipped_modules(self):
+        from shipped_modules import GPU_PYTHON_SOURCES, HYDRATE_PYTHON_SOURCES
+
+        self.assertIn("comfy_env_contract", GPU_PYTHON_SOURCES)
+        self.assertIn("runtime_hooks", GPU_PYTHON_SOURCES)
+        self.assertIn("comfy_env_contract", HYDRATE_PYTHON_SOURCES)
+        self.assertNotIn("base_nodes", HYDRATE_PYTHON_SOURCES)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import importlib
 import unittest
 
-import sparse_3d_runtime
+import runtime_hooks
 import workflow_queue
 from catalog import ROOT, list_catalogs, load_catalog, validate_catalog
 from catalog.gates import (
@@ -42,18 +42,18 @@ class RecipeGateSurfaceTests(unittest.TestCase):
 
     def test_cuda_volume_gate_is_lock_based(self):
         module_name, attr = CUDA_VOLUME_GATE.rsplit(".", 1)
-        self.assertEqual(module_name, "sparse_3d_runtime")
-        fn = getattr(sparse_3d_runtime, attr)
+        self.assertEqual(module_name, "runtime_hooks")
+        fn = getattr(runtime_hooks, attr)
         self.assertFalse(fn([]))
         self.assertTrue(fn([{"id": "Pixal3D-ComfyUI"}]))
+        self.assertTrue(fn([{"id": "ComfyUI-Trellis2"}]))
 
     def test_comfy_env_volume_gate_is_lock_based(self):
-        import sam3d_runtime
         from catalog.gates import COMFY_ENV_VOLUME_GATE
 
         module_name, attr = COMFY_ENV_VOLUME_GATE.rsplit(".", 1)
-        self.assertEqual(module_name, "sam3d_runtime")
-        fn = getattr(sam3d_runtime, attr)
+        self.assertEqual(module_name, "runtime_hooks")
+        fn = getattr(runtime_hooks, attr)
         self.assertFalse(fn([]))
         self.assertFalse(fn([{"id": "ComfyUI-Trellis2"}]))
         self.assertTrue(fn([{"id": "ComfyUI-SAM3DObjects"}]))
