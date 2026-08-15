@@ -18,9 +18,9 @@ python3 -m benchmarks --write
 | ComfyUI | **构建时解析最新 cu128-py312-v*** |
 | 平台 | Modal（profile `weiranzhiqian`） |
 | 计时 | 从 POST /prompt 到 /history 出现 success 的客户端墙钟。首张常含装进 VRAM 或同卡换模。 |
-| 空闲缩容 | **5 秒**（`modal serve` 会挡住） |
+| 空闲缩容 | **5 秒**（leftover `modal serve` / 开着的 ComfyUI 页会挡住） |
 
-测试默认 **L40S**（FLUX.2 / TRELLIS.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。测完停 serve。
+测试默认 **L40S**（FLUX.2 / TRELLIS.2 只能 RTX-PRO-6000）。正式推理 **RTX-PRO-6000**。不要用 T4。冒烟用 `modal deploy`；测完停残留容器，不要 `modal app stop`。
 
 ## 总览
 
@@ -430,6 +430,6 @@ Microsoft TRELLIS.2-4B 图生 GLB（几何）。visualbruno ComfyUI-Trellis2。�
 3. 在 `benchmarks/models.json` 加同一 `id`（或脚手架 `--write-overlay`）。
 4. 冒烟成功后把 `status` 改成 `recorded`，填 `gpu` / `seconds` / `source`。
 5. `python3 -m benchmarks --write` 重写本页和 Studio 配方表。
-6. **停掉** `modal serve`。
+6. 用 `modal deploy` 冒烟；队列结束即停。只有改 GPU 端 Python 才用 `modal serve`。
 
 `smoke.status`：`recorded` 已记墙钟；`hydrated` 权重在 Volume 但没排队；`pending` 还没测。

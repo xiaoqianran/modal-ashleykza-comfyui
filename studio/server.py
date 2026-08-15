@@ -37,8 +37,8 @@ from studio.modal_ops import (
     load_state,
     runtime_status,
     save_state,
-    start_serve,
-    stop_serve,
+    start_gpu,
+    stop_gpu,
 )
 
 
@@ -181,7 +181,7 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     catalog = load_catalog(recipe_id)
     base = str(payload.get("base_url") or load_state().get("base_url") or "").rstrip("/")
     if not base:
-        raise RuntimeError("还没有 ComfyUI 地址。先启动 GPU，或粘贴已有的 *.modal.run")
+        raise RuntimeError("还没有 ComfyUI 地址。先点「部署 GPU」，或粘贴已有的 *.modal.run")
     planned = iter_generate_jobs(catalog, payload)
     jobs.append_log(job_id, f"等待 {base} 就绪 · {catalog['title']} · {len(planned)} 个任务")
     workflow = None
@@ -276,9 +276,9 @@ def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not keep:
             jobs.append_log(
                 job_id,
-                "任务结束，停止 GPU。scaledown 5s 挡不住 leftover modal serve。",
+                "任务结束，停止 GPU 容器。deploy 的 App 留着吃快照；不要开着 ComfyUI 页。",
             )
-            stopped = stop_serve(log=lambda line: jobs.append_log(job_id, line))
+            stopped = stop_gpu(log=lambda line: jobs.append_log(job_id, line))
             jobs.append_log(
                 job_id,
                 json.dumps({"released": True, **stopped}, ensure_ascii=False),
@@ -396,12 +396,12 @@ class Handler(BaseHTTPRequestHandler):
             gpu = str(payload.get("gpu") or "")
 
             def run(job_id: str) -> dict[str, Any]:
-                return start_serve(recipe_id, gpu, log=lambda line: jobs.append_log(job_id, line))
+                return start_gpu(recipe_id, gpu, log=lambda line: jobs.append_log(job_id, line))
 
             _json(self, 200, {"job_id": jobs.spawn("serve", run)})
             return
         if path == "/api/stop":
-            result = stop_serve()
+            result = stop_gpu()
             _json(self, 200, result)
             return
         if path == "/api/base-url":
@@ -478,15 +478,15 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Studio  {url}", flush=True)
     print("顶栏配方可选 Z-Image / Z-Image-Turbo / FLUX.2 [dev] / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step / Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat。", flush=True)
     print("密钥只存在本机 .studio.env，不会进 Git。", flush=True)
-    print("默认 GPU 是 L40S；生成结束后会停掉 serve，避免空闲还计费。", flush=True)
-    atexit.register(stop_serve)
+    print("默认 GPU 是 L40S。启动走 modal deploy；生成结束后停残留容器，App 留着吃快照。", flush=True)
+    atexit.register(stop_gpu)
     if not args.no_browser:
         threading.Timer(0.4, lambda: open_browser(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nstopping GPU…", flush=True)
-        stop_serve()
+        print("\nstopping GPU containers…", flush=True)
+        stop_gpu()
         print("stopped", flush=True)
 
 

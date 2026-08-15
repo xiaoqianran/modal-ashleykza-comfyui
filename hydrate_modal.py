@@ -276,7 +276,7 @@ def main(
     if install_nodes:
         print(
             "warning: --install-nodes on hydrate is ignored; "
-            "set COMFY_INSTALL_NODES=1 on modal serve/deploy to bake profile "
+            "set COMFY_INSTALL_NODES=1 on modal deploy to bake profile "
             "node packs into the GPU Image.",
             file=sys.stderr,
         )
@@ -349,7 +349,7 @@ modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 
 # GPU UI (same cached Image; lock CNR on workspace Volume)
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 
 # 成片在 workspace Volume；GPU 空闲 5s 后应缩到 0。用 CPU 列目录 / 摊平套层：
 modal run hydrate_modal.py --action outputs

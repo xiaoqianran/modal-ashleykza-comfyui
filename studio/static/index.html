@@ -60,19 +60,20 @@
         <p class="hint">默认是测试卡（能放下显存的便宜卡）。正式出图再选 RTX-PRO-6000。</p>
         <label class="keep-gpu">
           <input id="keep-gpu" type="checkbox" />
-          任务结束后继续占着 GPU（默认关掉，否则会一直计费）
+          任务结束后继续占着 GPU（默认关掉。deploy 空闲 5 秒会缩掉；开着 ComfyUI 页仍会计费）
         </label>
         <label>Comfy 地址
           <input id="base-url" type="url" placeholder="https://…modal.run" />
         </label>
         <div class="row">
           <button type="button" id="hydrate" class="btn">准备权重</button>
-          <button type="button" id="serve" class="btn primary">启动 GPU</button>
+          <button type="button" id="serve" class="btn primary">部署 GPU</button>
         </div>
         <div class="row">
           <button type="button" id="save-url" class="btn ghost">记下地址</button>
           <button type="button" id="stop" class="btn ghost">停止</button>
         </div>
+        <p class="hint">默认 <code>modal deploy</code>：第一次请求才起 GPU，空闲 5 秒缩到 0。不要开着 ComfyUI 页。只有改 GPU 端 Python 才设 <code>STUDIO_GPU_MODE=serve</code>。</p>
         <pre id="runtime-log" class="log"></pre>
       </section>
     </aside>

@@ -11,7 +11,7 @@ Studio 全部配方的 GPU / 权重 / 实测见 [模型列表](models.md)。
 ```bash
 python3 -m workflow_queue --inspect --workflow examples/你的.json
 modal run hydrate_modal.py --workflow examples/你的.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/你的.json \
   --images photo.png \
@@ -133,7 +133,7 @@ modal deploy comfyui_modal.py
 
 ```bash
 modal run hydrate_modal.py --workflow examples/ltx-2.5-t2v-i2v-distilled.json
-MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+MODAL_GPU=RTX-PRO-6000 modal deploy comfyui_modal.py
 python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow examples/ltx-2.5-t2v-i2v-distilled.json
 ```
 
@@ -146,11 +146,11 @@ python3 scripts/queue_ltx25.py --base-url https://<your>.modal.run --workflow ex
 
 Ashley 0.32.0 已有核心节点（`TripoSplatConditioning`、`SplatToFile3D`、`SaveGLB` 等），锁里 `custom_nodes` 为空。`background_removal/` 已加入 Storage 目录。官方模板把 `SplatToMesh` / 第二路 `SaveGLB` 设成 bypass；原生输出仍是 `spz` + 已启用的 `SaveGLB`。
 
-`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `python3 -m workflow_queue --enable-glb`：展平 subgraph、打开被 bypass 的 mesh/GLB、排队、把模型拉到 `--out`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（不要用 T4）。跑完立刻停掉 `modal serve`，不要把 L40S 挂着。
+`POST /prompt` 不能直接吃这份 UI JSON。无 UI 时用 `python3 -m workflow_queue --enable-glb`：展平 subgraph、打开被 bypass 的 mesh/GLB、排队、把模型拉到 `--out`。这不是部署必需步骤。显存大约要 48GB，必须**显式** `MODAL_GPU=L40S`（不要用 T4）。队列结束后不要开着 ComfyUI 页；空闲 5 秒缩容。不要把 L40S 挂着。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/triposplat-image-to-gaussian-splat.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/triposplat-image-to-gaussian-splat.json \
   --enable-glb \
@@ -171,14 +171,14 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/pixal3d-image-to-3d.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/pixal3d-image-to-3d.json \
   --images gecko.png \
   --out artifacts/pixal3d
 ```
 
-空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。CUDA wheels 装在 workspace Volume 的 `/workspace/.python/sparse-3d`（wheel 缓存在 `/workspace/.python/wheels`），容器 venv 只放一个 `.pth` 指针。缩容后下次冷启动复用 Volume site，不会再 uv pip / 下载。测试请用完即停，不要把 L40S 挂着。
+空闲 scaledown 默认 5 秒。用 `modal deploy` 冒烟；`modal serve` 不关就会一直计费。CUDA wheels 装在 workspace Volume 的 `/workspace/.python/sparse-3d`（wheel 缓存在 `/workspace/.python/wheels`），容器 venv 只放一个 `.pth` 指针。缩容后下次冷启动复用 Volume site，不会再 uv pip / 下载。队列结束即停，不要把 L40S 挂着。
 
 ## 仓库示例：Hunyuan3D 2.1 图生 GLB
 
@@ -192,7 +192,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/hunyuan3d-2.1-image-to-3d.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/hunyuan3d-2.1-image-to-3d.json \
   --images photo.png \
@@ -211,14 +211,14 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/trellis2-image-to-3d.json
-MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+MODAL_GPU=RTX-PRO-6000 modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/trellis2-image-to-3d.json \
   --images photo.png \
   --out artifacts/trellis2
 ```
 
-空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。测试请用完即停。
+空闲 scaledown 默认 5 秒。用 `modal deploy` 冒烟；`modal serve` 不关就会一直计费。队列结束即停。
 
 ## 仓库示例：SAM 3D Objects 图生 GLB
 
@@ -232,14 +232,14 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --catalog sam3d
-COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal serve comfyui_modal.py
-python3 -m workflow_queue --base-url https://<your>.modal.run \
+COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal deploy comfyui_modal.py
+python3 -m workflow_queue --base-url https://<workspace>--comfyui-ashleykza-cu128-ui-ui.modal.run \
   --workflow examples/sam3d-image-to-3d.json \
   --images photo.png \
   --out artifacts/sam3d
 ```
 
-空闲 scaledown 默认 5 秒；`modal serve` 不关就会一直计费。测完立刻停。
+空闲 scaledown 默认 5 秒。用 `modal deploy` 冒烟；`modal serve` 不关就会一直计费。队列结束即停，不要 `modal app stop`。
 
 ## 仓库示例：FLUX.2 [dev] 文生图
 
@@ -249,11 +249,11 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | `examples/flux2-dev-t2i.lock.json` | 解析锁：fp8 mixed DiT + Mistral TE + small decoder VAE |
 | `catalog/flux2-dev.json` | Studio 契约：约 71GB，测试和正式都是 **RTX-PRO-6000** |
 
-锁内 `custom_nodes` 为空。`POST /prompt` 不能直接吃这份 UI JSON；无 UI 时用 `python3 -m workflow_queue`。不要用 T4 / L40S。VAE 在 `black-forest-labs/FLUX.2-small-decoder`，hydrate 需要已授权的 `HF_TOKEN`。跑完立刻停掉 `modal serve`。
+锁内 `custom_nodes` 为空。`POST /prompt` 不能直接吃这份 UI JSON；无 UI 时用 `python3 -m workflow_queue`。不要用 T4 / L40S。VAE 在 `black-forest-labs/FLUX.2-small-decoder`，hydrate 需要已授权的 `HF_TOKEN`。队列结束后不要开着 ComfyUI 页；空闲 5 秒缩容。
 
 ```bash
 modal run hydrate_modal.py --workflow examples/flux2-dev-t2i.json
-MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+MODAL_GPU=RTX-PRO-6000 modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/flux2-dev-t2i.json \
   --prompt "a celadon teapot on wet slate" \
@@ -272,7 +272,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/qwen-image-2512.json
-MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+MODAL_GPU=RTX-PRO-6000 modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/qwen-image-2512.json \
   --prompt "雨夜霓虹巷口，红风衣，电影感" \
@@ -291,7 +291,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/qwen-image-2512-lightning.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/qwen-image-2512-lightning.json \
   --prompt "雨夜霓虹巷口，红风衣，电影感" \
@@ -306,7 +306,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | `examples/krea2-turbo-t2i.lock.json` | 解析锁：fp8 Turbo DiT + Qwen3VL-4B TE + Qwen Image VAE |
 | `catalog/krea2-turbo.json` | Studio 契约：约 17GB，测试 **L40S**，正式 **RTX-PRO-6000** |
 
-官方 Turbo **8 步**，prompt enhancement 默认开。锁内 `custom_nodes` 为空。同样走 `python3 -m workflow_queue`，不要再写 `queue_krea.py`。风格 LoRA 在模板里默认关，锁里仍有 `krea2_darkbrush` 一份。跑完立刻停掉 `modal serve`。
+官方 Turbo **8 步**，prompt enhancement 默认开。锁内 `custom_nodes` 为空。同样走 `python3 -m workflow_queue`，不要再写 `queue_krea.py`。风格 LoRA 在模板里默认关，锁里仍有 `krea2_darkbrush` 一份。队列结束后不要开着 ComfyUI 页；空闲 5 秒缩容。
 
 2026-08-13 在 **NVIDIA RTX PRO 6000 Blackwell**（96GB，ComfyUI 0.32.0）上同一组 5 条提示词 **5/5 success**，占用约 **17.4GB** 显存：
 
@@ -322,7 +322,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/krea2-turbo-t2i.json
-MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+MODAL_GPU=RTX-PRO-6000 modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/krea2-turbo-t2i.json \
   --prompt "a celadon teapot on wet slate" \
@@ -341,7 +341,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ```bash
 modal run hydrate_modal.py --workflow examples/z-image-turbo-t2i.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
 无 UI 时走 Studio 的 graph，或对照 `catalog/z-image-turbo.json` 直接 `POST /prompt`。
@@ -360,14 +360,14 @@ Ashley **0.32.0** 可能还没有 `Ideogram4Scheduler` / `DualModelGuider` / `CF
 
 ```bash
 modal run hydrate_modal.py --workflow examples/ideogram4-t2i.json
-MODAL_GPU=RTX-PRO-6000 modal serve comfyui_modal.py
+MODAL_GPU=RTX-PRO-6000 modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/ideogram4-t2i.json \
   --prompt "a celadon teapot on wet slate" \
   --out artifacts/ideogram4
 ```
 
-跑完立刻停掉 `modal serve`。不要用 T4。
+队列结束后不要开着 ComfyUI 页；空闲 5 秒缩容。不要用 T4。
 
 ## 仓库示例：NVIDIA Cosmos 3
 
@@ -403,14 +403,14 @@ Storage 增加了 `cosmos3/`。不要对这七份 JSON 盲目 `--action resolve`
 
 ```bash
 modal run hydrate_modal.py --workflow examples/cosmos3-nano-t2v.json
-MODAL_GPU=L40S modal serve comfyui_modal.py
+MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/cosmos3-nano-t2v.json \
   --prompt "a robotic arm wiping a ceramic plate" \
   --out artifacts/cosmos3-nano
 ```
 
-图生视频把 `--images first.png` 交给 `examples/cosmos3-super-image2video.json` 或 `examples/cosmos3-super-image2video-4step.json`。4-step 文生图用 `examples/cosmos3-super-text2image-4step.json`（hydrate 一次 I2V-4Step 即可，两份锁同一目录）。跑完立刻停掉 `modal serve`。不要用 T4。
+图生视频把 `--images first.png` 交给 `examples/cosmos3-super-image2video.json` 或 `examples/cosmos3-super-image2video-4step.json`。4-step 文生图用 `examples/cosmos3-super-text2image-4step.json`（hydrate 一次 I2V-4Step 即可，两份锁同一目录）。队列结束后不要开着 ComfyUI 页；空闲 5 秒缩容。不要用 T4。
 
 ## 自定义工作流
 

@@ -11,7 +11,7 @@
     "notes": [
       "title / kind / gpu / workflow 以 catalog/*.json 为准，本文件只补权重、节点、实测。",
       "新增 catalog 必须同时加一条 id 相同的记录，否则单测失败。",
-      "测完停 modal serve。不要用 T4。产物不进 Git。"
+      "冒烟用 modal deploy。测完停残留 GPU 容器，不要 modal app stop。不要用 T4。产物不进 Git。"
     ]
   },
   "models": [
