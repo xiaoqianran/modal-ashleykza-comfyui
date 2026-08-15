@@ -197,10 +197,6 @@ def _installed_comfy_env_version(site: str | Path) -> str | None:
     return _ce_contract.installed_version(site)
 
 
-def _remove_volume_comfy_env(site: Path) -> None:
-    remove_site_install(site)
-
-
 def _ensure_volume_comfy_env(workspace: str | Path, python: str) -> bool:
     """Keep the pinned isolation library on the Volume site.
 

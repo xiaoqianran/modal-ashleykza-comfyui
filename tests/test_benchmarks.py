@@ -1,6 +1,7 @@
 import unittest
 
 import benchmarks
+import recipes
 from catalog import list_catalogs, load_catalog
 
 
@@ -46,6 +47,16 @@ class ModelListTests(unittest.TestCase):
             self.assertIn(item["title"], snippet, item["id"])
         self.assertNotRegex(text, r"\*\*T4\*\*|`T4`|\| T4 \|")
         self.assertTrue(benchmarks.docs_are_current())
+        gates = benchmarks.render_workflow_exception_table()
+        self.assertTrue(gates.startswith(benchmarks.GENERATED_BANNER))
+        self.assertEqual(benchmarks.WORKFLOW_GATES_PATH.read_text(encoding="utf-8"), gates)
+        self.assertIn("runtime_hooks.sparse_3d_matches", gates)
+        self.assertIn("runtime_hooks.sam3d_matches", gates)
+        profiles = benchmarks.render_legacy_profiles_table()
+        self.assertTrue(profiles.startswith(benchmarks.GENERATED_BANNER))
+        self.assertEqual(benchmarks.LEGACY_PROFILES_PATH.read_text(encoding="utf-8"), profiles)
+        for name in recipes.FROZEN_PROFILE_IDS:
+            self.assertIn(f"`{name}`", profiles, name)
 
     def test_shared_weight_ids_exist(self):
         ids = {item["id"] for item in list_catalogs()}

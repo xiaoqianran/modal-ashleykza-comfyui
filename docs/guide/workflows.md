@@ -23,14 +23,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 只有下面这些才需要额外文件，不是每个工作流都要。清单在 `catalog/gates.py`，单测会卡住新的 `queue_*.py` / `mode=graph`：
 
-| 还要特供 | 原因 | 闸门 |
-|---|---|---|
-| 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重，或不猜 URL | 脚手架打印 `unresolved` |
-| `scripts/queue_ltx25.py` 的 patch | Image 缺官方节点 | `ALLOWED_QUEUE_SCRIPTS` |
-| Pixal3D / TRELLIS CUDA wheels | 锁里出现对应 CNR 才装到 Volume | `sparse_3d_runtime`（按 lock node id） |
-| SAM 3D comfy-env / pixi | 锁里出现 `ComfyUI-SAM3DObjects` 才装到 Volume | `comfy_env_contract`（钉版本 + 布局）+ `sam3d_runtime` |
-| `catalog/*.json` | 只给 Studio 控制面填表单 | 新配方 `mode=workflow` |
-| `mode=graph` 内嵌 prompt | 只有 Z-Image / Z-Image-Turbo | `GRAPH_MODE_IDS` |
+--8<-- "guide/_generated_workflow_gates.md"
 
 网页里加载同一份 JSON 再 Queue，本来就不需要这些脚本。
 

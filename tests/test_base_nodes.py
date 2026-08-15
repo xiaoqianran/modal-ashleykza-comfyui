@@ -35,6 +35,7 @@ class BaseNodesTests(unittest.TestCase):
         self.assertNotIn("--commit", source)
 
     def test_base_build_clones_github_and_installs_requirements_sequentially(self):
+        self.assertFalse(hasattr(base_nodes, "build_base_nodes_command"))
         commands = base_nodes.build_base_nodes_commands()
         joined = "\n".join(commands)
         self.assertNotIn("sparse-checkout", joined)

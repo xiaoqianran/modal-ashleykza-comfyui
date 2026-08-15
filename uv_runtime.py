@@ -66,14 +66,6 @@ def pip_install_cmd(
     return cmd
 
 
-def pip_uninstall_cmd(
-    python: str,
-    *packages: str,
-    uv: str | None = None,
-) -> list[str]:
-    return [uv or resolve_uv(), "pip", "uninstall", "--python", python, "-y", *packages]
-
-
 def uvx_cmd(*args: str, uvx: str | None = None) -> list[str]:
     """One-off tool runner. This is the uv stand-in for pipx."""
     return [uvx or resolve_uvx(), *args]

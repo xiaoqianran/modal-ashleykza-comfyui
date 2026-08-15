@@ -49,6 +49,7 @@ class Sam3dLockGateTests(unittest.TestCase):
         self.assertTrue(sam3d_runtime._lock_has_sam3d([{"id": "comfyui-sam3dobjects"}]))
         self.assertFalse(sam3d_runtime._lock_has_sam3d([{"id": "ComfyUI-Trellis2"}]))
         self.assertFalse(sam3d_runtime._lock_has_sam3d([]))
+        self.assertFalse(hasattr(sam3d_runtime, "_remove_volume_comfy_env"))
 
 
 def _fake_pixi(path: Path) -> Path:

@@ -46,6 +46,9 @@ class ShippedModulesTests(unittest.TestCase):
         )
         self.assertIn("runtime_hooks", GPU_PYTHON_SOURCES)
         self.assertIn("shipped_modules", GPU_PYTHON_SOURCES)
+        self.assertIn("asset_sync", GPU_PYTHON_SOURCES)
+        self.assertIn("engine_util", GPU_PYTHON_SOURCES)
+        self.assertIn("node_install", GPU_PYTHON_SOURCES)
 
     def test_modal_images_star_the_shared_tuples(self):
         self.assertEqual(

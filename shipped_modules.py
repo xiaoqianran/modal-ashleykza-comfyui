@@ -20,6 +20,9 @@ GPU_PYTHON_SOURCES: tuple[str, ...] = (
     "modal_config",
     "shipped_modules",
     "storage",
+    "asset_sync",
+    "engine_util",
+    "node_install",
 )
 
 # Hydrate is CPU-only and never runs the 130-node Image installer.

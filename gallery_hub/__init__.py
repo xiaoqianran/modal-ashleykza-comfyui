@@ -184,6 +184,3 @@ def build_index(root: Path, repo: str = DEFAULT_REPO) -> dict[str, Any]:
         ],
     }
 
-
-def media_kind_from_name(name: str) -> str:
-    return bucket_for_suffix(Path(name).suffix)

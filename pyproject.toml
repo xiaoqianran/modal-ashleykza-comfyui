@@ -20,13 +20,16 @@ select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
+    "asset_sync",
     "base_nodes",
     "catalog",
     "comfy_engine",
     "comfy_env_contract",
     "comfyui_modal",
+    "engine_util",
     "gallery_hub",
     "modal_config",
+    "node_install",
     "recipes",
     "runtime_hooks",
     "sam3d_runtime",

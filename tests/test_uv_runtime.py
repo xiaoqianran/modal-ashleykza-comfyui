@@ -101,6 +101,7 @@ class UvRuntimeTests(unittest.TestCase):
             uninstall,
         )
         self.assertNotIn("-m pip", install + upgrade + uninstall)
+        self.assertFalse(hasattr(uv_runtime, "pip_uninstall_cmd"))
 
     def test_install_uv_tarball_copies_uv_and_uvx(self):
         with tempfile.TemporaryDirectory() as directory:

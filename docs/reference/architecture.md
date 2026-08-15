@@ -8,7 +8,10 @@
   hydrate_modal.py      CPU App：hydrate / resolve / profiles / outputs / repair
   modal_config.py       常量、路径、环境变量
   storage.py            Volume 路径与 extra_model_paths.yaml
-  comfy_engine.py       下载、校验、启动 ComfyUI
+  comfy_engine.py       GPU 启动门面：apply_volume_launch / start / stop
+  asset_sync.py         权重下载、hydrate、launch.json
+  node_install.py       CNR / GitHub 节点装到 Volume
+  engine_util.py        _run / venv python 助手（测试仍 patch comfy_engine）
   sparse_3d_runtime.py  Pixal3D / TRELLIS CUDA wheels（装到 workspace Volume）
   comfy_env_contract.py comfy-env 隔离协议：钉版本、0.3 布局、启动断言
   sam3d_runtime.py      SAM 3D pixi 安装 / Modal 补丁（只执行契约）
@@ -94,12 +97,12 @@ UI.snapshot_runtime (snap=True)
 UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
         └─ apply_volume_launch
               ├─ prepare_runtime
-              ├─ verify_workflow_models
+              ├─ asset_sync.verify_workflow_models
               ├─ runtime_hooks.matched_hooks(lock CNR ids)
               │     ├─ prepare / ensure_wheels / ensure_runtime
               │     └─ 现表：sparse-3d（Pixal3D / TRELLIS.2）+ sam3d
-              ├─ ensure_node_reqs_site          → comfy_node_reqs.pth
-              └─ install_registry_nodes
+              ├─ node_install.ensure_node_reqs_site → comfy_node_reqs.pth
+              └─ node_install.install_registry_nodes
                     ├─ skip clone when Volume marker matches
                     └─ _install_node_requirements  → uv pip --target node-reqs
 ```

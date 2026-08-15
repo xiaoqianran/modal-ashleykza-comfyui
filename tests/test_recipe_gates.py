@@ -58,6 +58,17 @@ class RecipeGateSurfaceTests(unittest.TestCase):
         self.assertFalse(fn([{"id": "ComfyUI-Trellis2"}]))
         self.assertTrue(fn([{"id": "ComfyUI-SAM3DObjects"}]))
 
+    def test_workflow_exception_table_follows_gates(self):
+        from catalog.gates import render_workflow_exception_table
+
+        text = render_workflow_exception_table()
+        self.assertIn(CUDA_VOLUME_GATE, text)
+        self.assertIn("runtime_hooks.sam3d_matches", text)
+        for name in sorted(ALLOWED_QUEUE_SCRIPTS):
+            self.assertIn(name, text)
+        for name in sorted(GRAPH_MODE_IDS):
+            self.assertIn(f"`{name}`", text)
+
     def test_ltx_path_cannot_enter_catalog(self):
         catalog = dict(load_catalog("pixal3d"))
         catalog["id"] = "ltx-25"

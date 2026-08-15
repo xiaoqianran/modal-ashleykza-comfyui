@@ -11,6 +11,15 @@ import recipes
 
 
 class RecipeTests(unittest.TestCase):
+    def test_profiles_are_frozen_and_not_a_catalog(self):
+        from catalog import list_catalogs
+
+        recipes.enforce_frozen_profiles()
+        self.assertEqual(set(recipes.PROFILES), set(recipes.FROZEN_PROFILE_IDS))
+        catalog_ids = {item["id"] for item in list_catalogs()}
+        overlap = set(recipes.PROFILES) & catalog_ids
+        self.assertFalse(overlap, overlap)
+
     def test_profile_references_exist(self):
         for profile in recipes.PROFILES.values():
             self.assertTrue(all(name in recipes.MODEL_PACKS for name in profile.model_packs))
