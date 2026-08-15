@@ -70,3 +70,19 @@ python -m gallery_hub.push \
 
 注意：HF 数据集是私有的，但编进 GitHub Pages 的快照是**公开**的。不要上传不能公开的文件。
 
+## 图库预览与分页
+
+3D 以前只有「下载 GLB」，不是 Pages 性能不够：生成器没挂查看器。现在 `docs/javascripts/gallery.js` 对 **GLB / GLTF** 用 [`<model-viewer>`](https://modelviewer.dev/)（Google CDN 4.3.1）在卡片里预览，下载按钮仍保留。`.obj` / `.ply` / splat 仍只能下载。
+
+分页在**每个合集**里做，不把整站拆成几十个 MkDocs 子页：
+
+| 桶 | 每页 | 原因 |
+|---|---|---|
+| 图片 | 12 | 缩略图已 `loading="lazy"` |
+| 视频 | 6 | 解码比图贵 |
+| 3D | 4 | 每个查看器占一个 WebGL 上下文，浏览器大约只给 8–16 个 |
+
+当前页且进入视口才挂载 `<model-viewer>`；翻页或滚出视口就卸掉。合集不超过一页时不显示翻页条。页码写在 hash 里（`#mesh3d-sam3d-pinterest-pins-p2`），可分享。
+
+以后单页 HTML / 媒体体积真的太大，再按合集拆 `gallery/<bucket>/<recipe>/<id>.md`；分页常量在 `gallery_hub.GALLERY_PAGE_SIZE`，改一处即可。
+

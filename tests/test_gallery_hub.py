@@ -8,7 +8,14 @@ import unittest
 from pathlib import Path
 
 import gallery_hub
-from gallery_hub import bucket_for_kind, build_index, collection_dir, slug
+from gallery_hub import (
+    GALLERY_PAGE_SIZE,
+    VIEWABLE_MESH_SUFFIXES,
+    bucket_for_kind,
+    build_index,
+    collection_dir,
+    slug,
+)
 from gallery_hub.build_pages import build_pages
 from gallery_hub.report import report
 from gallery_hub.stage import stage_collection
@@ -114,6 +121,108 @@ class GalleryHubTests(unittest.TestCase):
         self.assertIn("--require-items", text)
         self.assertIn("python -m gallery_hub.build_pages", text)
         self.assertIn("secrets.HF_TOKEN", text)
+
+    def test_mesh_glb_gets_viewer_placeholder_and_download(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            media = root / "mesh.glb"
+            media.write_bytes(b"glTF")
+            staged = stage_collection(
+                dest_root=root / "hub",
+                recipe="sam3d",
+                collection="pinterest-pins",
+                title="Pinterest 三张图 · SAM 3D",
+                kind="i23d",
+                items=[
+                    {
+                        "id": "001",
+                        "title": "Senin tree-canopy story",
+                        "prompt": "https://www.pinterest.com/pin/1/",
+                        "media_path": media,
+                    }
+                ],
+            )
+            self.assertTrue((staged / "001.glb").is_file())
+            generated = build_pages(
+                src=root / "hub",
+                docs_gallery=root / "docs-gallery",
+                repo="seachen/modal-comfyui-picture",
+            )
+            text = generated.read_text(encoding="utf-8")
+            self.assertIn('class="gallery-model"', text)
+            self.assertIn("data-src=", text)
+            self.assertIn("001.glb", text)
+            self.assertIn("gallery-download", text)
+            self.assertIn('data-bucket="mesh3d"', text)
+            self.assertIn('data-gallery-id="mesh3d-sam3d-pinterest-pins"', text)
+            self.assertIn(f'data-page-size="{GALLERY_PAGE_SIZE["mesh3d"]}"', text)
+            self.assertIn(".glb", "".join(VIEWABLE_MESH_SUFFIXES))
+            copied = list((root / "docs-gallery" / "media").rglob("*.glb"))
+            self.assertTrue(copied)
+
+    def test_mesh_ply_stays_download_only(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            media = root / "cloud.ply"
+            media.write_text("ply\n", encoding="utf-8")
+            stage_collection(
+                dest_root=root / "hub",
+                recipe="triposplat",
+                collection="demo",
+                title="splat demo",
+                kind="i23d",
+                items=[{"id": "001", "title": "cloud", "prompt": "a", "media_path": media}],
+            )
+            text = build_pages(
+                src=root / "hub",
+                docs_gallery=root / "docs-gallery",
+                repo="seachen/modal-comfyui-picture",
+            ).read_text(encoding="utf-8")
+            self.assertIn("gallery-model-unsupported", text)
+            self.assertNotIn("class=\"gallery-model\"", text)
+            self.assertIn("下载 001.ply", text)
+
+    def test_image_collection_declares_page_size_for_all_cards(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            media = root / "in.png"
+            media.write_bytes(TINY_PNG)
+            items = [
+                {
+                    "id": f"{index:03d}",
+                    "title": f"shot {index}",
+                    "prompt": "p",
+                    "media_path": media,
+                }
+                for index in range(1, 14)
+            ]
+            stage_collection(
+                dest_root=root / "hub",
+                recipe="z-image-turbo",
+                collection="landscapes-5",
+                title="江山",
+                kind="t2i",
+                items=items,
+            )
+            text = build_pages(
+                src=root / "hub",
+                docs_gallery=root / "docs-gallery",
+                repo="seachen/modal-comfyui-picture",
+            ).read_text(encoding="utf-8")
+            self.assertEqual(text.count('class="gallery-card"'), 13)
+            self.assertIn(f'data-page-size="{GALLERY_PAGE_SIZE["image"]}"', text)
+            self.assertLess(GALLERY_PAGE_SIZE["image"], 13)
+            self.assertLess(GALLERY_PAGE_SIZE["mesh3d"], GALLERY_PAGE_SIZE["image"])
+
+    def test_pages_loads_gallery_javascript(self):
+        root = Path(__file__).resolve().parents[1]
+        mkdocs = (root / "mkdocs.yml").read_text(encoding="utf-8")
+        self.assertIn("javascripts/gallery.js", mkdocs)
+        script = (root / "docs" / "javascripts" / "gallery.js").read_text(encoding="utf-8")
+        self.assertIn("model-viewer", script)
+        self.assertIn("IntersectionObserver", script)
+        self.assertIn("gallery-pager", script)
+        self.assertIn("4.3.1", script)
 
 
 if __name__ == "__main__":

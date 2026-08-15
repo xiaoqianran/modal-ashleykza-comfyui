@@ -11,9 +11,11 @@ from typing import Any
 from gallery_hub import (
     BUCKETS,
     DEFAULT_REPO,
+    GALLERY_PAGE_SIZE,
     IMAGE_SUFFIXES,
     MESH_SUFFIXES,
     VIDEO_SUFFIXES,
+    VIEWABLE_MESH_SUFFIXES,
     scan_collections,
 )
 
@@ -69,7 +71,7 @@ def _item_card(item: dict[str, Any], collection_dir: Path, dest_dir: Path, page_
     title = sidecar.get("title") or item.get("title") or item.get("id")
     prompt = str(sidecar.get("prompt") or "")
     suffix = Path(media_name).suffix.lower()
-    lines = [f'<article class="gallery-card" id="item-{item.get("id")}">']
+    lines = [f'<article class="gallery-card" id="item-{_escape(str(item.get("id") or src.stem))}">']
     if suffix in IMAGE_SUFFIXES and src.is_file():
         full = _copy_media(src, dest_dir / src.name)
         thumb = _thumb(src, dest_dir / f"{src.stem}.thumb.jpg")
@@ -84,7 +86,21 @@ def _item_card(item: dict[str, Any], collection_dir: Path, dest_dir: Path, page_
         )
     elif suffix in MESH_SUFFIXES and src.is_file():
         full = _copy_media(src, dest_dir / src.name)
-        lines.append(f'<a class="gallery-download" href="{_rel(full, page_dir)}">下载 {src.name}</a>')
+        href = _rel(full, page_dir)
+        if suffix in VIEWABLE_MESH_SUFFIXES:
+            lines.append(
+                f'<div class="gallery-model" data-src="{_escape(href)}" '
+                f'data-alt="{_escape(str(title))}">'
+                f'<span class="gallery-model-placeholder">3D 预览</span></div>'
+            )
+        else:
+            lines.append(
+                '<p class="gallery-model-unsupported">此格式无法在浏览器里预览，请下载后查看。</p>'
+            )
+        lines.append(
+            f'<a class="gallery-download" href="{_escape(href)}" download>'
+            f"下载 {_escape(src.name)}</a>"
+        )
     if prompt:
         lines.append("<details><summary>提示词</summary>")
         lines.append(f"<pre>{_escape(prompt)}</pre>")
@@ -139,7 +155,13 @@ def render_generated(src: Path, docs_gallery: Path, repo: str) -> str:
                 chunks.append("")
                 chunks.append(str(collection["summary"]))
             chunks.append("")
-            chunks.append('<div class="gallery-grid" markdown="1">')
+            gallery_id = f"{bucket}-{collection['recipe']}-{collection['id']}"
+            page_size = GALLERY_PAGE_SIZE.get(bucket) or GALLERY_PAGE_SIZE["image"]
+            chunks.append(
+                f'<div class="gallery-grid" data-bucket="{bucket}" '
+                f'data-gallery-id="{_escape(gallery_id)}" '
+                f'data-page-size="{page_size}" markdown="1">'
+            )
             chunks.append("")
             for entry in collection.get("items") or []:
                 chunks.append(_item_card(entry, folder, media_root / collection["path"], docs_gallery))
