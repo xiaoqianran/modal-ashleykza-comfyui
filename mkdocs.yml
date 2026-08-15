@@ -75,6 +75,9 @@ markdown_extensions:
 extra_css:
   - stylesheets/gallery.css
 
+extra_javascript:
+  - javascripts/gallery.js
+
 extra:
   social:
     - icon: fontawesome/brands/github

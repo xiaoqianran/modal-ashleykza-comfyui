@@ -28,6 +28,12 @@ KIND_TO_BUCKET = {
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 MESH_SUFFIXES = {".glb", ".gltf", ".obj", ".ply", ".splat", ".spz"}
+# model-viewer can draw these in the browser. Other mesh suffixes stay download-only.
+VIEWABLE_MESH_SUFFIXES = {".glb", ".gltf"}
+
+# Per-collection page size on GitHub Pages. Mesh is small because each
+# <model-viewer> holds a WebGL context (browsers typically cap ~8–16).
+GALLERY_PAGE_SIZE = {"image": 12, "video": 6, "mesh3d": 4}
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
