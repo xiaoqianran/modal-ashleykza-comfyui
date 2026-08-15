@@ -1,12 +1,15 @@
 import io
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from shipped_modules import GPU_PYTHON_SOURCES
 from studio import cost as studio_cost
+from studio import jobs as studio_jobs
+from studio import trace as studio_trace
 from studio.server import _generate_batch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +37,7 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(payload["jobs"], 1)
         self.assertEqual(payload["seconds"], 54.06)
         self.assertEqual(payload["usd"], round(54.06 * 0.000542, 6))
-        self.assertIn("不含 Volume", payload["hint"])
+        self.assertIn("hydrate CPU", payload["hint"])
         self.assertNotIn("T4", payload["hint"])
 
     def test_two_jobs_add_scaledown_once(self):
@@ -73,6 +76,13 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(payload["scaledown_seconds"], 5)
 
 
+class CpuRateCardTests(unittest.TestCase):
+    def test_hydrate_hour_is_eight_cores_and_sixteen_gib(self):
+        expected = 8 * 0.047 + 16 * 0.008
+        self.assertAlmostEqual(studio_cost.usd_for_cpu(3600), expected, places=4)
+        self.assertGreater(studio_cost.usd_for_cpu(3600), 0.5)
+
+
 class TraceTests(unittest.TestCase):
     def test_jsonl_strips_secrets_and_reads_recent(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -91,6 +101,94 @@ class TraceTests(unittest.TestCase):
             self.assertEqual(events[0]["recipe"], "pixal3d")
 
 
+class RunTraceTests(unittest.TestCase):
+    def test_hydrate_then_generate_is_one_call_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cost-trace.jsonl"
+            with patch.object(studio_cost, "TRACE_PATH", path):
+                studio_trace.track(
+                    "hydrate",
+                    lambda: (time.sleep(0.05) or {"ok": True}),
+                    payload={"catalog": "sam3d", "gpu": "L40S"},
+                )
+                studio_trace.track(
+                    "generate",
+                    lambda: {"ok": True, "count": 2, "catalog": "sam3d"},
+                    payload={"catalog": "sam3d", "gpu": "L40S"},
+                )
+                run = studio_trace.load_active()
+            names = [item["name"] for item in run["spans"]]
+            self.assertEqual(run["recipe"], "sam3d")
+            self.assertIn("hydrate", names)
+            self.assertIn("generate", names)
+            self.assertEqual(run["jobs"], 2)
+            self.assertGreater(run["usd"], 0)
+
+    def test_failed_job_still_writes_error_span(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cost-trace.jsonl"
+            with patch.object(studio_cost, "TRACE_PATH", path):
+                with self.assertRaises(RuntimeError):
+                    studio_trace.track(
+                        "generate",
+                        lambda: (_ for _ in ()).throw(RuntimeError("oom")),
+                        payload={"catalog": "pixal3d", "gpu": "L40S"},
+                    )
+                run = studio_trace.load_active()
+            generate = [item for item in run["spans"] if item["name"] == "generate"][0]
+            self.assertEqual(generate["status"], "error")
+            self.assertIn("oom", generate["error"])
+            self.assertEqual(run["status"], "error")
+
+    def test_leftover_gpu_keeps_metering_after_the_job(self):
+        leftovers = [
+            {
+                "container_id": "ta-1",
+                "app_name": "comfyui-ashleykza-cu128",
+                "role": "gpu",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cost-trace.jsonl"
+            with (
+                patch.object(studio_cost, "TRACE_PATH", path),
+                patch.object(studio_trace, "_PROBE_LIST", lambda: leftovers),
+                patch.object(studio_trace, "_PROBE_STOP", lambda **_k: []),
+                patch.object(studio_jobs, "running", return_value=[]),
+            ):
+                studio_trace.track(
+                    "generate",
+                    lambda: {"ok": True, "count": 1},
+                    payload={"catalog": "pixal3d", "gpu": "L40S"},
+                )
+                run = studio_trace.load_active()
+                self.assertEqual(run["status"], "leaking")
+                run["meter_ts"] = run["meter_ts"] - 120
+                studio_trace._save_run(run)
+                studio_trace.tick_leftovers()
+                run = studio_trace.load_active()
+            names = [item["name"] for item in run["spans"]]
+            self.assertIn("leftover_gpu", names)
+            leftover = [item for item in run["spans"] if item["name"] == "leftover_gpu"][-1]
+            self.assertGreaterEqual(leftover["seconds"], 119)
+            self.assertGreater(leftover["usd"], 0)
+            self.assertGreater(run["burn_usd_per_min"], 0)
+
+    def test_keep_gpu_is_held_not_leaking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cost-trace.jsonl"
+            with patch.object(studio_cost, "TRACE_PATH", path):
+                studio_trace.track(
+                    "generate",
+                    lambda: {"ok": True, "count": 1},
+                    payload={"catalog": "z-image", "gpu": "L40S"},
+                    keep_gpu=True,
+                )
+                run = studio_trace.load_active()
+            self.assertEqual(run["status"], "kept")
+            self.assertTrue(run["expect_gpu"])
+
+
 class CliTests(unittest.TestCase):
     def test_cli_prints_predict_json(self):
         buf = io.StringIO()
@@ -104,23 +202,31 @@ class CliTests(unittest.TestCase):
     def test_cli_trace(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "cost-trace.jsonl"
-            studio_cost.record_event({"kind": "generate", "recipe": "z-image"}, path=path)
             buf = io.StringIO()
             with patch.object(studio_cost, "TRACE_PATH", path), patch("sys.stdout", buf):
+                studio_trace.track(
+                    "hydrate",
+                    lambda: {"ok": True},
+                    payload={"catalog": "z-image", "gpu": "L40S"},
+                )
                 code = studio_cost.main(["--trace"])
         self.assertEqual(code, 0)
-        events = json.loads(buf.getvalue())
-        self.assertEqual(events[0]["recipe"], "z-image")
+        runs = json.loads(buf.getvalue())
+        self.assertEqual(runs[0]["recipe"], "z-image")
+        self.assertTrue(runs[0]["spans"])
 
 
 class SidecarBoundaryTests(unittest.TestCase):
     def test_not_on_gpu_image(self):
         self.assertNotIn("studio.cost", GPU_PYTHON_SOURCES)
+        self.assertNotIn("studio.trace", GPU_PYTHON_SOURCES)
         self.assertNotIn("cost", GPU_PYTHON_SOURCES)
         for name in GPU_PYTHON_SOURCES:
             text = (ROOT / f"{name}.py").read_text(encoding="utf-8")
             self.assertNotIn("studio.cost", text, name)
+            self.assertNotIn("studio.trace", text, name)
             self.assertNotIn("from studio import cost", text, name)
+            self.assertNotIn("from studio import trace", text, name)
 
     def test_generate_records_cost_without_breaking_stop(self):
         payload = {

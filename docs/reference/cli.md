@@ -47,7 +47,7 @@ python -m studio --no-browser
 
 Windows：Releases 里只下一个 `Studio.exe`，双击即可。见 [Studio](../guide/studio.md#studio-exe)。
 
-本机 `127.0.0.1:8787`，启动后默认打开浏览器。顶栏配方、GPU、实测见 [模型列表](../guide/models.md) 与 [Studio](../guide/studio.md)。GPU 秒估价（旁路，不进 Image）：
+本机 `127.0.0.1:8787`，启动后默认打开浏览器。顶栏配方、GPU、实测见 [模型列表](../guide/models.md) 与 [Studio](../guide/studio.md)。一次配方尝试的占用（hydrate CPU、GPU、报错后残留容器）记在本机 run trace：
 
 ```bash
 python3 -m studio.cost --recipe sam3d --gpu L40S --count 1

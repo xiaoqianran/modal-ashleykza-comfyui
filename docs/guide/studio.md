@@ -51,7 +51,24 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 ## 成本（旁路）
 
-Studio 用冻结的 Modal GPU 单价（2026-08-12 公开价卡）估 **GPU 秒**费用，写在本机 `.studio/cost-trace.jsonl`（已 gitignore）。不进 GPU Image，不改 hydrate / `runtime_hooks` / `comfy_engine`。不含 Volume / CPU / 内存。冒烟秒数是 POST `/prompt` → `/history`；生图墙钟含 `wait_ready`（冷启动），通常更长。没有实测时只显示每小时单价和 5 秒缩容，不编造任务总价。换卡或换配方时顶栏附近会更新预估；生成结束后同一行显示本次实测。
+加一个新配方准备跑时，钱不是「出图成功那几秒」，而是整段占用：准备权重的 CPU、冷启动 GPU、中途报错后容器还挂着、跑完忘了停。Studio 把这一次配方尝试收成一条 **run**，调用链是 span：
+
+```text
+run (sam3d / L40S)
+  reclaim          开跑前清掉上一次残留
+  hydrate          CPU 8 核 / 16GiB（modal run sync_workflow）
+  serve            deploy 本身不起卡；serve 会一直占 GPU
+  generate         GPU 占用墙钟（同一张卡，不按子步骤加两遍）
+    wait_ready
+    graph_to_prompt
+    prompt[1]      失败也会留下 error span
+    stop_gpu
+  leftover_gpu     停不掉或忘了停：按分钟继续记
+```
+
+冻结 Modal 2026-08-12 单价。只写本机 `.studio/runs/<run_id>.json` 和 `.studio/cost-trace.jsonl`（已 gitignore）。不进 GPU Image，不改 hydrate / `runtime_hooks` / `comfy_engine`。Studio 进程里每 60 秒扫一次 `modal container list`；hydrate CPU 和意外 GPU 会尝试停掉并记账。勾了占卡会显示「占卡计费中」，不会误杀。
+
+不含 Volume 月费。预估仍用 overlay 冒烟秒数；没有实测就不编造任务总价。
 
 ```bash
 python3 -m studio.cost --recipe sam3d --gpu L40S --count 1

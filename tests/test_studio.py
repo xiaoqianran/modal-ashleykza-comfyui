@@ -9,7 +9,9 @@ from studio.keys import mask_secret, save_keys
 from studio.modal_ops import (
     _container_rows,
     _first_app_url,
+    app_role,
     gpu_mode,
+    is_billable_cpu_app,
     is_billable_gpu_app,
     serve_url,
     start_gpu,
@@ -109,6 +111,9 @@ class GpuReleaseTests(unittest.TestCase):
     def test_hydrate_app_is_not_a_billable_gpu_target(self):
         self.assertTrue(is_billable_gpu_app("comfyui-ashleykza-cu128"))
         self.assertFalse(is_billable_gpu_app("comfyui-ashleykza-cu128-hydrate"))
+        self.assertTrue(is_billable_cpu_app("comfyui-ashleykza-cu128-hydrate"))
+        self.assertEqual(app_role("comfyui-ashleykza-cu128"), "gpu")
+        self.assertEqual(app_role("comfyui-ashleykza-cu128-hydrate"), "cpu")
         rows = _container_rows(
             '[{"container_id":"ta-1","app_name":"comfyui-ashleykza-cu128"}]'
         )

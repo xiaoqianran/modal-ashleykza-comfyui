@@ -60,6 +60,7 @@ class WindowsBundleTests(unittest.TestCase):
             self.assertTrue((app / "catalog" / "gates.py").is_file())
             self.assertTrue((app / "studio" / "server.py").is_file())
             self.assertTrue((app / "studio" / "cost.py").is_file())
+            self.assertTrue((app / "studio" / "trace.py").is_file())
             self.assertTrue((app / "benchmarks" / "models.json").is_file())
             self.assertFalse((app / "benchmarks.py").is_file())
             self.assertTrue((app / "README.txt").is_file())

@@ -9,7 +9,6 @@ import mimetypes
 import random
 import sys
 import threading
-import time
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -32,6 +31,7 @@ from catalog import (
 from storage import safe_dest_file
 from studio import cost as studio_cost
 from studio import jobs
+from studio import trace as studio_trace
 from studio.comfy import queue_prompt, wait_history, wait_ready
 from studio.keys import ALL_KEYS, ROOT, public_key_state, save_keys
 from studio.modal_ops import (
@@ -191,11 +191,12 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         workflow = json.loads(workflow_path(catalog).read_text(encoding="utf-8"))
     elif isinstance(catalog.get("graph"), dict):
         workflow = catalog["graph"]
-    ready = wait_ready(
-        base,
-        timeout=int(payload.get("ready_timeout") or 900),
-        workflow=workflow,
-    )
+    with studio_trace.span("wait_ready", resource="gpu", billable=False):
+        ready = wait_ready(
+            base,
+            timeout=int(payload.get("ready_timeout") or 900),
+            workflow=workflow,
+        )
     jobs.append_log(job_id, json.dumps({"ready": True, "devices": ready.get("devices")}, ensure_ascii=False))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -203,7 +204,8 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     if catalog_mode(catalog) == "workflow":
         jobs.append_log(job_id, "用运行中的 ComfyUI 做 graphToPrompt()")
         try:
-            template = workflow_queue.to_api_prompt(base, workflow)
+            with studio_trace.span("graph_to_prompt", resource="gpu", billable=False):
+                template = workflow_queue.to_api_prompt(base, workflow)
         except ModuleNotFoundError as exc:
             raise RuntimeError(
                 "workflow 模式需要本机 Playwright / Chrome 来跑 graphToPrompt。"
@@ -235,9 +237,15 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             job_id,
             f"[{index + 1}/{len(planned)}] seed={values.get('seed')} image={image_name or '-'}",
         )
-        prompt_id = queue_prompt(base, graph, str(catalog.get("client_id") or "studio"))
-        history = wait_history(base, prompt_id, timeout=900)
-        saved = workflow_queue.download_outputs(base, history, OUTPUT_DIR)
+        with studio_trace.span(
+            f"prompt[{index + 1}]",
+            resource="gpu",
+            billable=False,
+            extra={"seed": values.get("seed"), "image": image_name},
+        ):
+            prompt_id = queue_prompt(base, graph, str(catalog.get("client_id") or "studio"))
+            history = wait_history(base, prompt_id, timeout=900)
+            saved = workflow_queue.download_outputs(base, history, OUTPUT_DIR)
         if not saved:
             raise RuntimeError(f"prompt {prompt_id} finished without outputs")
         files = [f"/api/outputs/{path.name}" for path in saved]
@@ -267,83 +275,37 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _attach_cost(
-    job_id: str,
-    payload: dict[str, Any],
-    result: dict[str, Any] | None,
-    started: float,
-    keep: bool,
-    status: str,
-) -> None:
-    """Best-effort sidecar. Must never fail a generate job."""
-    try:
-        seconds = max(time.monotonic() - started, 0.0)
-        recipe_id = str(
-            payload.get("catalog")
-            or (result or {}).get("catalog")
-            or load_state().get("catalog")
-            or ""
-        ).strip()
-        gpu = str(payload.get("gpu") or "").strip()
-        jobs_n = int((result or {}).get("count") or 0)
-        if jobs_n < 1:
-            jobs_n = 1
-        predicted = studio_cost.predict(
-            recipe=recipe_id,
-            gpu=gpu,
-            count=jobs_n,
-            keep_gpu=keep,
-        )
-        gpu_name = str(predicted.get("gpu") or gpu)
-        idle = float(predicted.get("scaledown_seconds") or 0)
-        billable = seconds if keep else seconds + idle
-        event = studio_cost.record_event(
-            {
-                "kind": "generate",
-                "recipe": recipe_id or predicted.get("recipe"),
-                "gpu": gpu_name,
-                "seconds": round(seconds, 3),
-                "billable_seconds": round(billable, 3),
-                "usd": studio_cost.usd_for_seconds(gpu_name, billable) if gpu_name else None,
-                "jobs": jobs_n,
-                "predicted_usd": predicted.get("usd"),
-                "keep_gpu": keep,
-                "status": status,
-            }
-        )
-        jobs.append_log(job_id, json.dumps({"cost": event}, ensure_ascii=False))
-        if isinstance(result, dict):
-            result["cost"] = event
-    except Exception as exc:
-        try:
-            jobs.append_log(job_id, f"cost trace skipped: {exc}")
-        except Exception:
-            pass
-
-
 def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     keep = wants_keep_gpu(payload)
-    started = time.monotonic()
-    result: dict[str, Any] | None = None
-    status = "error"
-    try:
-        result = _run_generate_batch(job_id, payload)
-        status = "ok"
-        if keep:
-            jobs.append_log(job_id, "keep_gpu=true，GPU 继续挂着")
-        return result
-    finally:
-        if not keep:
-            jobs.append_log(
-                job_id,
-                "任务结束，停止 GPU 容器。deploy 的 App 留着吃快照；不要开着 ComfyUI 页。",
-            )
-            stopped = stop_gpu(log=lambda line: jobs.append_log(job_id, line))
-            jobs.append_log(
-                job_id,
-                json.dumps({"released": True, **stopped}, ensure_ascii=False),
-            )
-        _attach_cost(job_id, payload, result, started, keep, status)
+
+    def body() -> dict[str, Any]:
+        try:
+            result = _run_generate_batch(job_id, payload)
+            if keep:
+                jobs.append_log(job_id, "keep_gpu=true，GPU 继续挂着")
+            return result
+        finally:
+            if not keep:
+                jobs.append_log(
+                    job_id,
+                    "任务结束，停止 GPU 容器。deploy 的 App 留着吃快照；不要开着 ComfyUI 页。",
+                )
+                with studio_trace.span("stop_gpu", resource="control", billable=False):
+                    stopped = stop_gpu(log=lambda line: jobs.append_log(job_id, line))
+                jobs.append_log(
+                    job_id,
+                    json.dumps({"released": True, **stopped}, ensure_ascii=False),
+                )
+
+    tracked = studio_trace.track(
+        "generate",
+        body,
+        job_id=job_id,
+        payload=payload,
+        log=lambda line: jobs.append_log(job_id, line),
+        keep_gpu=keep,
+    )
+    return tracked
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -389,12 +351,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file(UPLOAD_DIR / name)
             return
         if path == "/api/status":
+            active = studio_trace.load_active()
             _json(
                 self,
                 200,
                 {
                     "keys": public_key_state(),
                     "runtime": runtime_status(),
+                    "cost": studio_trace.public_run(active) if active else None,
                 },
             )
             return
@@ -411,7 +375,14 @@ class Handler(BaseHTTPRequestHandler):
                 limit = int((qs.get("limit") or ["40"])[0])
             except ValueError:
                 limit = 40
-            _json(self, 200, {"events": studio_cost.recent_events(limit)})
+            _json(
+                self,
+                200,
+                {
+                    "runs": studio_trace.recent_runs(limit),
+                    "events": studio_cost.recent_events(limit),
+                },
+            )
             return
         if path == "/api/cost":
             qs = parse_qs(parsed.query)
@@ -420,7 +391,7 @@ class Handler(BaseHTTPRequestHandler):
             keep_raw = str((qs.get("keep_gpu") or [""])[0]).strip().lower()
             try:
                 count = int((qs.get("count") or ["1"])[0])
-                payload = studio_cost.predict(
+                estimate = studio_cost.predict(
                     recipe=recipe,
                     gpu=gpu,
                     count=count,
@@ -429,7 +400,10 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, TypeError) as exc:
                 _json(self, 400, {"error": str(exc)})
                 return
-            _json(self, 200, payload)
+            active = studio_trace.load_active()
+            run = studio_trace.public_run(active) if active else None
+            hint = str((run or estimate).get("hint") or estimate.get("hint") or "")
+            _json(self, 200, {**estimate, "run": run, "hint": hint})
             return
         _json(self, 404, {"error": "not found"})
 
@@ -474,7 +448,13 @@ class Handler(BaseHTTPRequestHandler):
             recipe_id = str(payload.get("catalog") or DEFAULT_CATALOG_ID)
 
             def run(job_id: str) -> dict[str, Any]:
-                return hydrate(recipe_id, log=lambda line: jobs.append_log(job_id, line))
+                return studio_trace.track(
+                    "hydrate",
+                    lambda: hydrate(recipe_id, log=lambda line: jobs.append_log(job_id, line)),
+                    job_id=job_id,
+                    payload={**payload, "catalog": recipe_id},
+                    log=lambda line: jobs.append_log(job_id, line),
+                )
 
             _json(self, 200, {"job_id": jobs.spawn("hydrate", run)})
             return
@@ -483,12 +463,18 @@ class Handler(BaseHTTPRequestHandler):
             gpu = str(payload.get("gpu") or "")
 
             def run(job_id: str) -> dict[str, Any]:
-                return start_gpu(recipe_id, gpu, log=lambda line: jobs.append_log(job_id, line))
+                return studio_trace.track(
+                    "serve",
+                    lambda: start_gpu(recipe_id, gpu, log=lambda line: jobs.append_log(job_id, line)),
+                    job_id=job_id,
+                    payload={**payload, "catalog": recipe_id, "gpu": gpu},
+                    log=lambda line: jobs.append_log(job_id, line),
+                )
 
             _json(self, 200, {"job_id": jobs.spawn("serve", run)})
             return
         if path == "/api/stop":
-            result = stop_gpu()
+            result = studio_trace.track("stop", stop_gpu, payload=payload)
             _json(self, 200, result)
             return
         if path == "/api/base-url":
@@ -566,6 +552,12 @@ def main(argv: list[str] | None = None) -> None:
     print("顶栏配方可选 Z-Image / Z-Image-Turbo / FLUX.2 [dev] / Qwen-Image-2512 / Qwen-Image-2512 Lightning / Krea-2 Turbo / Ideogram 4 / Cosmos3-Nano / Cosmos3-Edge / Cosmos3-Super / Cosmos3-Super-Text2Image / Cosmos3-Super-Text2Image-4Step / Cosmos3-Super-Image2Video / Cosmos3-Super-Image2Video-4Step / Pixal3D / Hunyuan3D 2.1 / TRELLIS.2 / TripoSplat。", flush=True)
     print("密钥只存在本机 .studio.env，不会进 Git。", flush=True)
     print("默认 GPU 是 L40S。启动走 modal deploy；生成结束后停残留容器，App 留着吃快照。", flush=True)
+    studio_trace.enable_modal_sidecar()
+    threading.Thread(
+        target=studio_trace.watch_leftovers,
+        name="studio-cost-watch",
+        daemon=True,
+    ).start()
     atexit.register(stop_gpu)
     if not args.no_browser:
         threading.Timer(0.4, lambda: open_browser(url)).start()

@@ -1,7 +1,8 @@
-"""Studio-only GPU-second cost estimate and local JSONL trace.
+"""Frozen Modal rate card + generate estimate.
 
-Frozen Modal public rate card. Not imported by the GPU Image, hydrate, or
-``runtime_hooks``. Updating ``GPU_USD_PER_SECOND`` is the only price maintenance.
+Call-chain occupancy (hydrate CPU, leftover GPU after errors) lives in
+``studio.trace``. Neither module is imported by the GPU Image.
+Updating the constants below is the only price maintenance.
 """
 
 from __future__ import annotations
@@ -37,6 +38,12 @@ GPU_USD_PER_SECOND: dict[str, float] = {
     "B300": 0.001972,
 }
 
+# Hydrate ``sync_workflow``: cpu=8, memory=16384. Not GPU.
+CPU_USD_PER_CORE_HOUR = 0.047
+MEMORY_USD_PER_GIB_HOUR = 0.008
+HYDRATE_CPU_CORES = 8.0
+HYDRATE_MEMORY_GIB = 16.0
+
 _GPU_ALIASES: dict[str, str] = {
     "A100": "A100-80GB",
     "A100 40GB": "A100-40GB",
@@ -71,6 +78,19 @@ def usd_per_second(gpu: str) -> float:
 
 def usd_for_seconds(gpu: str, seconds: float) -> float:
     return round(max(float(seconds), 0.0) * usd_per_second(gpu), 6)
+
+
+def usd_for_cpu(
+    seconds: float,
+    *,
+    cores: float = HYDRATE_CPU_CORES,
+    memory_gib: float = HYDRATE_MEMORY_GIB,
+) -> float:
+    hours = max(float(seconds), 0.0) / 3600.0
+    return round(
+        hours * (float(cores) * CPU_USD_PER_CORE_HOUR + float(memory_gib) * MEMORY_USD_PER_GIB_HOUR),
+        6,
+    )
 
 
 def format_usd(value: float | None) -> str:
@@ -138,7 +158,7 @@ def smoke_timing(recipe: str, overlay: dict[str, Any] | None = None) -> dict[str
     return {"seconds": seconds, "gpu": gpu, "warm_seconds": warm_seconds}
 
 
-def _catalog_gpu(recipe: str) -> str:
+def default_gpu(recipe: str) -> str:
     if not recipe:
         return ""
     try:
@@ -174,7 +194,7 @@ def predict(
 ) -> dict[str, Any]:
     recipe_id = str(recipe or "").strip()
     jobs = max(int(count), 1)
-    gpu_name = normalize_gpu(gpu) or normalize_gpu(_catalog_gpu(recipe_id))
+    gpu_name = normalize_gpu(gpu) or normalize_gpu(default_gpu(recipe_id))
     if not gpu_name:
         raise ValueError("gpu is required")
     rate = usd_per_second(gpu_name)
@@ -184,10 +204,12 @@ def predict(
     scaledown_usd = usd_for_seconds(gpu_name, idle)
     usd_minute = round(rate * 60, 6)
     usd_hour = round(rate * 3600, 6)
+    hydrate_hour = usd_for_cpu(3600)
     notes = [
-        "只计 GPU 秒，不含 Volume / CPU / 内存。",
-        "冒烟秒数是 POST /prompt → /history 的客户端墙钟。",
-        "Studio 生图墙钟含 wait_ready（冷启动），通常长于冒烟。",
+        "生成预估只计 GPU 秒，不含 Volume。",
+        "准备权重按 hydrate CPU 8 核 / 16GiB 另计，见运行 trace。",
+        "冒烟秒数是 POST /prompt → /history。生图墙钟含 wait_ready（冷启动）。",
+        "报错或忘了停容器时，占用会继续写进同一条 run。",
     ]
     if keep_gpu:
         notes.append("勾了占卡后空闲也会一直计费，直到点停止。")
@@ -198,7 +220,8 @@ def predict(
         smoke_gpu = smoke.get("gpu")
         hint = (
             f"约 {format_usd(usd)} · {gpu_name} · {jobs} 张 × {smoke['seconds']:.0f}s"
-            f" + 缩容 {idle:.0f}s（仅 GPU 秒，不含 Volume/CPU）"
+            f" + 缩容 {idle:.0f}s"
+            f"；hydrate CPU {format_usd(hydrate_hour)}/h"
         )
         if smoke_gpu and normalize_gpu(str(smoke_gpu)) != gpu_name:
             hint += f"；秒数来自 {smoke_gpu} 冒烟"
@@ -223,14 +246,16 @@ def predict(
             "usd_per_minute": usd_minute,
             "usd_per_hour": usd_hour,
             "scaledown_usd": scaledown_usd,
+            "hydrate_usd_per_hour": hydrate_hour,
             "keep_gpu": keep_gpu,
-            "excludes": ["volume", "cpu", "memory"],
+            "excludes": ["volume"],
             "notes": notes,
             "hint": hint,
         }
     hint = (
         f"{gpu_name} {format_usd(usd_hour)}/h · 缩容 {idle:.0f}s ≈ {format_usd(scaledown_usd)}"
-        "（尚无实测秒数，不编造任务总价；仅 GPU 秒）"
+        f"；hydrate CPU {format_usd(hydrate_hour)}/h"
+        "（尚无实测秒数，不编造任务总价）"
     )
     if keep_gpu:
         hint += " · 勾了占卡会一直计费"
@@ -253,8 +278,9 @@ def predict(
         "usd_per_minute": usd_minute,
         "usd_per_hour": usd_hour,
         "scaledown_usd": scaledown_usd,
+        "hydrate_usd_per_hour": hydrate_hour,
         "keep_gpu": keep_gpu,
-        "excludes": ["volume", "cpu", "memory"],
+        "excludes": ["volume"],
         "notes": notes,
         "hint": hint,
     }
@@ -303,7 +329,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gpu", default="")
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--keep-gpu", action="store_true")
-    parser.add_argument("--trace", action="store_true", help="print recent local JSONL events")
+    parser.add_argument("--trace", action="store_true", help="print recent run traces")
     parser.add_argument("--limit", type=int, default=20)
     return parser.parse_args(argv)
 
@@ -311,7 +337,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.trace:
-        json.dump(recent_events(args.limit), sys.stdout, ensure_ascii=False, indent=2)
+        from studio.trace import recent_runs
+
+        json.dump(recent_runs(args.limit), sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 0
     if not args.recipe and not args.gpu:

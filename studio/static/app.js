@@ -52,8 +52,13 @@ async function pollJob(jobId, logNode) {
   }
 }
 
-function setPill(runtime) {
+function setPill(runtime, cost) {
   const pill = $("status-pill");
+  if (cost && (cost.status === "leaking" || cost.status === "kept")) {
+    pill.textContent = cost.status === "kept" ? "占卡计费中" : "容器还在计费";
+    pill.dataset.state = cost.status === "kept" ? "ready" : "off";
+    return;
+  }
   if (runtime.serve_running) {
     pill.textContent = "GPU 运行中";
     pill.dataset.state = "ready";
@@ -243,11 +248,32 @@ function jobCount() {
   return Math.max(imageCount, 1);
 }
 
+function renderCost(cost) {
+  const hint = $("cost-hint");
+  const node = $("cost-spans");
+  if (!hint) return;
+  const view = cost?.run || cost;
+  hint.textContent = cost?.hint || view?.hint || "";
+  if (!node) return;
+  const spans = view?.spans || [];
+  if (!spans.length) {
+    node.hidden = true;
+    node.textContent = "";
+    return;
+  }
+  node.hidden = false;
+  node.textContent = spans
+    .map((item) => {
+      const money = item.billable && item.usd ? ` $${Number(item.usd).toFixed(3)}` : "";
+      const err = item.error ? ` ERROR ${item.error}` : "";
+      return `${item.name} ${Number(item.seconds || 0).toFixed(0)}s ${item.resource || ""}${money}${err}`;
+    })
+    .join("\n");
+}
+
 function applyActualCost(cost) {
   if (!cost) return;
-  const usd = cost.usd == null ? "—" : `$${Number(cost.usd).toFixed(3)}`;
-  const extra = cost.keep_gpu ? " · GPU 还挂着" : "";
-  $("cost-hint").textContent = `本次 ${usd} · ${Number(cost.seconds || 0).toFixed(0)}s ${cost.gpu || ""}${extra}`;
+  renderCost(cost);
 }
 
 async function refreshCost() {
@@ -260,6 +286,10 @@ async function refreshCost() {
       `/api/cost?catalog=${encodeURIComponent(catalog.id)}&gpu=${encodeURIComponent(gpu)}&count=${jobCount()}&keep_gpu=${keep}`,
     );
     hint.textContent = data.hint || "";
+    renderCost(data);
+    if (data.run && (data.run.status === "leaking" || data.run.status === "kept")) {
+      setPill({ serve_running: false }, data.run);
+    }
   } catch (error) {
     hint.textContent = String(error.message || error);
   }
@@ -305,7 +335,7 @@ async function refreshStatus() {
   if (data.runtime.gpu && catalog && (catalog.gpu_choices || []).includes(data.runtime.gpu)) {
     $("gpu").value = data.runtime.gpu;
   }
-  setPill(data.runtime);
+  setPill(data.runtime, data.cost);
   return data;
 }
 
@@ -431,3 +461,7 @@ $("generate").onclick = async () => {
 };
 
 boot().catch((error) => appendLog($("job-log"), String(error)));
+setInterval(() => {
+  if (document.hidden) return;
+  refreshCost().catch(() => {});
+}, 15000);
