@@ -2,6 +2,16 @@
 
 CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。插件写入 lock 和 Volume `.state/launch.json`，由 GPU **启动时**装到 `/workspace/custom_nodes`（已存在则跳过）。换工作流不会重建 GPU Image。
 
+社区 JSON 常常没有 `cnr_id`、也没有 `models[]` URL。网页里加载工作流后点 **Install Missing Custom Nodes** / Model Manager **In Workflow** 的，是 [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager)。本仓库用同一份目录（`extension-node-map.json`、`model-list.json`），走 CPU，不必先开 GPU：
+
+```text
+A  CPU 起一份 ComfyUI --cpu（Volume `.cpu-comfy`，不计 GPU）
+B  Manager 目录补锁 → 已绑定的权重在 CPU 下载
+C  modal deploy 上 GPU（CUDA 节点仍在 GPU 启动时装）
+```
+
+默认 `hydrate` 仍是解析器只绑定 JSON 里已有的 URL / CNR，**不猜** HuggingFace 仓库。要走 Manager + CPU 探测用 `--action probe`。
+
 ## 三种方式
 
 === "Catalog"
@@ -34,6 +44,18 @@ CPU 把权重写入 Volume `comfyui-ashleykza-models`。不构建 GPU Image。�
 modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.json
 ```
 
+社区 JSON 缺 URL / `cnr_id` 时，用 Manager 目录 + CPU ComfyUI 探测（第一次会在 Volume 上 clone ComfyUI 并装 CPU torch，之后复用）：
+
+```bash
+modal run hydrate_modal.py --action probe --workflow examples/你的.json
+# 或
+modal run hydrate_modal.py --action probe --catalog z-image
+python3 -m manager_catalog --workflow examples/你的.json
+MODAL_GPU=L40S modal deploy comfyui_modal.py
+```
+
+`--action probe` 仍不猜地址：Manager 表里一对一命中才写入锁；文件名对应两个 URL、或 `save_path` 不是已知 `models/` 目录，留在 `unresolved`。已手修且 fully resolved 的 `.lock.json` **不会**被覆盖。锁还没齐时只下载已经绑定的权重，**不**写 Volume `launch.json`（避免 GPU 当成齐套工作流）。CUDA 专用节点在 CPU 上 import 失败是预期，会出现在 `probe.missing_nodes_in_lock`；真正安装仍在步骤 C。
+
 | 参数 | 说明 |
 |---|---|
 | `--catalog` | Studio 配方 id → 换成该 JSON 的 workflow / lock |
@@ -42,7 +64,7 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 | `--lock-out` | 锁文件路径；默认把工作流后缀改成 `.lock.json` |
 | `--skip-lock-nodes` | 写入 launch.json，让 GPU 启动时跳过 CNR |
 | `--install-nodes` | hydrate 上无效；配方额外包请在 GPU serve/deploy 设 `COMFY_INSTALL_NODES=1` |
-| `--action` | `hydrate`（默认）、`sync` / `workflow-sync`、`resolve`、`profiles`、`info`、`outputs`、`repair` |
+| `--action` | `hydrate`（默认）、`sync` / `workflow-sync`、`resolve`、`probe`、`profiles`、`info`、`outputs`、`repair` |
 
 给了 `--workflow` 就是 workflow 模式，不再用 profile 拉模型包。
 

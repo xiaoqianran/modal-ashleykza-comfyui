@@ -13,11 +13,12 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## 2a. 工作流 JSON
 
-解析 JSON 里的 model 与插件声明，只把**模型**写入 Storage；锁写到 Volume `.state/launch.json`：
+解析 JSON 里的 model 与插件声明，只把**模型**写入 Storage；锁写到 Volume `.state/launch.json`。社区 JSON 缺 URL / `cnr_id` 时改用 `hydrate --action probe`（ComfyUI-Manager 目录 + CPU ComfyUI），不要先开 GPU。
 
 ```bash
 modal run hydrate_modal.py --catalog z-image
 # 或 modal run hydrate_modal.py --workflow examples/z-image-base.json
+# 或 modal run hydrate_modal.py --action probe --workflow examples/你的.json
 MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 

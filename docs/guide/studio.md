@@ -66,7 +66,7 @@ python3 -m benchmarks --write
 | `catalog/<id>.json` | Studio 表单 + 绑定 + GPU |
 | `benchmarks/models.json` | 同一 `id`：权重、节点、冒烟耗时 |
 
-锁里出现 `unresolved` 就手补 URL 或把新目录加进 `recipes.MODEL_DIRS`。解析器不猜 HuggingFace 仓库。
+锁里出现 `unresolved` 就先 `python3 -m manager_catalog` 或 `hydrate --action probe`。仍缺再手补 URL 或把新目录加进 `recipes.MODEL_DIRS`。解析器不猜 HuggingFace 仓库。
 
 `catalog/<id>.json` 的 id 必须等于文件名。打开 Studio 就会出现在配方下拉里。例外写在 `catalog/gates.py`，加载时会拒绝：
 

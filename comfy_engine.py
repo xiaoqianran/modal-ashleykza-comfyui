@@ -708,6 +708,8 @@ def sync_workflow_models(
     workflow_source: str = "",
     lock_source: str = "",
     profile_name: str = "base",
+    persist_launch: bool = True,
+    require_resolved: bool = True,
 ) -> dict:
     """Download every resolved workflow model into the Modal models Volume.
 
@@ -716,7 +718,7 @@ def sync_workflow_models(
     The active lock is also written to Volume ``.state/`` so the GPU Image can
     stay workflow-agnostic.
     """
-    validate_workflow_lock(workflow_lock, require_resolved=True)
+    validate_workflow_lock(workflow_lock, require_resolved=require_resolved)
     workspace = Path(workspace)
     storage_root = ensure_storage_layout(storage_root)
     ensure_workspace_layout(workspace)
@@ -727,15 +729,16 @@ def sync_workflow_models(
     workflow = workflow_lock.get("workflow", {})
     workflow_name = str(workflow.get("name", "workflow"))
     workflow_sha256 = str(workflow.get("sha256", ""))
-    persist_launch_state(
-        storage_root,
-        mode="workflow",
-        profile=profile_name,
-        workflow=workflow_source or workflow_name,
-        lock_source=lock_source,
-        install_lock_nodes=install_lock_nodes,
-        workflow_lock=workflow_lock,
-    )
+    if persist_launch:
+        persist_launch_state(
+            storage_root,
+            mode="workflow",
+            profile=profile_name,
+            workflow=workflow_source or workflow_name,
+            lock_source=lock_source,
+            install_lock_nodes=install_lock_nodes,
+            workflow_lock=workflow_lock,
+        )
 
     jobs: list[tuple[str, str, ModelAsset, dict]] = []
     for model in workflow_lock["models"]:

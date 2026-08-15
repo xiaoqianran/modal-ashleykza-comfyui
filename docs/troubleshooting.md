@@ -32,7 +32,8 @@ Studio 生成结束后会默认停残留容器，不会卸掉已部署的 App。
 2. 对照工作流节点里的**精确文件名**
 3. 确认 category：`diffusion_models` 不是随意别名
 4. `modal run hydrate_modal.py --action resolve --workflow <file>` 查看 `unresolved`
-5. 补 URL 后重新 `hydrate`
+5. 社区 JSON 缺 `cnr_id` / URL：`python3 -m manager_catalog --workflow <file>` 或 `hydrate --action probe`
+6. 补 URL 后重新 `hydrate`
 
 GPU 默认不会从 Hugging Face 现下。文件必须已经在 Volume 里。hydrate 完成后再发下一次 HTTP；已运行的容器在缩容后会 `Volume.reload()` 读到新的 `launch.json`。`modal serve` 没有持久快照，只有改 GPU 端 `.py` 才用。`modal deploy` 的 memory snapshot 只冻结 ComfyUI 进程；`snap=False` 仍会读最新 Volume。
 
@@ -82,9 +83,16 @@ modal secret create comfyui-creds --from-dotenv .env --force
 
 ## 工作流仍有 unresolved
 
-锁文件不会猜测下载地址。把 `name` + `directory` + http(s) URL 写进工作流的 `models` 数组，或把 HuggingFace / Civitai 直链写进 Note（文件名必须对得上 widget）。不要为此再写一份 `queue_*.py`。
+锁文件不会猜测下载地址。把 `name` + `directory` + http(s) URL 写进工作流的 `models` 数组，或把 HuggingFace / Civitai 直链写进 Note（文件名必须对得上 widget）。也可以先走 ComfyUI-Manager 同一份表：
 
-若 `unresolved` 条目已经带了 `url`、`reason` 为 `missing_category`，只差补 ComfyUI 目录名，再挪进 `models`。手修 `.lock.json` 后也可以 hydrate。
+```bash
+python3 -m manager_catalog --workflow examples/你的.json
+modal run hydrate_modal.py --action probe --workflow examples/你的.json
+```
+
+一对一命中才写入；两个 URL / 未知 `models/` 目录仍留 `unresolved`。不要为此再写一份 `queue_*.py`。
+
+若 `unresolved` 条目已经带了 `url`、`reason` 为 `missing_category`，只差补 ComfyUI 目录名，再挪进 `models`。手修 `.lock.json` 后也可以 hydrate。已手修的 fully resolved 锁不会被 `probe` 覆盖。
 
 ## Pages 文档 404
 

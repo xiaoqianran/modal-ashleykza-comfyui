@@ -10,7 +10,8 @@ Studio 全部配方的 GPU / 权重 / 实测见 [模型列表](models.md)。
 
 ```bash
 python3 -m workflow_queue --inspect --workflow examples/你的.json
-modal run hydrate_modal.py --workflow examples/你的.json
+python3 -m manager_catalog --workflow examples/你的.json
+modal run hydrate_modal.py --action probe --workflow examples/你的.json
 MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
   --workflow examples/你的.json \
@@ -44,7 +45,14 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 python3 -m recipe_scaffold examples/你的.json --id your-recipe --title "显示名" --kind t2i --write
 ```
 
-有 `unresolved` 就手补 URL，不要再 `--action resolve` 覆盖手修锁。确认锁齐了再：
+有 `unresolved` 就先走 ComfyUI-Manager 探测，不要立刻手写 `queue_*.py`：
+
+```bash
+python3 -m manager_catalog --workflow examples/你的.json
+modal run hydrate_modal.py --action probe --workflow examples/你的.json
+```
+
+这就是网页里上传 JSON 后「Install Missing Custom Nodes」用的同一份 Manager 目录，外加 CPU ComfyUI `--cpu` 对照 `/object_info`。命中才写入锁；仍缺的留 `unresolved` 再手补 URL / `MODEL_DIRS`。不要用 `--action resolve` 覆盖已手修的锁。确认锁齐了再：
 
 ```bash
 modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.json
@@ -58,9 +66,10 @@ modal run hydrate_modal.py --action resolve --workflow examples/z-image-base.jso
 |---|---|
 | `models[]` 里的 name + directory + http(s) URL | 只有文件名，JSON / Note 里都没有可下载 URL |
 | Note / MarkdownNote 里 HuggingFace、Civitai 链接，basename 对得上 widget | 对上了 URL 但看不出 `models/<目录>`（锁里会带上 URL，等人补目录） |
-| `cnr_id` + `ver`（版本打架时留一版，优先 semver） | 没有 `cnr_id` 的自定义节点 |
+| `cnr_id` + `ver`（版本打架时留一版，优先 semver） | 没有 `cnr_id` 的自定义节点（`--action probe` 用 Manager `extension-node-map` 一对一补 GitHub 仓） |
 | `?download=true` / `/blob/` 规范化后的同一地址 | 同一目标两个不同 URL 且哈希也对不上 |
 | 官方目录：`audio_encoders`、`detection`、`frame_interpolation`、`optical_flow`、`model_patches` 等 | 未知目录；`api_*` 云端工作流 |
+| Manager `model-list.json` 里文件名唯一、目录已知 | 文件名对应两个 URL，或 `save_path` 不是已知 `models/` 目录 |
 
 `hydrate` 在 `require_resolved=True` 时遇到 `unresolved` 会失败。`warnings`（例如 CNR 版本冲突选了哪一版）**不**阻止下载。边界说明见 [官方模板分析](templates.md)。
 
@@ -415,10 +424,11 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 ## 自定义工作流
 
 1. 在本地 ComfyUI 导出 API / workflow JSON（或带嵌入工作流的 PNG）。
-2. `resolve` 查看 `unresolved`；缺 URL 就补进 JSON 或锁文件。
-3. `hydrate` 写入 Storage。
-4. `modal volume ls comfyui-ashleykza-models` 确认 category 与文件名。
-5. `modal deploy` 后在 UI 里加载**同一份** JSON。
+2. `python3 -m manager_catalog` 或 `hydrate --action probe`：用 ComfyUI-Manager 目录补锁，CPU 列出还缺的节点 / 文件。
+3. 仍有 `unresolved` 就手补 URL 或 `MODEL_DIRS`；不要猜 HuggingFace 仓库。
+4. `hydrate` 写入 Storage（锁已齐才会写 `launch.json`）。
+5. `modal volume ls comfyui-ashleykza-models` 确认 category 与文件名。
+6. `modal deploy` 后在 UI 里加载**同一份** JSON。
 
 文件名必须与 Loader 节点里填的字符串完全一致（含扩展名）。
 
@@ -427,8 +437,9 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 ## 无法自动解决的情况
 
-- 工作流只有本地文件名，没有 URL
-- custom node 缺少 CNR 元数据且不在 Recipe
+- 工作流只有本地文件名，Manager `model-list.json` 里也没有唯一 URL
+- custom node 的 `class_type` 在 Manager 表里对应两个 GitHub 仓
 - 下载需要网页交互或自定义授权
 - 模型名由节点运行时动态计算
 - 工作流依赖的 ComfyUI 版本与当前 Image 不兼容
+- CUDA 专用节点在 CPU `--cpu` 上 import 失败（锁里已有仓则等 GPU 启动再装）

@@ -379,6 +379,42 @@ class WorkflowResolverTests(unittest.TestCase):
         self.assertEqual(result["synced"], 1)
         self.assertIn("checkpoints/qwen/model.safetensors", state["assets"])
 
+    def test_probe_sync_downloads_without_writing_launch_state(self):
+        workflow = _sample_workflow()
+        workflow["nodes"][2]["widgets_values"] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "workflow.json"
+            source.write_text(json.dumps(workflow), encoding="utf-8")
+            lock = workflow_resolver.resolve_workflow(source)
+            lock["unresolved"] = [
+                {"filename": "orphan.safetensors", "reason": "missing_url"}
+            ]
+
+            def fake_download(asset, target_dir, lock_entry=None):
+                target = target_dir / comfy_engine.asset_filename(asset)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"model")
+                return {"url": asset.url, "path": str(target), "size": 5}
+
+            with patch.object(comfy_engine, "download_asset", fake_download):
+                result = comfy_engine.sync_workflow_models(
+                    lock,
+                    root / "workspace",
+                    storage_root=root / "storage",
+                    persist_launch=False,
+                    require_resolved=False,
+                )
+
+            launch = root / "storage/.state/launch.json"
+            target = root / "storage/checkpoints/qwen/model.safetensors"
+            target_exists = target.is_file()
+            launch_exists = launch.is_file()
+
+        self.assertTrue(target_exists)
+        self.assertFalse(launch_exists)
+        self.assertEqual(result["synced"], 1)
+
     def test_gpu_preflight_rejects_missing_models(self):
         workflow = _sample_workflow()
         workflow["nodes"][2]["widgets_values"] = []

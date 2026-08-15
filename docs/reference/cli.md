@@ -8,11 +8,13 @@ CPU App，只下载模型。
 modal run hydrate_modal.py --catalog z-image
 modal run hydrate_modal.py --catalog sam3d
 modal run hydrate_modal.py --workflow examples/z-image-base.json
+modal run hydrate_modal.py --action probe --workflow examples/你的.json
 modal run hydrate_modal.py --profile qwen-image
 modal run hydrate_modal.py --action resolve --catalog pixal3d
 modal run hydrate_modal.py --action profiles
 modal run hydrate_modal.py --action outputs
 modal run hydrate_modal.py --action repair
+python3 -m manager_catalog --workflow examples/你的.json
 ```
 
 | 参数 | 说明 |
@@ -23,7 +25,7 @@ modal run hydrate_modal.py --action repair
 | `--lock-out` | 锁文件路径 |
 | `--skip-lock-nodes` | GPU 启动时跳过锁内 CNR |
 | `--install-nodes` | **无效**（hydrate 不构建 GPU Image）。配方额外包请在 deploy 时设 `COMFY_INSTALL_NODES=1` |
-| `--action` | `hydrate`（默认）、`sync` / `workflow-sync`（同 hydrate）、`resolve`、`profiles`、`info`、`outputs`、`repair` |
+| `--action` | `hydrate`（默认）、`sync` / `workflow-sync`（同 hydrate）、`resolve`、`probe`、`profiles`、`info`、`outputs`、`repair` |
 
 ## comfyui_modal.py
 
@@ -35,6 +37,8 @@ modal run comfyui_modal.py
 ```
 
 不要用 GPU App 做 hydrate。冒烟默认 **deploy**：命令本身不起 GPU，第一次打到没有 `-dev` 的 `*.modal.run` 才起卡。测完不必 `modal app stop`。
+
+`probe`：先拉 ComfyUI-Manager 的节点/模型目录补锁，再在 CPU 上起 `ComfyUI --cpu` 对照 `/object_info` 和 Volume 缺文件。第一次会 clone ComfyUI + CPU torch 到 Volume `.cpu-comfy/`。默认 `hydrate` / `resolve` 仍只解析 JSON，不猜下载地址。
 
 ## studio
 

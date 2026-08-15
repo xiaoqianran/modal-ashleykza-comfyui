@@ -23,10 +23,11 @@ modal run hydrate_modal.py --catalog z-image
 MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
-**2. 工作流 JSON** — 解析 model 和插件；下载模型；锁写到 Volume。GPU Image 不随工作流变化：
+**2. 工作流 JSON** — 解析 model 和插件；下载模型；锁写到 Volume。GPU Image 不随工作流变化。社区 JSON 缺 URL / `cnr_id` 时用 ComfyUI-Manager 同一份目录 + CPU ComfyUI `--cpu`，再上 GPU：
 
 ```bash
-modal run hydrate_modal.py --workflow examples/z-image-base.json
+python3 -m manager_catalog --workflow examples/你的.json
+modal run hydrate_modal.py --action probe --workflow examples/你的.json
 MODAL_GPU=L40S modal deploy comfyui_modal.py
 ```
 
