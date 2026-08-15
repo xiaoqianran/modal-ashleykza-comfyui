@@ -49,6 +49,15 @@ Windows 双击仓库根目录 `open-studio.bat`；macOS / Linux 用 `./open-stud
 
 关掉 Studio（Ctrl+C）也会尝试停残留容器，不会卸掉已部署的 App。
 
+## 成本（旁路）
+
+Studio 用冻结的 Modal GPU 单价（2026-08-12 公开价卡）估 **GPU 秒**费用，写在本机 `.studio/cost-trace.jsonl`（已 gitignore）。不进 GPU Image，不改 hydrate / `runtime_hooks` / `comfy_engine`。不含 Volume / CPU / 内存。冒烟秒数是 POST `/prompt` → `/history`；生图墙钟含 `wait_ready`（冷启动），通常更长。没有实测时只显示每小时单价和 5 秒缩容，不编造任务总价。换卡或换配方时顶栏附近会更新预估；生成结束后同一行显示本次实测。
+
+```bash
+python3 -m studio.cost --recipe sam3d --gpu L40S --count 1
+python3 -m studio.cost --trace
+```
+
 ## 契约（经得起拷问的模板）
 
 一份新配方 = 脚手架吐出的四个文件，**不要**再写 `queue_*.py`：

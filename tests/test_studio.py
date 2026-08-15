@@ -84,22 +84,27 @@ class GpuReleaseTests(unittest.TestCase):
         self.assertTrue(wants_keep_gpu({"keep_gpu": "yes"}))
 
     def test_generate_stops_gpu_unless_keep_gpu(self):
-        payload = {"prompts": ["a teapot"]}
-        with (
-            patch(
-                "studio.server._run_generate_batch",
-                return_value={"ok": True, "count": 1, "results": []},
-            ),
-            patch(
-                "studio.server.stop_gpu",
-                return_value={"stopped": True, "pid": None, "containers": []},
-            ) as stop,
-        ):
-            _generate_batch("job-a", payload)
-            stop.assert_called_once()
-            stop.reset_mock()
-            _generate_batch("job-b", {**payload, "keep_gpu": True})
-            stop.assert_not_called()
+        payload = {"prompts": ["a teapot"], "catalog": "z-image", "gpu": "L40S"}
+        with tempfile.TemporaryDirectory() as directory:
+            trace = Path(directory) / "cost-trace.jsonl"
+            with (
+                patch(
+                    "studio.server._run_generate_batch",
+                    return_value={"ok": True, "count": 1, "results": []},
+                ),
+                patch(
+                    "studio.server.stop_gpu",
+                    return_value={"stopped": True, "pid": None, "containers": []},
+                ) as stop,
+                patch("studio.cost.TRACE_PATH", trace),
+            ):
+                result = _generate_batch("job-a", payload)
+                stop.assert_called_once()
+                self.assertIn("cost", result)
+                stop.reset_mock()
+                kept = _generate_batch("job-b", {**payload, "keep_gpu": True})
+                stop.assert_not_called()
+                self.assertTrue(kept["cost"]["keep_gpu"])
 
     def test_hydrate_app_is_not_a_billable_gpu_target(self):
         self.assertTrue(is_billable_gpu_app("comfyui-ashleykza-cu128"))

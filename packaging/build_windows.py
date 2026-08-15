@@ -155,6 +155,9 @@ def copy_app(app_dir: Path) -> None:
     examples.mkdir()
     for path in sorted((ROOT / "examples").glob("*.json")):
         shutil.copy2(path, examples / path.name)
+    overlay_dir = app_dir / "benchmarks"
+    overlay_dir.mkdir()
+    shutil.copy2(ROOT / "benchmarks" / "models.json", overlay_dir / "models.json")
     (app_dir / "README.txt").write_text(README, encoding="utf-8")
 
 

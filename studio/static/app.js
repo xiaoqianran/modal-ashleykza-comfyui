@@ -235,6 +235,36 @@ function gpuLabel(recipe, name) {
   return name;
 }
 
+function jobCount() {
+  if (hasPromptParam()) {
+    return Math.max(splitPrompts($("prompts").value).length, 1);
+  }
+  const imageCount = Object.values(collectedImages()).reduce((sum, list) => sum + list.length, 0);
+  return Math.max(imageCount, 1);
+}
+
+function applyActualCost(cost) {
+  if (!cost) return;
+  const usd = cost.usd == null ? "—" : `$${Number(cost.usd).toFixed(3)}`;
+  const extra = cost.keep_gpu ? " · GPU 还挂着" : "";
+  $("cost-hint").textContent = `本次 ${usd} · ${Number(cost.seconds || 0).toFixed(0)}s ${cost.gpu || ""}${extra}`;
+}
+
+async function refreshCost() {
+  const hint = $("cost-hint");
+  if (!catalog || !hint) return;
+  try {
+    const keep = $("keep-gpu")?.checked ? "1" : "0";
+    const gpu = $("gpu")?.value || catalog.gpu || "";
+    const data = await api(
+      `/api/cost?catalog=${encodeURIComponent(catalog.id)}&gpu=${encodeURIComponent(gpu)}&count=${jobCount()}&keep_gpu=${keep}`,
+    );
+    hint.textContent = data.hint || "";
+  } catch (error) {
+    hint.textContent = String(error.message || error);
+  }
+}
+
 function applyCatalog(recipe) {
   catalog = recipe;
   Object.keys(uploadsByParam).forEach((key) => delete uploadsByParam[key]);
@@ -248,6 +278,7 @@ function applyCatalog(recipe) {
   $("prompt-wrap").hidden = !hasPromptParam();
   renderParams(recipe.params || [], recipe.defaults || {});
   renderUploads();
+  refreshCost();
 }
 
 async function selectCatalog(id) {
@@ -306,6 +337,10 @@ $("recipe").onchange = async () => {
     appendLog($("job-log"), String(error.message || error));
   }
 };
+
+$("gpu").onchange = () => refreshCost();
+$("keep-gpu").onchange = () => refreshCost();
+$("prompts").addEventListener("input", () => refreshCost());
 
 $("save-keys").onclick = async () => {
   const body = {};
@@ -376,6 +411,7 @@ $("generate").onclick = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         catalog: catalog.id,
+        gpu: $("gpu").value,
         base_url: $("base-url").value.trim(),
         prompts,
         images,
@@ -385,6 +421,7 @@ $("generate").onclick = async () => {
     });
     const job = await pollJob(started.job_id, $("job-log"));
     addCards(job.result?.results || []);
+    applyActualCost(job.result?.cost);
   } catch (error) {
     appendLog($("job-log"), String(error.message || error));
   } finally {

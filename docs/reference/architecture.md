@@ -29,6 +29,7 @@ catalog
 
 Studio
   studio/               本机 UI；读 catalog，调 hydrate / deploy / workflow_queue
+  studio/cost.py        冻结 GPU 单价 + 本机 JSONL（不进 GPU Image）
   packaging/            Windows Studio.exe
   gallery_hub/          HF 图库数据集（推送 / 拉取 / 编进 Pages）
 

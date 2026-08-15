@@ -9,12 +9,13 @@ import mimetypes
 import random
 import sys
 import threading
+import time
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import workflow_queue
 from catalog import (
@@ -29,6 +30,7 @@ from catalog import (
     workflow_path,
 )
 from storage import safe_dest_file
+from studio import cost as studio_cost
 from studio import jobs
 from studio.comfy import queue_prompt, wait_history, wait_ready
 from studio.keys import ALL_KEYS, ROOT, public_key_state, save_keys
@@ -265,10 +267,68 @@ def _run_generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _attach_cost(
+    job_id: str,
+    payload: dict[str, Any],
+    result: dict[str, Any] | None,
+    started: float,
+    keep: bool,
+    status: str,
+) -> None:
+    """Best-effort sidecar. Must never fail a generate job."""
+    try:
+        seconds = max(time.monotonic() - started, 0.0)
+        recipe_id = str(
+            payload.get("catalog")
+            or (result or {}).get("catalog")
+            or load_state().get("catalog")
+            or ""
+        ).strip()
+        gpu = str(payload.get("gpu") or "").strip()
+        jobs_n = int((result or {}).get("count") or 0)
+        if jobs_n < 1:
+            jobs_n = 1
+        predicted = studio_cost.predict(
+            recipe=recipe_id,
+            gpu=gpu,
+            count=jobs_n,
+            keep_gpu=keep,
+        )
+        gpu_name = str(predicted.get("gpu") or gpu)
+        idle = float(predicted.get("scaledown_seconds") or 0)
+        billable = seconds if keep else seconds + idle
+        event = studio_cost.record_event(
+            {
+                "kind": "generate",
+                "recipe": recipe_id or predicted.get("recipe"),
+                "gpu": gpu_name,
+                "seconds": round(seconds, 3),
+                "billable_seconds": round(billable, 3),
+                "usd": studio_cost.usd_for_seconds(gpu_name, billable) if gpu_name else None,
+                "jobs": jobs_n,
+                "predicted_usd": predicted.get("usd"),
+                "keep_gpu": keep,
+                "status": status,
+            }
+        )
+        jobs.append_log(job_id, json.dumps({"cost": event}, ensure_ascii=False))
+        if isinstance(result, dict):
+            result["cost"] = event
+    except Exception as exc:
+        try:
+            jobs.append_log(job_id, f"cost trace skipped: {exc}")
+        except Exception:
+            pass
+
+
 def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     keep = wants_keep_gpu(payload)
+    started = time.monotonic()
+    result: dict[str, Any] | None = None
+    status = "error"
     try:
         result = _run_generate_batch(job_id, payload)
+        status = "ok"
         if keep:
             jobs.append_log(job_id, "keep_gpu=true，GPU 继续挂着")
         return result
@@ -283,6 +343,7 @@ def _generate_batch(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
                 job_id,
                 json.dumps({"released": True, **stopped}, ensure_ascii=False),
             )
+        _attach_cost(job_id, payload, result, started, keep, status)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -343,6 +404,32 @@ class Handler(BaseHTTPRequestHandler):
                 _json(self, 404, {"error": "job not found"})
                 return
             _json(self, 200, job)
+            return
+        if path == "/api/cost/trace":
+            qs = parse_qs(parsed.query)
+            try:
+                limit = int((qs.get("limit") or ["40"])[0])
+            except ValueError:
+                limit = 40
+            _json(self, 200, {"events": studio_cost.recent_events(limit)})
+            return
+        if path == "/api/cost":
+            qs = parse_qs(parsed.query)
+            recipe = str((qs.get("catalog") or qs.get("recipe") or [""])[0])
+            gpu = str((qs.get("gpu") or [""])[0])
+            keep_raw = str((qs.get("keep_gpu") or [""])[0]).strip().lower()
+            try:
+                count = int((qs.get("count") or ["1"])[0])
+                payload = studio_cost.predict(
+                    recipe=recipe,
+                    gpu=gpu,
+                    count=count,
+                    keep_gpu=keep_raw in {"1", "true", "yes", "on"},
+                )
+            except (ValueError, TypeError) as exc:
+                _json(self, 400, {"error": str(exc)})
+                return
+            _json(self, 200, payload)
             return
         _json(self, 404, {"error": "not found"})
 
