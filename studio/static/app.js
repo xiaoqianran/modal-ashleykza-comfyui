@@ -52,8 +52,13 @@ async function pollJob(jobId, logNode) {
   }
 }
 
-function setPill(runtime) {
+function setPill(runtime, cost) {
   const pill = $("status-pill");
+  if (cost && (cost.status === "leaking" || cost.status === "kept")) {
+    pill.textContent = cost.status === "kept" ? "占卡计费中" : "容器还在计费";
+    pill.dataset.state = cost.status === "kept" ? "ready" : "off";
+    return;
+  }
   if (runtime.serve_running) {
     pill.textContent = "GPU 运行中";
     pill.dataset.state = "ready";
@@ -235,6 +240,61 @@ function gpuLabel(recipe, name) {
   return name;
 }
 
+function jobCount() {
+  if (hasPromptParam()) {
+    return Math.max(splitPrompts($("prompts").value).length, 1);
+  }
+  const imageCount = Object.values(collectedImages()).reduce((sum, list) => sum + list.length, 0);
+  return Math.max(imageCount, 1);
+}
+
+function renderCost(cost) {
+  const hint = $("cost-hint");
+  const node = $("cost-spans");
+  if (!hint) return;
+  const view = cost?.run || cost;
+  hint.textContent = cost?.hint || view?.hint || "";
+  if (!node) return;
+  const spans = view?.spans || [];
+  if (!spans.length) {
+    node.hidden = true;
+    node.textContent = "";
+    return;
+  }
+  node.hidden = false;
+  node.textContent = spans
+    .map((item) => {
+      const money = item.billable && item.usd ? ` $${Number(item.usd).toFixed(3)}` : "";
+      const err = item.error ? ` ERROR ${item.error}` : "";
+      return `${item.name} ${Number(item.seconds || 0).toFixed(0)}s ${item.resource || ""}${money}${err}`;
+    })
+    .join("\n");
+}
+
+function applyActualCost(cost) {
+  if (!cost) return;
+  renderCost(cost);
+}
+
+async function refreshCost() {
+  const hint = $("cost-hint");
+  if (!catalog || !hint) return;
+  try {
+    const keep = $("keep-gpu")?.checked ? "1" : "0";
+    const gpu = $("gpu")?.value || catalog.gpu || "";
+    const data = await api(
+      `/api/cost?catalog=${encodeURIComponent(catalog.id)}&gpu=${encodeURIComponent(gpu)}&count=${jobCount()}&keep_gpu=${keep}`,
+    );
+    hint.textContent = data.hint || "";
+    renderCost(data);
+    if (data.run && (data.run.status === "leaking" || data.run.status === "kept")) {
+      setPill({ serve_running: false }, data.run);
+    }
+  } catch (error) {
+    hint.textContent = String(error.message || error);
+  }
+}
+
 function applyCatalog(recipe) {
   catalog = recipe;
   Object.keys(uploadsByParam).forEach((key) => delete uploadsByParam[key]);
@@ -248,6 +308,7 @@ function applyCatalog(recipe) {
   $("prompt-wrap").hidden = !hasPromptParam();
   renderParams(recipe.params || [], recipe.defaults || {});
   renderUploads();
+  refreshCost();
 }
 
 async function selectCatalog(id) {
@@ -274,7 +335,7 @@ async function refreshStatus() {
   if (data.runtime.gpu && catalog && (catalog.gpu_choices || []).includes(data.runtime.gpu)) {
     $("gpu").value = data.runtime.gpu;
   }
-  setPill(data.runtime);
+  setPill(data.runtime, data.cost);
   return data;
 }
 
@@ -306,6 +367,10 @@ $("recipe").onchange = async () => {
     appendLog($("job-log"), String(error.message || error));
   }
 };
+
+$("gpu").onchange = () => refreshCost();
+$("keep-gpu").onchange = () => refreshCost();
+$("prompts").addEventListener("input", () => refreshCost());
 
 $("save-keys").onclick = async () => {
   const body = {};
@@ -376,6 +441,7 @@ $("generate").onclick = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         catalog: catalog.id,
+        gpu: $("gpu").value,
         base_url: $("base-url").value.trim(),
         prompts,
         images,
@@ -385,6 +451,7 @@ $("generate").onclick = async () => {
     });
     const job = await pollJob(started.job_id, $("job-log"));
     addCards(job.result?.results || []);
+    applyActualCost(job.result?.cost);
   } catch (error) {
     appendLog($("job-log"), String(error.message || error));
   } finally {
@@ -394,3 +461,7 @@ $("generate").onclick = async () => {
 };
 
 boot().catch((error) => appendLog($("job-log"), String(error)));
+setInterval(() => {
+  if (document.hidden) return;
+  refreshCost().catch(() => {});
+}, 15000);

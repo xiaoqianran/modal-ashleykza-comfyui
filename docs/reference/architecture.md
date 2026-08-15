@@ -29,6 +29,8 @@ catalog
 
 Studio
   studio/               本机 UI；读 catalog，调 hydrate / deploy / workflow_queue
+  studio/cost.py        冻结 GPU / hydrate CPU 单价（不进 GPU Image）
+  studio/trace.py       一次配方尝试 = 一条 run + 调用链 span + 残留容器
   packaging/            Windows Studio.exe
   gallery_hub/          HF 图库数据集（推送 / 拉取 / 编进 Pages）
 
@@ -119,6 +121,27 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
 | OpenGL `apt-get`、Blackwell boot `.pth` | 每次写进当前容器 | 每次都做（便宜） | 不在 Volume 上 |
 
 冒烟默认 **`modal deploy`**：0 tasks 不计 GPU，快照跨冷启动复用。`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存；serve 进程还在就会挡住缩容。只有改 GPU 端 Python 才用 serve。comfy-env 的版本、布局、失败方式只改 `comfy_env_contract.py`。
+
+## Studio 成本调用链
+
+开发者加一个配方准备跑时，账单是占用墙钟，不是「最后一张图成功」。维护者只在 Studio 入口包一层 `trace.track`，不要往 GPU Image 加探针。
+
+```text
+studio.trace.track
+  hydrate (cpu 8c/16GiB)
+        └─ modal run hydrate_modal.sync_workflow
+  serve   (control；modal serve 才会一直占 GPU)
+  generate (gpu occupancy)
+        ├─ wait_ready
+        ├─ graph_to_prompt
+        ├─ prompt[i]          失败也记 error span
+        └─ stop_gpu
+  probe modal container list
+        ├─ leftover_gpu / leftover_cpu   停不掉就按分钟记
+        └─ watch 60s                     进程还在就继续扫
+```
+
+钱写在本机 `.studio/runs/`。单价表在 `studio/cost.py`。
 
 ## Volume 路径
 

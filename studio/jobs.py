@@ -59,6 +59,11 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return dict(job) if job is not None else None
 
 
+def running() -> list[dict[str, Any]]:
+    with _LOCK:
+        return [dict(job) for job in _JOBS.values() if job.get("status") == "running"]
+
+
 def spawn(kind: str, fn: Callable[[str], Any]) -> str:
     job_id = create_job(kind)
 

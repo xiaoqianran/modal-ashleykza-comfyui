@@ -218,17 +218,63 @@ def is_billable_gpu_app(name: str) -> bool:
     return gpu_app_name().lower() in text
 
 
-def stop_gpu_containers(log: Any | None = None) -> list[str]:
-    """Stop leftover GPU containers. Do not ``modal app stop`` — keep the snapshot."""
+def app_role(name: str) -> str | None:
+    """Classify a Modal app as GPU ComfyUI or hydrate CPU. None = ignore."""
+    text = (name or "").lower()
+    gpu = gpu_app_name().lower()
+    if not gpu or gpu not in text:
+        return None
+    if "hydrate" in text:
+        return "cpu"
+    return "gpu"
+
+
+def is_billable_cpu_app(name: str) -> bool:
+    return app_role(name) == "cpu"
+
+
+def list_workspace_containers(log: Any | None = None) -> list[dict[str, str]]:
+    """GPU + hydrate CPU containers for this app. Empty on CLI failure."""
+    try:
+        env = subprocess_env()
+        listed = _run(
+            [modal_bin(), "container", "list", "--json"],
+            env=env,
+            log=log,
+            timeout=30,
+        )
+    except (RuntimeError, FileNotFoundError, OSError):
+        return []
+    rows: list[dict[str, str]] = []
+    for row in _container_rows(listed.stdout or ""):
+        role = app_role(row.get("app_name") or "")
+        if not role or not row.get("container_id"):
+            continue
+        rows.append({**row, "role": role})
+    return rows
+
+
+def stop_workspace_containers(
+    *,
+    roles: tuple[str, ...] = ("gpu",),
+    log: Any | None = None,
+) -> list[str]:
+    wanted = set(roles)
     env = subprocess_env()
-    listed = _run([modal_bin(), "container", "list", "--json"], env=env, timeout=30)
+    try:
+        listed = _run([modal_bin(), "container", "list", "--json"], env=env, timeout=30)
+    except (RuntimeError, FileNotFoundError, OSError) as exc:
+        if log:
+            log(f"container list failed: {exc}")
+        return []
     stopped: list[str] = []
     for row in _container_rows(listed.stdout or ""):
         container_id = row["container_id"]
-        if not container_id or not is_billable_gpu_app(row["app_name"]):
+        role = app_role(row["app_name"])
+        if not container_id or role not in wanted:
             continue
         if log:
-            log(f"stopping leftover GPU container {container_id} ({row['app_name']})")
+            log(f"stopping leftover {role} container {container_id} ({row['app_name']})")
         try:
             _run(
                 [modal_bin(), "container", "stop", container_id],
@@ -242,6 +288,11 @@ def stop_gpu_containers(log: Any | None = None) -> list[str]:
             continue
         stopped.append(container_id)
     return stopped
+
+
+def stop_gpu_containers(log: Any | None = None) -> list[str]:
+    """Stop leftover GPU containers. Do not ``modal app stop`` — keep the snapshot."""
+    return stop_workspace_containers(roles=("gpu",), log=log)
 
 
 def _chosen_gpu(recipe_id: str, gpu: str) -> str:

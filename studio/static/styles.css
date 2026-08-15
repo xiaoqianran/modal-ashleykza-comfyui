@@ -91,6 +91,8 @@ h2 { font-size: 20px; margin-bottom: 10px; }
   box-shadow: var(--shadow);
 }
 .hint, .foot { color: var(--mute); font-size: 13px; line-height: 1.5; }
+.cost-hint { color: var(--accent-2); }
+.cost-spans { max-height: 160px; }
 code { color: var(--accent-2); }
 
 label {
