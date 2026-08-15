@@ -15,6 +15,7 @@ CONTAINER_FILES = (
     "sparse_3d_runtime.py",
     "uv_runtime.py",
     "sam3d_runtime.py",
+    "comfy_env_contract.py",
 )
 
 
