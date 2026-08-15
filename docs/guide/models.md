@@ -8,7 +8,7 @@ Studio 能跑的全部配方。**契约**在 `catalog/*.json`（标题、kind、
 python3 -m benchmarks --write
 ```
 
-本页由上面这条命令生成。数据更新日期 **2026-08-14**。
+本页由上面这条命令生成。数据更新日期 **2026-08-15**。
 
 ## 共用环境
 
@@ -372,7 +372,7 @@ Meta SAM 3D Objects 图生带贴图 GLB。PozzettiAndrea ComfyUI-SAM3DObjects。
 | 实测状态 | `recorded` · PR #46 · 2026-08-14 |
 | 实测 GPU / 耗时 | L40S 首张 634.4s / 热 43.3s |
 | 冒烟产物 | textured GLB |
-| 备注 | 5/5 success。001 含冷启动约 7min；002 冷 isolation+14.9GB 634s；003–005 约 43–69s。测完已停 GPU。 |
+| 备注 | 5/5 success。001 含冷启动约 7min；002 冷 isolation+14.9GB 634s；003–005 约 43–69s。测完已停 GPU。另：2026-08-15 三张 Pinterest 3/3（PR #51）：冷 718.3s / 热 42.0s / 57.3s；JPG 需 rembg+裁 alpha。 |
 
 | 样本 | 秒 |
 |---|---:|
@@ -381,6 +381,9 @@ Meta SAM 3D Objects 图生带贴图 GLB。PozzettiAndrea ComfyUI-SAM3DObjects。
 | 003.png | 43.3s |
 | 004.png | 51.5s |
 | 005.png | 68.6s |
+| pinterest-001 Senin (2026-08-15 L40S PR #51；rembg u2net + crop；含冷启动) | 718.3s |
+| pinterest-002 alley AC (热；isnet-general-use 抠出地面空调) | 42s |
+| pinterest-003 ramune (热；u2net cutout) | 57.3s |
 
 ### TRELLIS.2 (`trellis2`)
 
