@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-14",
+  "updated": "2026-08-15",
   "environment": {
     "image": "ashleykleynhans/comfyui cu128-py312",
     "comfyui_version": "构建时解析最新 cu128-py312-v*",
@@ -339,14 +339,17 @@
         "seconds": 634.44,
         "warm_seconds": 43.3,
         "output": "textured GLB",
-        "note": "5/5 success。001 含冷启动约 7min；002 冷 isolation+14.9GB 634s；003–005 约 43–69s。测完已停 GPU。"
+        "note": "5/5 success。001 含冷启动约 7min；002 冷 isolation+14.9GB 634s；003–005 约 43–69s。测完已停 GPU。另：2026-08-15 三张 Pinterest 3/3（PR #51）：冷 718.3s / 热 42.0s / 57.3s；JPG 需 rembg+裁 alpha。"
       },
       "runs": [
         {"prompt": "001.png", "seconds": 431, "note": "含首次 boot / Volume 拉权重"},
         {"prompt": "002.png", "seconds": 634.44, "note": "冷 isolation + 14.9GB"},
         {"prompt": "003.png", "seconds": 43.3},
         {"prompt": "004.png", "seconds": 51.47},
-        {"prompt": "005.png", "seconds": 68.63}
+        {"prompt": "005.png", "seconds": 68.63},
+        {"prompt": "pinterest-001 Senin", "seconds": 718.29, "note": "2026-08-15 L40S PR #51；rembg u2net + crop；含冷启动"},
+        {"prompt": "pinterest-002 alley AC", "seconds": 41.97, "note": "热；isnet-general-use 抠出地面空调"},
+        {"prompt": "pinterest-003 ramune", "seconds": 57.28, "note": "热；u2net cutout"}
       ]
     },
     {

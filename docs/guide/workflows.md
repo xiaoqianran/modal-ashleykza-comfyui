@@ -230,6 +230,8 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 
 锁里是 GitHub 节点 `ComfyUI-SAM3DObjects@main`。`LoadSAM3DModel` 读 `sam3dobjects/`。隔离协议钉在 `comfy_env_contract.py`：只认 `comfy-env==0.3.89` 和 `/.pixi/envs/<name>` 布局，版本或源码对不上就启动失败，不准追 PyPI latest。官方 `comfy-env-root.toml` 里的 GeometryPack / Multiband **不装**。不要写 `queue_*.py`。官方模板走 InvertMask，**透明底 PNG** 更好。冷启动把 `COMFY_STARTUP_TIMEOUT_SECONDS` 提到 3600。`graphToPrompt` 若没换掉默认图，本地用 `/object_info` 转 API。建议 **L40S**。不要用 T4。
 
+2026-08-15 用同一配方在 L40S 上跑通三张 Pinterest 静物（PR #51）：[Senin 树冠海报](https://www.pinterest.com/pin/916834436624982792/)、[巷子空调](https://www.pinterest.com/pin/1011339660096616838/)、[波子汽水与雏菊](https://www.pinterest.com/pin/1025343040188570043/)。JPG 先 rembg 抠图（002 用 `isnet-general-use`，其余 `u2net`），再按 alpha 裁到主体。整幅 900×1600 透明画布会让 `SAM3D_DepthEstimate` 卡满 isolation 600s。3/3 出带贴图 GLB：冷 718.3s，热 42.0s / 57.3s。图库 collection `pinterest-pins`。
+
 ```bash
 modal run hydrate_modal.py --catalog sam3d
 COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal deploy comfyui_modal.py

@@ -23,6 +23,7 @@ PACKAGES = ("catalog", "studio")
 MODULES = (
     "base_nodes.py",
     "comfy_engine.py",
+    "comfy_env_contract.py",
     "comfyui_modal.py",
     "hydrate_modal.py",
     "modal_config.py",

@@ -52,6 +52,7 @@ sync_image = (
         "recipes",
         "workflow_resolver",
         "comfy_engine",
+        "comfy_env_contract",
         "sparse_3d_runtime",
         "uv_runtime",
         "sam3d_runtime",
