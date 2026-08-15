@@ -6,6 +6,7 @@ GPU 容器不负责下载权重。权重只由 CPU Hydrate 写入 Volume；GPU �
 flowchart LR
   CAT[catalog/*.json] --> HY[hydrate_modal.py<br/>CPU]
   WF[工作流 JSON] --> HY
+  MGR[ComfyUI-Manager 目录] --> HY
   HY --> VOL[(Volume<br/>comfyui-ashleykza-models)]
   WS[(Volume<br/>comfyui-ashleykza-workspace)]
   VOL --> GPU[comfyui_modal.py<br/>GPU UI]
@@ -19,12 +20,12 @@ Studio 顶栏和 `hydrate --catalog` 读同一份 `catalog/*.json`。`recipes.PR
 
 | App | 文件 | 作用 |
 |---|---|---|
-| `{MODAL_APP_NAME}-hydrate` | `hydrate_modal.py` | CPU：解析锁文件、并行下载、`commit()` Volume |
+| `{MODAL_APP_NAME}-hydrate` | `hydrate_modal.py` | CPU：解析锁文件、可选 Manager + ComfyUI `--cpu` 探测、并行下载、`commit()` Volume |
 | `MODAL_APP_NAME` | `comfyui_modal.py` | GPU：ComfyUI Web UI |
 
 默认 `MODAL_APP_NAME=comfyui-ashleykza-cu128`。
 
-必须拆开：hydrate 只跑 debian-slim。GPU App 即使默认不装插件，也会加载 Runtime Image。
+必须拆开：hydrate 只跑 debian-slim。GPU App 即使默认不装插件，也会加载 Runtime Image。`--action probe` 的 CPU ComfyUI 克隆在 workspace Volume 的 `.cpu-comfy/`，不打进默认 hydrate Image。
 
 ## 两个 Volume
 

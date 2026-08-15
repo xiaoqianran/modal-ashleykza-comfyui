@@ -57,10 +57,10 @@ Storage 目录表只扩官方 ComfyUI / 官方模板真实在用的文件夹（�
 | 情况 | 做法 |
 |---|---|
 | `api_*` 云端节点 | 不要在本机 GPU 跑 |
-| 只有文件名，笔记里也没有可下载 URL | `unresolved`，hydrate 失败；把 URL 写进 JSON 或锁 |
+| 只有文件名，笔记里也没有可下载 URL | `unresolved`；先 `python3 -m manager_catalog` / `hydrate --action probe`，仍缺再手补 |
 | 笔记 URL 对上了文件名，但看不出 `models/<目录>` | `unresolved` 会带上 URL，只差人手补目录 |
 | 同一目标两个不同文件 / 两个 SHA256 | 丢掉该条，不猜该下哪份 |
-| 节点没有 `cnr_id` | 不编造 GitHub 仓库 |
+| 节点没有 `cnr_id` | 不编造 GitHub 仓库；`--action probe` 仅在 Manager 表一对一命中时补仓 |
 | 路径穿越、`file://` | 拒绝；`file://` 跳过该条，不中止其余解析 |
 | 想为缺节点写 `queue_*.py` | 先看 `catalog.gates.ALLOWED_QUEUE_SCRIPTS`；新配方用 `recipe_scaffold` |
 
@@ -68,5 +68,6 @@ Storage 目录表只扩官方 ComfyUI / 官方模板真实在用的文件夹（�
 
 ## 已知缺口
 
-- 约 9 份本地模板仍是「有文件名、无下载地址」（AnimateDiff / OpenPose / FILM 等老模板），只能手补
+- 约 9 份本地模板仍是「有文件名、无下载地址」（AnimateDiff / OpenPose / FILM 等老模板）。先 `hydrate --action probe` 查 Manager `model-list.json`；仍缺只能手补
 - subgraph 的 UUID 节点类型，`--inspect` 只能看到外壳；真正展平仍靠运行中的 `graphToPrompt()`
+- Manager 的 `model-list.json` 覆盖不全（上游也承认），命不中就保持 `unresolved`

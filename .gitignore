@@ -9,6 +9,7 @@ __pycache__/
 .DS_Store
 site/
 .cache/
+.cpu-comfy/
 .code-review-graph/
 docs/gallery/media/
 artifacts/

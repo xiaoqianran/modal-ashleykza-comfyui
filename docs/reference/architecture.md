@@ -5,7 +5,7 @@
 ```text
 运行时
   comfyui_modal.py      GPU App：Cls UI + web_server（端口 3001）
-  hydrate_modal.py      CPU App：hydrate / resolve / profiles / outputs / repair
+  hydrate_modal.py      CPU App：hydrate / resolve / probe / profiles / outputs / repair
   modal_config.py       常量、路径、环境变量
   storage.py            Volume 路径与 extra_model_paths.yaml
   comfy_engine.py       下载、校验、启动 ComfyUI
@@ -13,6 +13,8 @@
   comfy_env_contract.py comfy-env 隔离协议：钉版本、0.3 布局、启动断言
   sam3d_runtime.py      SAM 3D pixi 安装 / Modal 补丁（只执行契约）
   workflow_resolver.py  工作流 → 锁文件（只绑定 JSON 里已有的 URL / CNR）
+  manager_catalog.py    ComfyUI-Manager 目录：class_type / 文件名 → GitHub / 下载 URL
+  cpu_comfy.py          Volume 上的 CPU ComfyUI --cpu 探测
   recipes.py            MODEL_DIRS + 旧 profile / model pack / node pack
 
 catalog

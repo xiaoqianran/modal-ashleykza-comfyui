@@ -15,16 +15,32 @@ GPU Image or clone custom nodes. The active lock is written to Volume
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 import modal
 
 from comfy_engine import sync_profile_models, sync_workflow_models
+from cpu_comfy import (
+    ensure_cpu_runtime,
+    missing_model_files,
+    probe_running,
+    start_cpu_comfy,
+    stop_cpu_comfy,
+    wait_cpu_ready,
+    write_cpu_extra_paths,
+)
+from manager_catalog import classify_probe_nodes, prepare_probe_lock
 from modal_config import ModalSettings
 from recipes import PROFILES, get_profile
 from storage import list_output_files, repair_storage_layout, repair_workspace_layout
-from workflow_resolver import dump_workflow_lock, select_workflow_lock, write_workflow_lock
+from workflow_resolver import (
+    dump_workflow_lock,
+    load_workflow,
+    select_workflow_lock,
+    write_workflow_lock,
+)
 
 SETTINGS = ModalSettings.from_env(os.environ)
 APP_NAME = f"{SETTINGS.app_name}-hydrate"
@@ -51,6 +67,8 @@ sync_image = (
     .add_local_python_source(
         "recipes",
         "workflow_resolver",
+        "manager_catalog",
+        "cpu_comfy",
         "comfy_engine",
         "sparse_3d_runtime",
         "uv_runtime",
@@ -59,6 +77,8 @@ sync_image = (
         "storage",
     )
 )
+
+probe_image = sync_image.apt_install("git", "build-essential", "python3-dev")
 
 SYNC_RETRIES = modal.Retries(
     max_retries=3,
@@ -189,6 +209,84 @@ def repair_paths() -> dict:
     }
 
 
+@app.function(
+    image=probe_image,
+    volumes=APP_VOLUMES,
+    secrets=APP_SECRETS,
+    timeout=6 * 60 * MINUTES,
+    retries=SYNC_RETRIES,
+    cpu=8.0,
+    memory=16384,
+    max_containers=1,
+)
+def probe_workflow(
+    workflow_lock: dict,
+    workflow: dict,
+    install_lock_nodes: bool = True,
+    workflow_source: str = "",
+    lock_source: str = "",
+    profile_name: str = "base",
+    boot_cpu: bool = True,
+    persist_launch: bool = True,
+    require_resolved: bool = True,
+) -> dict:
+    """CPU: download missing weights, optionally boot ComfyUI --cpu, list leftovers."""
+    downloaded = sync_workflow_models(
+        workflow_lock,
+        WORKSPACE,
+        storage_root=STORAGE_ROOT,
+        workers=HYDRATE_WORKERS,
+        install_lock_nodes=install_lock_nodes,
+        workflow_source=workflow_source,
+        lock_source=lock_source,
+        profile_name=profile_name,
+        persist_launch=persist_launch,
+        require_resolved=require_resolved,
+    )
+    scan = {
+        "missing_models": missing_model_files(workflow_lock.get("models") or (), STORAGE_ROOT),
+        "missing_nodes": [],
+        "missing_nodes_in_lock": [],
+        "missing_nodes_unmapped": [],
+        "cpu_boot": False,
+    }
+    proc = None
+    if boot_cpu:
+        try:
+            runtime = ensure_cpu_runtime(WORKSPACE)
+            extra = write_cpu_extra_paths(
+                comfy_root=Path(runtime["comfy_root"]),
+                storage_root=STORAGE_ROOT,
+                workspace=WORKSPACE,
+            )
+            proc = start_cpu_comfy(
+                python=runtime["python"],
+                comfy_root=runtime["comfy_root"],
+                extra_paths=extra,
+            )
+            wait_cpu_ready("http://127.0.0.1:8188")
+            scan = probe_running(
+                "http://127.0.0.1:8188",
+                workflow,
+                models=workflow_lock.get("models") or (),
+                storage_root=STORAGE_ROOT,
+            )
+            scan["cpu_boot"] = True
+        except (OSError, TimeoutError, subprocess.CalledProcessError, FileNotFoundError) as exc:
+            scan["cpu_error"] = str(exc)[-1000:]
+        finally:
+            if proc is not None:
+                stop_cpu_comfy(proc)
+    scan.update(
+        classify_probe_nodes(
+            scan.get("missing_nodes") or (),
+            workflow_lock.get("custom_nodes") or (),
+        )
+    )
+    _commit_storage()
+    return {**downloaded, "probe": scan}
+
+
 def _hydrate_workflow(settings: ModalSettings) -> dict:
     lock, origin = select_workflow_lock(settings.workflow_source, settings.workflow_lock_source)
     if origin == "resolved":
@@ -217,6 +315,41 @@ def _hydrate_workflow(settings: ModalSettings) -> dict:
         ),
     }
     return result
+
+
+def _probe_workflow(settings: ModalSettings) -> dict:
+    lock, origin = prepare_probe_lock(
+        settings.workflow_source,
+        settings.workflow_lock_source,
+    )
+    workflow, _raw = load_workflow(settings.workflow_source)
+    unresolved = list(lock.get("unresolved") or ())
+    remote = probe_workflow.remote(
+        lock,
+        workflow,
+        install_lock_nodes=settings.install_lock_nodes,
+        workflow_source=settings.workflow_source,
+        lock_source=settings.workflow_lock_source,
+        profile_name=settings.profile_name,
+        boot_cpu=True,
+        persist_launch=not unresolved,
+        require_resolved=False,
+    )
+    return {
+        **remote,
+        "mode": "probe",
+        "workflow": settings.workflow_source,
+        "lock": settings.workflow_lock_source,
+        "lock_origin": origin,
+        "manager": lock.get("manager"),
+        "custom_nodes": lock["custom_nodes"],
+        "unresolved": unresolved,
+        "plugins_note": (
+            "ComfyUI-Manager catalogs filled the lock; models downloaded on "
+            "CPU. Incomplete locks are not written to launch.json. GPU start "
+            "still installs CUDA nodes onto the Volume."
+        ),
+    }
 
 
 def _hydrate_profile(settings: ModalSettings) -> dict:
@@ -320,6 +453,12 @@ def main(
         print(repair_paths.remote())
         return
 
+    if action == "probe":
+        if settings.launch_mode != "workflow":
+            raise ValueError("--catalog or --workflow is required for action=probe")
+        print(_probe_workflow(settings))
+        return
+
     if action in {"hydrate", "sync", "workflow-sync"}:
         if settings.launch_mode == "workflow":
             print(_hydrate_workflow(settings))
@@ -329,7 +468,7 @@ def main(
 
     if action != "info":
         raise ValueError(
-            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync, outputs, repair"
+            "action must be one of: info, profiles, hydrate, sync, resolve, workflow-sync, probe, outputs, repair"
         )
 
     print(
@@ -342,8 +481,9 @@ Workers: {HYDRATE_WORKERS}
 # Studio catalog id: same workflow path Studio uses
 modal run hydrate_modal.py --catalog z-image
 
-# workflow JSON: parse models + plugins, download models only
-modal run hydrate_modal.py --workflow examples/z-image-base.json
+# workflow JSON: Manager catalogs + CPU ComfyUI probe, then download
+modal run hydrate_modal.py --action probe --catalog z-image
+modal run hydrate_modal.py --action probe --workflow examples/z-image-base.json
 
 # legacy profile: download that pack's models (Studio does not use this table)
 modal run hydrate_modal.py --profile qwen-image
