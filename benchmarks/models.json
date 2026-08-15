@@ -322,6 +322,34 @@
       }
     },
     {
+      "id": "sam3d",
+      "family": "sam3d",
+      "quant": "bf16",
+      "weights_gb": 14.9,
+      "vram_gb": null,
+      "weights_note": "Meta SAM 3D Objects 图生带贴图 GLB。手修锁：apozz/sam-3d-objects-safetensors → sam3dobjects/。GitHub 节点 ComfyUI-SAM3DObjects@main。隔离协议钉在 comfy_env_contract（comfy-env==0.3.89）。不要用 T4。",
+      "shared_weights_with": [],
+      "nodes": "ComfyUI-SAM3DObjects",
+      "output": "GLB",
+      "smoke": {
+        "status": "recorded",
+        "gpu": "L40S",
+        "date": "2026-08-14",
+        "source": "PR #46",
+        "seconds": 634.44,
+        "warm_seconds": 43.3,
+        "output": "textured GLB",
+        "note": "5/5 success。001 含冷启动约 7min；002 冷 isolation+14.9GB 634s；003–005 约 43–69s。测完已停 GPU。"
+      },
+      "runs": [
+        {"prompt": "001.png", "seconds": 431, "note": "含首次 boot / Volume 拉权重"},
+        {"prompt": "002.png", "seconds": 634.44, "note": "冷 isolation + 14.9GB"},
+        {"prompt": "003.png", "seconds": 43.3},
+        {"prompt": "004.png", "seconds": 51.47},
+        {"prompt": "005.png", "seconds": 68.63}
+      ]
+    },
+    {
       "id": "qwen-image-2512",
       "family": "qwen",
       "quant": "fp8",

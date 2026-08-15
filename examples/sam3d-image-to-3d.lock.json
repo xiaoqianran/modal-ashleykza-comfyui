@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "workflow": {
+    "name": "sam3d-image-to-3d.json",
+    "sha256": "a1e6f3f4960d5959c4206daf402feed22ba85303788becbb5f73769b9932d354"
+  },
+  "models": [
+    {
+      "category": "sam3dobjects",
+      "filename": "dinov2_vitl14_reg.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/dinov2_vitl14_reg.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "moge_vitl.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/moge_vitl.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "moge_vitl_config.json",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/moge_vitl_config.json"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "pipeline.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/pipeline.yaml"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_decoder_gs.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_decoder_gs.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_decoder_gs.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_decoder_gs.yaml"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_decoder_gs_4.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_decoder_gs_4.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_decoder_gs_4.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_decoder_gs_4.yaml"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_decoder_mesh.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_decoder_mesh.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_decoder_mesh.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_decoder_mesh.yaml"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_generator.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_generator.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "slat_generator.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/slat_generator.yaml"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "ss_decoder.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/ss_decoder.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "ss_decoder.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/ss_decoder.yaml"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "ss_generator.safetensors",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/ss_generator.safetensors"
+    },
+    {
+      "category": "sam3dobjects",
+      "filename": "ss_generator.yaml",
+      "sha256": null,
+      "source": "manual:apozz/sam-3d-objects-safetensors",
+      "url": "https://huggingface.co/apozz/sam-3d-objects-safetensors/resolve/main/ss_generator.yaml"
+    }
+  ],
+  "custom_nodes": [
+    {
+      "id": "ComfyUI-SAM3DObjects",
+      "version": "main",
+      "url": "https://github.com/PozzettiAndrea/ComfyUI-SAM3DObjects.git",
+      "node_types": [
+        "LoadSAM3DModel",
+        "SAM3DGaussianDecode",
+        "SAM3DGenerateSLAT",
+        "SAM3DMeshDecode",
+        "SAM3DTextureBake",
+        "SAM3D_DepthEstimate",
+        "SAM3D_PreviewPointCloud"
+      ]
+    }
+  ],
+  "unresolved": [],
+  "warnings": []
+}

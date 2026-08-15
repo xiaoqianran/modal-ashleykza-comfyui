@@ -38,6 +38,8 @@ BINDER_CLASS_SETS = (
 
 # CUDA wheels are gated by lock node ids in sparse_3d_runtime, not catalog id.
 CUDA_VOLUME_GATE = "sparse_3d_runtime._lock_needs_sparse_3d_runtime"
+# SAM 3D pixi / comfy-env cache is gated the same way, on a Volume path.
+COMFY_ENV_VOLUME_GATE = "sam3d_runtime._lock_has_sam3d"
 
 CATALOG_MODES = frozenset({"graph", "workflow"})
 RECIPE_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")

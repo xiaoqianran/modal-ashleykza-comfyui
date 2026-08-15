@@ -124,6 +124,91 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertIn("nodeData", workflow_queue.GRAPH_TO_PROMPT_JS)
         self.assertIn("defined_types", workflow_queue.GRAPH_TO_PROMPT_JS)
         self.assertIn("entry.class_type = type", workflow_queue.GRAPH_TO_PROMPT_JS)
+        self.assertIn("loadGraphData did not load expected node types", workflow_queue.GRAPH_TO_PROMPT_JS)
+
+    def test_ui_workflow_to_api_prompt_maps_links_and_skips_force_input(self):
+        ui = {
+            "nodes": [
+                {
+                    "id": 4,
+                    "type": "LoadImage",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": ["elephant.png", "image"],
+                },
+                {
+                    "id": 72,
+                    "type": "SAM3DMeshDecode",
+                    "mode": 0,
+                    "inputs": [
+                        {"name": "slat_decoder_mesh", "type": "SAM3D_MODEL", "link": 1},
+                        {"name": "slat", "type": "STRING", "link": 2},
+                    ],
+                    "widgets_values": [True, 0.95],
+                },
+                {
+                    "id": 70,
+                    "type": "SAM3DGenerateSLAT",
+                    "mode": 0,
+                    "inputs": [
+                        {"name": "generator", "type": "SAM3D_MODEL", "link": 3},
+                        {"name": "image", "type": "IMAGE", "link": 4},
+                    ],
+                    "widgets_values": [42, "fixed", 12, 7.5],
+                },
+            ],
+            "links": [
+                [1, 74, 3, 72, 0, "SAM3D_MODEL"],
+                [2, 70, 0, 72, 1, "STRING"],
+                [3, 74, 1, 70, 0, "SAM3D_MODEL"],
+                [4, 4, 0, 70, 1, "IMAGE"],
+            ],
+        }
+        info = {
+            "LoadImage": {"input": {"required": {"image": [["elephant.png"], {}]}}},
+            "SAM3DMeshDecode": {
+                "input": {
+                    "required": {
+                        "slat_decoder_mesh": ["SAM3D_MODEL", {}],
+                        "slat": ["STRING", {"forceInput": True}],
+                    },
+                    "optional": {
+                        "with_postprocess": ["BOOLEAN", {}],
+                        "simplify": ["FLOAT", {}],
+                    },
+                }
+            },
+            "SAM3DGenerateSLAT": {
+                "input": {
+                    "required": {
+                        "generator": ["SAM3D_MODEL", {}],
+                        "image": ["IMAGE", {}],
+                        "seed": ["INT", {}],
+                    },
+                    "optional": {
+                        "stage1_steps": ["INT", {}],
+                        "stage1_cfg": ["FLOAT", {}],
+                    },
+                }
+            },
+        }
+        prompt = workflow_queue.ui_workflow_to_api_prompt(ui, info)
+        self.assertEqual(prompt["4"]["inputs"]["image"], "elephant.png")
+        self.assertEqual(prompt["72"]["inputs"]["with_postprocess"], True)
+        self.assertEqual(prompt["72"]["inputs"]["simplify"], 0.95)
+        self.assertEqual(prompt["72"]["inputs"]["slat"], ["70", 0])
+        self.assertEqual(prompt["72"]["inputs"]["slat_decoder_mesh"], ["74", 3])
+        self.assertEqual(prompt["70"]["inputs"]["seed"], 42)
+        self.assertEqual(prompt["70"]["inputs"]["stage1_steps"], 12)
+        self.assertEqual(prompt["70"]["inputs"]["stage1_cfg"], 7.5)
+        self.assertEqual(prompt["70"]["inputs"]["image"], ["4", 0])
+        self.assertTrue(workflow_queue._prompt_covers_ui(prompt, ui))
+        self.assertFalse(
+            workflow_queue._prompt_covers_ui(
+                {"9": {"class_type": "SaveImage", "inputs": {}}},
+                ui,
+            )
+        )
 
     def test_repair_converted_prompt_fills_class_type_and_unknown_widgets(self):
         prompt = {
@@ -467,6 +552,27 @@ class WorkflowBindTests(unittest.TestCase):
         }
         items = workflow_queue.history_view_items(history)
         self.assertEqual(items[0]["filename"], "pixal3d_demo.glb")
+        self.assertEqual(items[0]["subfolder"], "")
+
+    def test_history_view_items_keeps_sam3d_output_subfolder(self):
+        history = {
+            "outputs": {
+                "73": {
+                    "text": ["/workspace/output/sam3d_run_1/mesh_textured.glb"]
+                }
+            }
+        }
+        items = workflow_queue.history_view_items(history)
+        self.assertEqual(
+            items,
+            [
+                {
+                    "filename": "mesh_textured.glb",
+                    "subfolder": "sam3d_run_1",
+                    "type": "output",
+                }
+            ],
+        )
 
     def test_history_view_items_dedupes_images_and_result(self):
         history = {

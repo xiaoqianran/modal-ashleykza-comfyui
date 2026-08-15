@@ -18,7 +18,18 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
+from comfy_env_contract import (
+    SITE_MARK as COMFY_ENV_SITE_MARK,
+)
+from comfy_env_contract import (
+    SKIP_PACKAGES as NODE_REQS_SKIP_PACKAGES,
+)
 from recipes import MODEL_PACKS, NODE_PACKS, ModelAsset, NodeRecipe, get_profile
+from sam3d_runtime import (
+    _lock_has_sam3d,
+    apply_comfy_env_root,
+    ensure_sam3d_runtime,
+)
 from sparse_3d_runtime import (  # noqa: F401
     NATTEN_WHEEL_INDEX,
     SPARSE_3D_PTH_NAME,
@@ -76,6 +87,8 @@ WORKFLOW_LOCK_STATE_FILE = "workflow.lock.json"
 # on the workspace Volume and point site-packages at them with a venv-local .pth.
 NODE_REQS_SITE_MARK = "node-reqs-site"
 NODE_REQS_PTH_NAME = "comfy_node_reqs.pth"
+# Host isolation library. Pin and layout live in comfy_env_contract.
+# Do not let node-reqs overwrite the pin with an unpinned comfy-env.
 
 
 def _quote(value: str | Path) -> str:
@@ -1123,7 +1136,16 @@ def _install_node_requirements(
     if marker.is_file() and marker.read_text(encoding="utf-8").strip() == digest:
         print(f"[SKIP] node reqs {dest.name} already on Volume", flush=True)
         return False
-    _run(pip_install_cmd(python, "-r", str(requirements), site_dir=site_dir))
+    filtered = requirements_without_packages(
+        requirements.read_text(encoding="utf-8"),
+        NODE_REQS_SKIP_PACKAGES,
+    )
+    req_file = requirements
+    if filtered != requirements.read_text(encoding="utf-8"):
+        req_file = site_dir / ".markers" / f"{dest.name}.requirements.txt"
+        req_file.write_text(filtered, encoding="utf-8")
+        print(f"[NODE-REQS] skip Image-only packages {sorted(NODE_REQS_SKIP_PACKAGES)}", flush=True)
+    _run(pip_install_cmd(python, "-r", str(req_file), site_dir=site_dir))
     marker.write_text(digest + "\n", encoding="utf-8")
     print(f"[INSTALL] node reqs {dest.name} -> {site_dir}", flush=True)
     return True
@@ -1267,11 +1289,11 @@ def prepare_runtime(
 
     for name in ("input", "output", "user"):
         _replace_with_symlink(comfy_root / name, workspace / name)
-    # Trellis2LoadModel joins folder_paths.models_dir / "microsoft/..." and
-    # "facebook/..." instead of extra_model_paths. Point those at the Volume.
+    # Some loaders join folder_paths.models_dir / "<category>/..." instead of
+    # extra_model_paths. Point those Image dirs at the Volume.
     models_dir = comfy_root / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("microsoft", "facebook"):
+    for name in ("microsoft", "facebook", "sam3dobjects"):
         _replace_with_symlink(models_dir / name, storage_root / name)
 
     write_optional_node_configs(comfy_root, workspace)
@@ -1319,6 +1341,9 @@ def apply_volume_launch(
     installer = install_nodes or install_registry_nodes
     include_pixal3d = _lock_has_pixal3d(nodes)
     include_trellis2 = _lock_has_trellis2(nodes)
+    include_sam3d = _lock_has_sam3d(nodes)
+    if include_sam3d:
+        apply_comfy_env_root(workspace)
     wheels_changed = False
     if install_lock_nodes and _lock_needs_sparse_3d_runtime(nodes):
         # Wheel first so CNR / TRELLIS.2 do not compile CUDA sdists.
@@ -1347,6 +1372,15 @@ def apply_volume_launch(
             allow_source_compile=False,
             workspace=workspace,
         )
+    if install_lock_nodes and include_sam3d:
+        runtime_changed = (
+            ensure_sam3d_runtime(
+                comfy_root,
+                workspace / "custom_nodes",
+                workspace=workspace,
+            )
+            or runtime_changed
+        )
     fingerprint = launch_fingerprint(
         launch,
         profile_name=profile_name,
@@ -1374,7 +1408,11 @@ def apply_volume_launch(
         wait(port=port, timeout=startup_timeout)
     assert process is not None
     if wheels_changed or runtime_changed:
-        if SPARSE_3D_SITE_MARK not in newly:
+        if _lock_needs_sparse_3d_runtime(nodes) and SPARSE_3D_SITE_MARK not in newly:
+            newly.append(SPARSE_3D_SITE_MARK)
+        if include_sam3d and COMFY_ENV_SITE_MARK not in newly:
+            newly.append(COMFY_ENV_SITE_MARK)
+        if not newly:
             newly.append(SPARSE_3D_SITE_MARK)
     return process, fingerprint, newly
 

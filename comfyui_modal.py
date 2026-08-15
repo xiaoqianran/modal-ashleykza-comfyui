@@ -169,6 +169,7 @@ runtime_image = (
         "comfy_engine",
         "sparse_3d_runtime",
         "uv_runtime",
+        "sam3d_runtime",
         "modal_config",
         "storage",
     )

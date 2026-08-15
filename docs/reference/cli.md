@@ -6,6 +6,7 @@ CPU App，只下载模型。
 
 ```bash
 modal run hydrate_modal.py --catalog z-image
+modal run hydrate_modal.py --catalog sam3d
 modal run hydrate_modal.py --workflow examples/z-image-base.json
 modal run hydrate_modal.py --profile qwen-image
 modal run hydrate_modal.py --action resolve --catalog pixal3d

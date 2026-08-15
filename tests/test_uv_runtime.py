@@ -14,6 +14,7 @@ CONTAINER_FILES = (
     "hydrate_modal.py",
     "sparse_3d_runtime.py",
     "uv_runtime.py",
+    "sam3d_runtime.py",
 )
 
 

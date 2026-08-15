@@ -797,7 +797,7 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
         self.assertNotIn("DRTK", joined)
         self.assertNotIn("flash-attn", joined)
 
-    def test_prepare_runtime_symlinks_microsoft_and_facebook(self):
+    def test_prepare_runtime_symlinks_microsoft_facebook_and_sam3dobjects(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             comfy_root = root / "ComfyUI"
@@ -806,7 +806,7 @@ class Sparse3dRuntimeWithoutPixal3dTests(unittest.TestCase):
             comfy_root.mkdir()
             (comfy_root / "main.py").write_text("#\n", encoding="utf-8")
             comfy_engine.prepare_runtime(comfy_root, workspace, storage)
-            for name in ("microsoft", "facebook"):
+            for name in ("microsoft", "facebook", "sam3dobjects"):
                 link = comfy_root / "models" / name
                 self.assertTrue(link.is_symlink(), name)
                 self.assertEqual(link.resolve(), (storage / name).resolve())

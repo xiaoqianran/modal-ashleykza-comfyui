@@ -10,6 +10,8 @@
   storage.py            Volume 路径与 extra_model_paths.yaml
   comfy_engine.py       下载、校验、启动 ComfyUI
   sparse_3d_runtime.py  Pixal3D / TRELLIS CUDA wheels（装到 workspace Volume）
+  comfy_env_contract.py comfy-env 隔离协议：钉版本、0.3 布局、启动断言
+  sam3d_runtime.py      SAM 3D pixi 安装 / Modal 补丁（只执行契约）
   workflow_resolver.py  工作流 → 锁文件（只绑定 JSON 里已有的 URL / CNR）
   recipes.py            MODEL_DIRS + 旧 profile / model pack / node pack
 
@@ -21,7 +23,7 @@ catalog
   benchmarks.py         实测 overlay → docs/guide/models.md + Studio 配方表
 
 Studio
-  studio/               本机 UI；读 catalog，调 hydrate / serve / workflow_queue
+  studio/               本机 UI；读 catalog，调 hydrate / deploy / workflow_queue
   packaging/            Windows Studio.exe
   gallery_hub/          HF 图库数据集（推送 / 拉取 / 编进 Pages）
 
@@ -77,9 +79,9 @@ Studio
 
 ## Volume 提交
 
-CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes`、或把 CUDA wheels 写入 `/workspace/.python/sparse-3d` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。
+CPU Function 在成功路径调用 `models_vol.commit()` 与 `workspace_vol.commit()`。GPU 在首次把 CNR 写入 `/workspace/custom_nodes`、或把 CUDA wheels 写入 `/workspace/.python/sparse-3d`、或把 SAM 3D pixi 写入 `/workspace/.python/comfy-env` 后也会 `workspace_vol.commit()`，否则缩容后下次还会再装一遍。SaveVideo 写入 `/workspace/output` 后由后台 watch 再 `commit()`；`@modal.exit()` 再提交一次。成片不需要 GPU 容器继续活着，用 hydrate CPU `--action outputs` 或 `modal volume get` 读取。
 
-CUDA wheels 不进 Image、也不进 models Volume。冷启动时 `sparse_3d_runtime` 用 `uv pip install --target /workspace/.python/sparse-3d`，wheel 文件缓存在 `/workspace/.python/wheels`，再往容器 venv 的 site-packages 写一个 `comfy_sparse_3d.pth`。`.pth` 随 Image venv 一起消失，Volume 上的 site 还在；下次只要重新写 `.pth` 就能 import。Blackwell 的 boot `.pth` 仍写在 venv 里（几行 Python）。OpenGL 的 `apt-get` 仍是每次冷启动。CNR / GitHub 节点的 `requirements.txt` 同样装到 `/workspace/.python/node-reqs`，venv 里只留 `comfy_node_reqs.pth`；`requirements.txt` 的 sha256 对上就跳过 `uv pip`。
+CUDA wheels 不进 Image、也不进 models Volume。冷启动时 `sparse_3d_runtime` 用 `uv pip install --target /workspace/.python/sparse-3d`，wheel 文件缓存在 `/workspace/.python/wheels`，再往容器 venv 的 site-packages 写一个 `comfy_sparse_3d.pth`。`.pth` 随 Image venv 一起消失，Volume 上的 site 还在；下次只要重新写 `.pth` 就能 import。Blackwell 的 boot `.pth` 仍写在 venv 里（几行 Python）。OpenGL 的 `apt-get` 仍是每次冷启动。CNR / GitHub 节点的 `requirements.txt` 同样装到 `/workspace/.python/node-reqs`，venv 里只留 `comfy_node_reqs.pth`；`requirements.txt` 的 sha256 对上就跳过 `uv pip`。SAM 3D 的 pixi 环境同样不进 Image：`COMFY_ENV_ROOT=/workspace/.python/comfy-env`，只在锁里出现 `ComfyUI-SAM3DObjects` 时才跑 `install.py`。
 
 ## 隔离冷启动：哪些能复用
 
@@ -96,7 +98,8 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
               ├─ install_registry_nodes
               │     ├─ skip clone when Volume marker matches
               │     └─ _install_node_requirements  → uv pip --target node-reqs
-              └─ ensure_pixal3d_runtime
+              ├─ ensure_pixal3d_runtime
+              └─ ensure_sam3d_runtime           → 契约断言 + Volume pixi + 0.3.89 补丁
 ```
 
 | 层 | 第一次冷启动 | 缩容后再来 | 不能复用的原因 |
@@ -105,11 +108,12 @@ UI.apply_launch     (snap=False)  → stop_comfyui → Volume.reload
 | CNR / git clone | 装到 `/workspace/custom_nodes` 并 `commit` | marker + 目录在就 `[SKIP]` | — |
 | CUDA wheels | `--target /workspace/.python/sparse-3d` | 只重写 `.pth` | Image venv 是一次性的 |
 | 节点 `requirements.txt` | `--target /workspace/.python/node-reqs` | hash 命中则跳过 `uv pip` | 以前装进 venv，缩容就没了 |
+| SAM 3D pixi env | `install.py` → `/workspace/.python/comfy-env` | 跳过 install，只打补丁 + 预热 | isolation worker 进程跟容器一起死 |
 | Memory / GPU snapshot | 只在 **`modal deploy` 之后** | 恢复进程，再 `snap=False` 对一下指纹 | `modal serve` 不写快照 |
 | Isolation worker 进程 | 容器内拉起 | 必须再拉一次 | 进程跟容器一起死 |
 | OpenGL `apt-get`、Blackwell boot `.pth` | 每次写进当前容器 | 每次都做（便宜） | 不在 Volume 上 |
 
-冒烟默认 **`modal deploy`**：0 tasks 不计 GPU，快照跨冷启动复用。`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存；serve 进程还在就会挡住缩容。只有改 GPU 端 Python 才用 serve。SAM 3D 的 pixi / comfy-env 隔离在配方分支上，主线这条链不经过它。
+冒烟默认 **`modal deploy`**：0 tasks 不计 GPU，快照跨冷启动复用。`modal serve` 热加载的是本地 `.py`，**不是** GPU 内存；serve 进程还在就会挡住缩容。只有改 GPU 端 Python 才用 serve。comfy-env 的版本、布局、失败方式只改 `comfy_env_contract.py`。
 
 ## Volume 路径
 

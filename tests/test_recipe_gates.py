@@ -47,6 +47,17 @@ class RecipeGateSurfaceTests(unittest.TestCase):
         self.assertFalse(fn([]))
         self.assertTrue(fn([{"id": "Pixal3D-ComfyUI"}]))
 
+    def test_comfy_env_volume_gate_is_lock_based(self):
+        import sam3d_runtime
+        from catalog.gates import COMFY_ENV_VOLUME_GATE
+
+        module_name, attr = COMFY_ENV_VOLUME_GATE.rsplit(".", 1)
+        self.assertEqual(module_name, "sam3d_runtime")
+        fn = getattr(sam3d_runtime, attr)
+        self.assertFalse(fn([]))
+        self.assertFalse(fn([{"id": "ComfyUI-Trellis2"}]))
+        self.assertTrue(fn([{"id": "ComfyUI-SAM3DObjects"}]))
+
     def test_ltx_path_cannot_enter_catalog(self):
         catalog = dict(load_catalog("pixal3d"))
         catalog["id"] = "ltx-25"

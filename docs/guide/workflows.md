@@ -28,6 +28,7 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 | 手修 `.lock.json` | 自动 resolve 扫进了用不到的权重，或不猜 URL | 脚手架打印 `unresolved` |
 | `scripts/queue_ltx25.py` 的 patch | Image 缺官方节点 | `ALLOWED_QUEUE_SCRIPTS` |
 | Pixal3D / TRELLIS CUDA wheels | 锁里出现对应 CNR 才装到 Volume | `sparse_3d_runtime`（按 lock node id） |
+| SAM 3D comfy-env / pixi | 锁里出现 `ComfyUI-SAM3DObjects` 才装到 Volume | `comfy_env_contract`（钉版本 + 布局）+ `sam3d_runtime` |
 | `catalog/*.json` | 只给 Studio 控制面填表单 | 新配方 `mode=workflow` |
 | `mode=graph` 内嵌 prompt | 只有 Z-Image / Z-Image-Turbo | `GRAPH_MODE_IDS` |
 
@@ -218,6 +219,27 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
 ```
 
 空闲 scaledown 默认 5 秒。用 `modal deploy` 冒烟；`modal serve` 不关就会一直计费。队列结束即停。
+
+## 仓库示例：SAM 3D Objects 图生 GLB
+
+| 文件 | 作用 |
+|---|---|
+| `examples/sam3d-image-to-3d.json` | 官方 UI 工作流 `full_generation.json`（[PozzettiAndrea/ComfyUI-SAM3DObjects](https://github.com/PozzettiAndrea/ComfyUI-SAM3DObjects)） |
+| `examples/sam3d-image-to-3d.lock.json` | **手修**锁：`apozz/sam-3d-objects-safetensors` → `sam3dobjects/` |
+| `catalog/sam3d.json` | Studio 契约：图生带贴图 GLB，测试 **L40S** |
+
+锁里是 GitHub 节点 `ComfyUI-SAM3DObjects@main`。`LoadSAM3DModel` 读 `sam3dobjects/`。隔离协议钉在 `comfy_env_contract.py`：只认 `comfy-env==0.3.89` 和 `/.pixi/envs/<name>` 布局，版本或源码对不上就启动失败，不准追 PyPI latest。官方 `comfy-env-root.toml` 里的 GeometryPack / Multiband **不装**。不要写 `queue_*.py`。官方模板走 InvertMask，**透明底 PNG** 更好。冷启动把 `COMFY_STARTUP_TIMEOUT_SECONDS` 提到 3600。`graphToPrompt` 若没换掉默认图，本地用 `/object_info` 转 API。建议 **L40S**。不要用 T4。
+
+```bash
+modal run hydrate_modal.py --catalog sam3d
+COMFY_STARTUP_TIMEOUT_SECONDS=3600 MODAL_GPU=L40S modal deploy comfyui_modal.py
+python3 -m workflow_queue --base-url https://<workspace>--comfyui-ashleykza-cu128-ui-ui.modal.run \
+  --workflow examples/sam3d-image-to-3d.json \
+  --images photo.png \
+  --out artifacts/sam3d
+```
+
+空闲 scaledown 默认 5 秒。用 `modal deploy` 冒烟；`modal serve` 不关就会一直计费。队列结束即停，不要 `modal app stop`。
 
 ## 仓库示例：FLUX.2 [dev] 文生图
 

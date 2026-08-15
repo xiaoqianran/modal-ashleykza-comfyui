@@ -41,6 +41,7 @@ python3 -m benchmarks --write
 | `pixal3d` | Pixal3D | i23d | **L40S** | RTX-PRO-6000 | — | GLB | — | 待补测 |
 | `qwen-image-2512` | Qwen-Image-2512 | t2i | **L40S** | RTX-PRO-6000 | 50 | 1328² png | 32 GB | RTX-PRO-6000 首张 77.6s / 热 53.9s |
 | `qwen-image-2512-lightning` | Qwen-Image-2512 Lightning | t2i | **L40S** | RTX-PRO-6000 | 8 | 1328² png | 34 GB | 已 hydrate，未记时 |
+| `sam3d` | SAM 3D Objects | i23d | **L40S** | RTX-PRO-6000 | — | GLB | 14.9 GB | L40S 首张 634.4s / 热 43.3s |
 | `trellis2` | TRELLIS.2 | i23d | **RTX-PRO-6000** | RTX-PRO-6000 | — | GLB | 16 GB | RTX-PRO-6000 208.3s |
 | `triposplat` | TripoSplat | i23d | **L40S** | RTX-PRO-6000 | — | SPZ + GLB | — | L40S 首张 53.7s / 热 30.1s |
 | `z-image-turbo` | Z-Image-Turbo | t2i | **L40S** | RTX-PRO-6000 | 8 | 1024² png | — | 已 hydrate，未记时 |
@@ -354,6 +355,32 @@ NVIDIA Cosmos 3 64B 全能基座，文生视频（832×480 / 93 帧 / 24fps）�
 | 实测状态 | `pending` · PR #14 · 2026-08-13 |
 | 实测 GPU / 耗时 | 待补测 |
 | 备注 | gecko.jpg 跑通并导出 GLB，尚未记录墙钟秒数。 |
+
+### SAM 3D Objects (`sam3d`)
+
+Meta SAM 3D Objects 图生带贴图 GLB。PozzettiAndrea ComfyUI-SAM3DObjects。测试 L40S，正式 RTX-PRO-6000。不要用 T4。透明底 PNG 更好。
+
+| 项 | 值 |
+|---|---|
+| 工作流 | `examples/sam3d-image-to-3d.json` |
+| 锁 | `examples/sam3d-image-to-3d.lock.json` |
+| 模式 | `workflow` |
+| 量化 | bf16 |
+| 节点 | ComfyUI-SAM3DObjects |
+| 权重 | 14.9 GB；显存 — |
+| 共用 | — |
+| 实测状态 | `recorded` · PR #46 · 2026-08-14 |
+| 实测 GPU / 耗时 | L40S 首张 634.4s / 热 43.3s |
+| 冒烟产物 | textured GLB |
+| 备注 | 5/5 success。001 含冷启动约 7min；002 冷 isolation+14.9GB 634s；003–005 约 43–69s。测完已停 GPU。 |
+
+| 样本 | 秒 |
+|---|---:|
+| 001.png (含首次 boot / Volume 拉权重) | 431s |
+| 002.png (冷 isolation + 14.9GB) | 634.4s |
+| 003.png | 43.3s |
+| 004.png | 51.5s |
+| 005.png | 68.6s |
 
 ### TRELLIS.2 (`trellis2`)
 

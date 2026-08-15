@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "sam3d",
+  "title": "SAM 3D Objects",
+  "summary": "Meta SAM 3D Objects 图生带贴图 GLB。PozzettiAndrea ComfyUI-SAM3DObjects。测试 L40S，正式 RTX-PRO-6000。不要用 T4。透明底 PNG 更好。",
+  "kind": "i23d",
+  "mode": "workflow",
+  "workflow": "examples/sam3d-image-to-3d.json",
+  "lock": "examples/sam3d-image-to-3d.lock.json",
+  "gpu": "L40S",
+  "gpu_inference": "RTX-PRO-6000",
+  "gpu_choices": ["L40S", "RTX-PRO-6000"],
+  "client_id": "studio-sam3d",
+  "filename_prefix": "SAM3D_studio",
+  "io": {"images_in": 1},
+  "params": [
+    {
+      "id": "image",
+      "type": "image",
+      "bind": "image",
+      "title": "输入图",
+      "required": true,
+      "help": "一张物体图。透明底 PNG 更好；JPG 没有 alpha 时官方 InvertMask 会对不上。可一次选多张，按张排队。"
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "bind": "seed",
+      "title": "种子",
+      "default": 42,
+      "minimum": 0,
+      "help": "绑 SAM3DGenerateSLAT。"
+    }
+  ]
+}
