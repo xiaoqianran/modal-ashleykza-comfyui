@@ -26,6 +26,19 @@ Studio 生成结束后会默认停残留容器，不会卸掉已部署的 App。
 
 当前 `comfyui_modal.py` **始终**注册 GPU UI。Hydrate 在独立 App 里。若仍看到此错误，确认部署的是最新 `main`。
 
+## `ModuleNotFoundError: catalog` / `workflow_queue`
+
+这不是缺依赖。用 `python3 path/to/script.py` 时，`sys.path[0]` 是**脚本所在目录**，不是仓库根，也不是当前工作目录。
+
+| 做法 | 结果 |
+|---|---|
+| 在仓库根 `python3 -m workflow_queue ...` | `-m` 把 cwd 放进 `sys.path` |
+| `python3 scripts/queue_ltx25.py` / `run_z_image_prompts.py` | 脚本自己 `sys.path.insert` 仓库根 |
+| `python3 artifacts/.../run.py` + `PYTHONPATH=/workspace` | 治标。不要把 runner 放进 `artifacts/` |
+| 在别的目录 `python3 -m workflow_queue` | 失败：cwd 不是仓库根，包也没 `pip install -e .` |
+
+图生 / 文生排队用 `--catalog <id>` 或 `--workflow examples/*.json`，见 [命令行](reference/cli.md)。
+
 ## 缺模型 / Loader 找不到文件
 
 1. `modal volume ls comfyui-ashleykza-models`

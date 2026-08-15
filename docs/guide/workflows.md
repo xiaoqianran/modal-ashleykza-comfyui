@@ -10,6 +10,7 @@ Studio 全部配方的 GPU / 权重 / 实测见 [模型列表](models.md)。
 
 ```bash
 python3 -m workflow_queue --inspect --workflow examples/你的.json
+python3 -m workflow_queue --inspect --catalog z-image-turbo
 modal run hydrate_modal.py --workflow examples/你的.json
 MODAL_GPU=L40S modal deploy comfyui_modal.py
 python3 -m workflow_queue --base-url https://<your>.modal.run \
@@ -17,7 +18,11 @@ python3 -m workflow_queue --base-url https://<your>.modal.run \
   --images photo.png \
   --prompt "optional text" \
   --out artifacts/run
+python3 -m workflow_queue --base-url https://<your>.modal.run \
+  --catalog z-image-turbo --prompt "optional text" --out artifacts/run
 ```
+
+从仓库根目录调用 `python -m workflow_queue`。Z-Image / Turbo 是 `mode=graph`，用 `--catalog` 绑定内嵌 prompt，不要在 `artifacts/` 里另写一份 runner。
 
 `--inspect` 不占 GPU，只列出能绑定的 LoadImage / 提示词 / Save* 节点。已经是 API prompt（节点带 `class_type`）则跳过浏览器。UI 图需要本机 Chrome + Playwright，去跑正在服务的 ComfyUI 页。
 

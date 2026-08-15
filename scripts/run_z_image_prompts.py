@@ -4,11 +4,21 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
-from workflow_queue import IDLE_REMINDER, download_outputs, queue_prompt, wait_history
-from workflow_queue import wait_ready as wait_comfy_ready
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from workflow_queue import (  # noqa: E402
+    IDLE_REMINDER,
+    download_outputs,
+    queue_prompt,
+    wait_history,
+)
+from workflow_queue import wait_ready as wait_comfy_ready  # noqa: E402
 
 PROMPTS = [
     {

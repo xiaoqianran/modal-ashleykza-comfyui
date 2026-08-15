@@ -392,6 +392,27 @@ class RecipeUrlTests(unittest.TestCase):
 
 
 class ScriptContractTests(unittest.TestCase):
+    def test_file_scripts_import_from_any_cwd_without_pythonpath(self):
+        import os
+        import subprocess
+        import sys
+        import tempfile
+
+        env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        env["PYTHONPATH"] = ""
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ("run_z_image_prompts.py", "queue_ltx25.py"):
+                completed = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / name), "--help"],
+                    cwd=directory,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertIn("usage:", completed.stdout.lower())
+
     def test_z_image_script_uses_lock_filenames(self):
         lock = workflow_resolver.load_workflow_lock(
             ROOT / "examples" / "z-image-base.lock.json",

@@ -757,6 +757,43 @@ class WorkflowBindTests(unittest.TestCase):
         self.assertEqual(payload["format"], "ui")
         self.assertTrue(payload["nodes"])
 
+    def test_inspect_cli_catalog_graph_does_not_need_prompt(self):
+        import io
+        from contextlib import redirect_stdout
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            workflow_queue.main(["--inspect", "--catalog", "z-image-turbo"])
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(payload["format"], "api")
+        binds = {item["bind"] for item in payload["nodes"]}
+        self.assertIn("prompt", binds)
+        self.assertIn("save", binds)
+
+    def test_resolve_catalog_graph_binds_placeholders(self):
+        graph, already_bound = workflow_queue.resolve_queue_payload(
+            catalog="z-image-turbo",
+            overrides={"prompt": "karst fog", "seed": 1017, "width": 1280, "height": 768},
+        )
+        self.assertTrue(already_bound)
+        self.assertTrue(workflow_queue.is_api_prompt(graph))
+        self.assertEqual(graph["67"]["inputs"]["text"], "karst fog")
+        self.assertEqual(graph["69"]["inputs"]["seed"], 1017)
+        self.assertEqual(graph["68"]["inputs"]["width"], 1280)
+        self.assertEqual(graph["68"]["inputs"]["height"], 768)
+        self.assertNotIn("$", json.dumps(graph))
+
+    def test_resolve_rejects_both_catalog_and_workflow(self):
+        with self.assertRaises(SystemExit):
+            workflow_queue.resolve_queue_payload(
+                catalog="z-image-turbo",
+                workflow="examples/z-image-base.json",
+            )
+
+    def test_resolve_rejects_neither_catalog_nor_workflow(self):
+        with self.assertRaises(SystemExit):
+            workflow_queue.resolve_queue_payload()
+
 
 class ChromePathTests(unittest.TestCase):
     def test_comfy_chrome_override_wins_when_file_exists(self):
